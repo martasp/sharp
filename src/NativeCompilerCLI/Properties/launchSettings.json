@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "NativeCompilerCLI": {
+      "commandName": "Project",
+      "commandLineArgs": "build --csproj-folder-path \"./\"",
+      "workingDirectory": "C:\\Users\\m.pocius\\Desktop\\NativeCompiler\\tests\\TestExampleProjects\\ConsoleAppWorking"
+    }
+  }
+}

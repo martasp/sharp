@@ -1,0 +1,130 @@
+﻿[
+  {
+    Display: ./ConsoleAppTest.dll,
+    FilePath: ./ConsoleAppTest.dll
+  },
+  {
+    Display: ./DiffEngine.dll,
+    FilePath: ./DiffEngine.dll
+  },
+  {
+    Display: ./EmptyFiles.dll,
+    FilePath: ./EmptyFiles.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.CSharp.dll,
+    FilePath: ./Microsoft.CodeAnalysis.CSharp.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.dll,
+    FilePath: ./Microsoft.CodeAnalysis.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CommunicationUtilities.dll,
+    FilePath: ./Microsoft.TestPlatform.CommunicationUtilities.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CoreUtilities.dll,
+    FilePath: ./Microsoft.TestPlatform.CoreUtilities.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CrossPlatEngine.dll,
+    FilePath: ./Microsoft.TestPlatform.CrossPlatEngine.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.PlatformAbstractions.dll,
+    FilePath: ./Microsoft.TestPlatform.PlatformAbstractions.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.Utilities.dll,
+    FilePath: ./Microsoft.TestPlatform.Utilities.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.CodeCoverage.Shim.dll,
+    FilePath: ./Microsoft.VisualStudio.CodeCoverage.Shim.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.TestPlatform.Common.dll,
+    FilePath: ./Microsoft.VisualStudio.TestPlatform.Common.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.TestPlatform.ObjectModel.dll,
+    FilePath: ./Microsoft.VisualStudio.TestPlatform.ObjectModel.dll
+  },
+  {
+    Display: ./NativeCompiler.dll,
+    FilePath: ./NativeCompiler.dll
+  },
+  {
+    Display: ./NativeCompilerTests.dll,
+    FilePath: ./NativeCompilerTests.dll
+  },
+  {
+    Display: ./Newtonsoft.Json.dll,
+    FilePath: ./Newtonsoft.Json.dll
+  },
+  {
+    Display: ./NuGet.Frameworks.dll,
+    FilePath: ./NuGet.Frameworks.dll
+  },
+  {
+    Display: ./Shouldly.dll,
+    FilePath: ./Shouldly.dll
+  },
+  {
+    Display: ./SimpleInfoName.dll,
+    FilePath: ./SimpleInfoName.dll
+  },
+  {
+    Display: ./System.CodeDom.dll,
+    FilePath: ./System.CodeDom.dll
+  },
+  {
+    Display: ./System.Management.dll,
+    FilePath: ./System.Management.dll
+  },
+  {
+    Display: ./Test.dll,
+    FilePath: ./Test.dll
+  },
+  {
+    Display: ./testhost.dll,
+    FilePath: ./testhost.dll
+  },
+  {
+    Display: ./Verify.dll,
+    FilePath: ./Verify.dll
+  },
+  {
+    Display: ./Verify.Xunit.dll,
+    FilePath: ./Verify.Xunit.dll
+  },
+  {
+    Display: ./xunit.abstractions.dll,
+    FilePath: ./xunit.abstractions.dll
+  },
+  {
+    Display: ./xunit.assert.dll,
+    FilePath: ./xunit.assert.dll
+  },
+  {
+    Display: ./xunit.core.dll,
+    FilePath: ./xunit.core.dll
+  },
+  {
+    Display: ./xunit.execution.dotnet.dll,
+    FilePath: ./xunit.execution.dotnet.dll
+  },
+  {
+    Display: ./xunit.runner.reporters.netcoreapp10.dll,
+    FilePath: ./xunit.runner.reporters.netcoreapp10.dll
+  },
+  {
+    Display: ./xunit.runner.utility.netcoreapp10.dll,
+    FilePath: ./xunit.runner.utility.netcoreapp10.dll
+  },
+  {
+    Display: ./xunit.runner.visualstudio.dotnetcore.testadapter.dll,
+    FilePath: ./xunit.runner.visualstudio.dotnetcore.testadapter.dll
+  }
+]

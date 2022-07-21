@@ -1,0 +1,18 @@
+﻿{
+  Usings: [
+    System,
+    System.IO,
+    System.Net,
+    System.Linq,
+    System.Text,
+    System.Text.RegularExpressions,
+    System.Collections.Generic
+  ],
+  Language: C#,
+  ScriptClassName: Script,
+  CheckOverflow: true,
+  WarningLevel: 4,
+  ConcurrentBuild: true,
+  Deterministic: true,
+  AssemblyIdentityComparer: {}
+}
