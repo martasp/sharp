@@ -1,4 +1,3 @@
-﻿namespace NativeCompiler
-{
-    public record ProjectFile (string FilePath, string FileContent);
-}
+﻿namespace NativeCompiler;
+
+public record ProjectFile(string FilePath, string FileContent);

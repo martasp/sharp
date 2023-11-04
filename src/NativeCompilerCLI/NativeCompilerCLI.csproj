@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Cocona" Version="2.0.3" />
+	  <!--<PackageReference Include="Cocona" Version="2.0.3" />-->
 	  <!--<PackageReference Include="Cocona.Core" Version="2.0.3" />-->
 	  <!--<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="7.0.0-*" />-->
   </ItemGroup>

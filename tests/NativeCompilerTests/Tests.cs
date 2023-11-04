@@ -1,70 +1,69 @@
-using NativeCompiler;
-using Shouldly;
-using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Shouldly;
 using Xunit;
-using Xunit.Abstractions;
 
-namespace NativeCompilerTests
+namespace NativeCompilerTests;
+
+public class ConsoleAppTests
 {
-    public class ConsoleAppTests
+    public static string TestProjectsFolder =
+        Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "TestExampleProjects");
+
+    public static string ConsoleAppNotWorkig = Path.Combine(TestProjectsFolder, nameof(ConsoleAppNotWorkig));
+
+    public static string ConsoleAppWorking = Path.Combine(TestProjectsFolder, nameof(ConsoleAppWorking));
+
+    [Fact]
+    public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrors()
     {
-        public static string TestProjectsFolder = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "TestExampleProjects");
+        var csprojFolderPath = ConsoleAppWorking;
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.success.ShouldBeTrue(result.errors);
+    }
 
-        public static string ConsoleAppNotWorkig = Path.Combine(TestProjectsFolder, nameof(ConsoleAppNotWorkig));
-        
-        public static string ConsoleAppWorking = Path.Combine(TestProjectsFolder, nameof(ConsoleAppWorking));
+    [Fact]
+    public void WhenSampleConsoleAppGivenItShouldCompileWithErrorAndShowErrorLineNumber()
+    {
+        var csprojFolderPath = ConsoleAppNotWorkig;
+        var conpilation = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        conpilation.errors.ShouldContain(":line 2");
+    }
 
-        [Fact]
-        public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrors()
-        {
-            var csprojFolderPath = ConsoleAppWorking;
-            var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            result.success.ShouldBeTrue(result.errors);
-        }
+    [Fact]
+    public void WhenSampleConsoleAppGivenItShouldRunAppAndCaptureConsoleLogs()
+    {
+        var csprojFolderPath = ConsoleAppWorking;
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.errors.ShouldContain("--------captured-logs-test--------");
+        result.errors.ShouldNotContain("----Error----captured-logs-test--------");
+    }
 
-        [Fact]
-        public void WhenSampleConsoleAppGivenItShouldCompileWithErrorAndShowErrorLineNumber()
-        {
-            var csprojFolderPath = ConsoleAppNotWorkig;
-            var conpilation = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            conpilation.errors.ShouldContain(":line 2");
-        }
-        [Fact]
-        public void WhenSampleConsoleAppGivenItShouldRunAppAndCaptureConsoleLogs()
-        {
-            var csprojFolderPath = ConsoleAppWorking;
-            var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            result.errors.ShouldContain("--------captured-logs-test--------");
-            result.errors.ShouldNotContain("----Error----captured-logs-test--------");
-        }
-        [Fact]
-        public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrorsAndProduceDll()
-        {
-            var csprojFolderPath = ConsoleAppWorking;
-            var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            result.success.ShouldBeTrue(result.errors);
-            Directory.EnumerateFiles(csprojFolderPath).Any(item => item.Contains(".dll")).ShouldBeTrue("dll not Exists");
-        }
-        [Fact]
-        public void ITShouldCompileSelfProject()
-        {
-            var csprojFolderPath = @"C:\Users\m.pocius\Desktop\NativeCompiler\src\NativeCompiler";
-            var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            result.success.ShouldBeTrue(result.errors);
-        }
-        [Fact]
-        public void ITShouldCompileSelfCliProject()
-        {
-            var csprojFolderPath = @"C:\Users\m.pocius\Desktop\NativeCompiler\src\NativeCompilerCLI";
-            var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-            result.success.ShouldBeTrue(result.errors);
-        }
+    [Fact]
+    public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrorsAndProduceDll()
+    {
+        var csprojFolderPath = ConsoleAppWorking;
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.success.ShouldBeTrue(result.errors);
+        Directory.EnumerateFiles(csprojFolderPath).Any(item => item.Contains(".dll")).ShouldBeTrue("dll not Exists");
+    }
+
+    [Fact]
+    public void ITShouldCompileSelfProject()
+    {
+        var csprojFolderPath = @"C:\Mp\pocs\Pocs\NativeCompiler\src\NativeCompiler";
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.success.ShouldBeTrue(result.errors);
+    }
+
+    [Fact]
+    public void ITShouldCompileSelfCliProject()
+    {
+        var csprojFolderPath = @"C:\Mp\pocs\Pocs\NativeCompiler\src\NativeCompilerCLI";
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.success.ShouldBeTrue(result.errors);
     }
 }
-
 
 
 //Console.WriteLine("1  : " + typeof(object));

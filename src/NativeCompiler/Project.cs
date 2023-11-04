@@ -1,77 +1,93 @@
-﻿using Microsoft.CodeAnalysis;
-using System.Diagnostics.CodeAnalysis;
-using System.Xml.Serialization;
-using System.Xml.Linq;
-using System.Dynamic;
+﻿using System.Xml.Serialization;
+using Microsoft.CodeAnalysis;
 using XML;
-using System.Linq;
+using ProjectReference = XML.ProjectReference;
 
-namespace NativeCompiler
+namespace NativeCompiler;
+
+public class Project : IProject
 {
-    public class Project : IProject
+    public Project(ProjectFile csProjFile, List<ProjectFile> csFiles, string projectRootPath)
     {
-        public Project(ProjectFile csProjFile, List<ProjectFile> csFiles, string projectRootPath)
+        CsProjFile = csProjFile;
+        //Appsettings = appsettings;
+        CSFiles = csFiles;
+        ProjectRootPath = projectRootPath;
+    }
+
+    public ProjectFile CsProjFile { get; set; }
+
+    //public ProjectFile Appsettings { get; set; }
+    public List<ProjectFile> CSFiles { get; set; }
+    public string ProjectRootPath { get; set; }
+    public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
+    public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath);
+    private XML.Project XMLProject => DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
+
+
+    public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
+    public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
+    public string DllPathName => Path.Combine(SharpBinFolderPath, ExtensionName);
+    public string PDBName => Path.ChangeExtension(ProjectName, "pdb");
+    public string NugetPackagesRootPath => GetNuGetCacheDirectory();
+
+    public List<ProjectReference> ProjectReferences =>
+        XMLProject.ItemGroup.SelectMany(item => item.ProjectReferences).ToList();
+
+    public List<PackageReference> PackageReferences =>
+        XMLProject.ItemGroup.SelectMany(item => item.PackageReferences).ToList();
+
+    public OutputKind ResolvedProjectOutputKind()
+    {
+        var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
+
+        return ExeContains switch
         {
-            CsProjFile = csProjFile;
-            //Appsettings = appsettings;
-            CSFiles = csFiles;
-            ProjectRootPath = projectRootPath;
-        }
+            true => OutputKind.ConsoleApplication,
+            false => OutputKind.DynamicallyLinkedLibrary
+        };
+    }
 
-        public ProjectFile CsProjFile { get; set; }
-        //public ProjectFile Appsettings { get; set; }
-        public List<ProjectFile> CSFiles { get; set; }
-        public string ProjectRootPath { get; set; }
+    private XML.Project DeserializeObject(string path)
+    {
+        var xml = File.ReadAllText(path);
 
+        var serializer = new XmlSerializer(typeof(XML.Project));
+        using TextReader reader = new StringReader(xml);
+        var result = (XML.Project?)serializer.Deserialize(reader) ?? throw new Exception("Can not Deserialize");
 
-        public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
-        public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
-        public string DllPathName => Path.Combine(SharpBinFolderPath, ExtensionName);
-        public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
-        public string SharpBinFolderPath => @"C:\Users\m.pocius\Desktop\NativeCompiler\src\NativeCompilerCLI\sharpbin"; //todo unhardcode 
-        public string PDBName => Path.ChangeExtension(ProjectName, "pdb");
-        public string NugetPackagesRootPath => @"C:\Users\m.pocius\.nuget\packages"; //todo unhardcode 
-        private XML.Project XMLProject => DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
-        private XML.Project DeserializeObject(string path)
+        return result;
+    }
+
+    private static string GetNuGetCacheDirectory()
+    {
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+        return path;
+    }
+
+    private static string GetSharpBinDirectory(string projectRootPath)
+    {
+        var path = Path.Combine(projectRootPath, "bin", "sharpbin");
+        CreateFolderIfNotExists(path);
+        return path;
+    }
+
+    public static void CreateFolderIfNotExists(string folderPath)
+    {
+        if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+    }
+
+    private string ResolvedProjectExtensionType()
+    {
+        var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
+
+        return ExeContains switch
         {
-            string xml = File.ReadAllText(path);
-
-            XmlSerializer serializer = new XmlSerializer(typeof(XML.Project));
-            using TextReader reader = new StringReader(xml);
-            XML.Project result = (XML.Project?)serializer.Deserialize(reader) ?? throw new Exception("Can not Deserialize");
-
-            return result;
-        }
-
-        public List<ProjectReference> ProjectReferences =>  XMLProject.ItemGroup.SelectMany(item => item.ProjectReferences).ToList();
-        public List<PackageReference> PackageReferences => XMLProject.ItemGroup.SelectMany(item => item.PackageReferences).ToList();
-        public OutputKind ResolvedProjectOutputKind()
-        {
-            var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
-
-            return ExeContains switch
-            {
-                true => OutputKind.ConsoleApplication,
-                false => OutputKind.DynamicallyLinkedLibrary,
-            };
-        }
-
-        private string ResolvedProjectExtensionType()
-        {
-            var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
-
-            return ExeContains switch
-            {
-                true => "exe",
-                false => "dll",
-            };
-        }
-
-
-
+            true => "exe",
+            false => "dll"
+        };
     }
 }
-
 
 
 ////

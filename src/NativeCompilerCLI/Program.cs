@@ -1,15 +1,12 @@
-﻿global using NativeCompiler;
+﻿using System;
+using NativeCompiler;
+using static System.Console;
 //global using Cocona;
-using Microsoft.CodeAnalysis;
-using System.Text;
-using System.Diagnostics;
-using System;
-using System.Linq;
 
 Console.WriteLine(args);
 Console.WriteLine(args.FirstOrDefault());
 
-var csprojFolderPath = args.FirstOrDefault() ?? throw new Exception ("add console argument");
+var csprojFolderPath = args.FirstOrDefault() ?? throw new Exception("add console argument");
 var _ = NativeCompiler.NativeCompiler.Run(csprojFolderPath);
 
 
@@ -32,29 +29,6 @@ var _ = NativeCompiler.NativeCompiler.Run(csprojFolderPath);
 
 ////app.Logger..Log<String>(Microsoft.Extensions.Logging.LogLevel.Information, new EventId(5), timer.ElapsedMilliseconds.ToString(),null,null);
 //app.Run();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 //app.Logger.LogInformation(timer.ElapsedMilliseconds.ToString());
