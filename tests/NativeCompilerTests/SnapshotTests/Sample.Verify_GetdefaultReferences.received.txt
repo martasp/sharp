@@ -100,10 +100,6 @@
     FilePath: ./System.CodeDom.dll
   },
   {
-    Display: ./System.Collections.Immutable.dll,
-    FilePath: ./System.Collections.Immutable.dll
-  },
-  {
     Display: ./System.Composition.AttributedModel.dll,
     FilePath: ./System.Composition.AttributedModel.dll
   },
@@ -130,14 +126,6 @@
   {
     Display: ./System.Management.dll,
     FilePath: ./System.Management.dll
-  },
-  {
-    Display: ./System.Reflection.Metadata.dll,
-    FilePath: ./System.Reflection.Metadata.dll
-  },
-  {
-    Display: ./System.Threading.Channels.dll,
-    FilePath: ./System.Threading.Channels.dll
   },
   {
     Display: ./testhost.dll,

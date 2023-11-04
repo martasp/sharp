@@ -4,7 +4,7 @@ using Xunit;
 using static VerifyXunit.Verifier;
 using static NativeCompiler.NativeCompilerUtils;
 
-namespace NativeCompilerTests;
+namespace NativeCompilerTests.SnapshotTests;
 
 [UsesVerify]
 public class Sample

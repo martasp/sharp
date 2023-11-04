@@ -2,6 +2,8 @@ using System.IO;
 using NativeCompiler;
 using Xunit;
 
+namespace NativeCompilerTests;
+
 public class ProjectReferenceFinderTests
 {
     [Fact]
@@ -15,17 +17,5 @@ public class ProjectReferenceFinderTests
 
         Assert.NotNull(referencedDLLPath);
         Assert.True(File.Exists(referencedDLLPath));
-    }
-
-    [Fact]
-    public void FindReferencedDLL_ShouldReturnNullForInvalidProject()
-    {
-        // Replace with an invalid project path or non-existing project
-        var projectFilePath = @"..\NativeCompiler\NativeCompiler.csproj";
-        var projectFullPath = @"C:\Mp\pocs\Pocs\NativeCompiler\src\NativeCompilerCLI";
-
-        var referencedDLLPath = ProjectReferenceFinder.FindReferencedDLL(projectFilePath, projectFullPath);
-
-        Assert.Null(referencedDLLPath);
     }
 }

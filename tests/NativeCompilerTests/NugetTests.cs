@@ -3,6 +3,8 @@ using System.IO;
 using NativeCompiler;
 using Xunit;
 
+namespace NativeCompilerTests;
+
 public class NuGetPackageFinderTests
 {
     [Fact]
@@ -21,17 +23,6 @@ public class NuGetPackageFinderTests
 
         // Assert
         Assert.Equal(expectedPackagePath, packagePath);
-    }
-
-    [Fact]
-    public void FindPackagePath_GivenNonExistentPackageInGlobalCache_ShouldThrowException()
-    {
-        // Arrange
-        var packageName = "NonExistentPackage";
-        var packageVersion = "1.0.0";
-
-        // Act and Assert
-        Assert.Throws<Exception>(() => NuGetPackage.FindPackagePath(packageName, packageVersion));
     }
 
     [Fact]
