@@ -2,8 +2,8 @@
   "profiles": {
     "NativeCompilerCLI": {
       "commandName": "Project",
-      "commandLineArgs": "build --csproj-folder-path \"./\"",
-      "workingDirectory": "C:\\Users\\m.pocius\\Desktop\\NativeCompiler\\tests\\TestExampleProjects\\ConsoleAppWorking"
+      "commandLineArgs": "./",
+      "workingDirectory": "D:\\main\\Pocs\\NativeCompiler\\src\\NativeCompilerCLI\\bin\\Debug\\net8.0\\win-x64\\publish\\testcon"
     }
   }
 }

@@ -45,7 +45,7 @@ public static class NativeCompiler
             ? ""
             : throw new ArgumentException($"Project path not exists, given path {projectPath}");
         var projectFiles = ReadAllProjectFilesPath(projectPath);
-        var files = ReadAllFilesInMemory(projectFiles);
+        var files = ReadAllFilesInMemory(projectFiles); //slow part 300ms;
         var project = GetProjectDetails(files, projectPath);
 
         var dotNetAssemblyPath = AsemblyExtensions.ResolveSdkLocation;
@@ -60,19 +60,27 @@ public static class NativeCompiler
 
         var mergedDefaultReferences = defaultNugetReferences.Concat(defaultLocalReferences).Concat(defaultReferences);
 
+        // Write count of mergedDefaultReferences use nice format:
+        
+        Console.WriteLine($"Merged default references count: {mergedDefaultReferences.Count()}");
+        
         var compilation = CSharpCompilation.Create(project.ExtensionName, syntaxTrees, mergedDefaultReferences,
             compilationOptions);
         //.WithOptions(compilationOptions)
         //.AddReferences(mergedDefaultReferences)
         //.AddSyntaxTrees(syntaxTrees);
 
-        var produceDll = ProduceDll(compilation, project);
+        var produceDll = ProduceDll(compilation, project); // slowest part 1sec
         var paths = mergedDefaultReferences.Select(item => item?.Display ?? "").ToList();
         WriteFiles(project.SharpBinFolderPath, paths);
 
+        Console.WriteLine($"Compiled {project.ProjectName} successfully");
+        
         var runErrors = project.ResolvedProjectOutputKind() == OutputKind.ConsoleApplication
             ? RunAssembly(compilation, project, parsedData.Select(item => item.embeddedText).ToList())
             : (success: true, errors: "");
+
+        Console.WriteLine($"Run {project.ProjectName} successfully");
 
         return (runErrors.success && produceDll.success, runErrors.errors + produceDll.errors);
     }
@@ -93,6 +101,7 @@ public static class NativeCompiler
 
             //dotnet publish -r win-x64 -c release
             var result = compilation.Emit(project.DllPathName, project.PDBPathName);
+            var result1 = compilation.Emit(project.DllPathName);
             var buildErrors = result.PrintErrors();
             return (result.Success, buildErrors);
         }
@@ -125,6 +134,7 @@ public static class NativeCompiler
             var builder = new StringBuilder();
             TextWriter writer = new StringWriter(builder);
             Console.SetOut(writer);
+            Console.WriteLine($"Running {project.ProjectName} with args {project.ProjectRootPath}");
             method?.Invoke(sourceInstance, new object[] { new[] { project.ProjectRootPath } });
             var result = builder.ToString();
             return (true, result); // Todo needs logging better

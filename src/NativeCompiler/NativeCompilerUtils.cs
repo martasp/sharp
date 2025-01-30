@@ -90,17 +90,38 @@ public static class NativeCompilerUtils
             @"api-ms-win-core-console-l1-1-0.dll",
             @"api-ms-win-crt-private-l1-1-0.dll",
             @"hostfxr.dll",
-            @"api-ms-win-core-fibers-l1-1-0.dll"
+            @"api-ms-win-core-fibers-l1-1-0.dll",
+            @"mscordaccore_amd64_amd64_8.0.724.31311.dll",
+            @"clrgc.dll",
+           // @"System.Private.CoreLib.dll"
         };
 
         var directory = new DirectoryInfo(dotNetAssemblyPath);
         var files = directory
             .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
-            .Where(f => exclude.Contains(f.Name) == false).ToArray();
+            //.Where(f => exclude.Contains(f.Name) == false)
+            .ToArray();
+
+        // Explicitly add runtime assemblies for .NET 8
+        //var references = new List<MetadataReference>
+        //{
+        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Private.CoreLib.dll")),
+        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Runtime.dll")),
+        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Console.dll"))
+        //};
 
         var defaultReferences = files.Select(f =>
             (MetadataReference)MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, f.Name))).ToArray();
-        return defaultReferences;
+
+        //var executingEsemblies = AppDomain.CurrentDomain.GetAssemblies().Where(a => a.IsDynamic == false).ToArray();
+        //var defaultReferences =  executingEsemblies.Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToArray();
+
+        // fix System.Exception: './Program.cs(2,1): error CS0103: The name 'Console' does not exist in the current context'
+        //var mscorlib = MetadataReference.CreateFromFile(typeof(object).Assembly.Location);
+        //defaultReferences = defaultReferences.Append(mscorlib).ToArray();
+
+
+        return defaultReferences.ToArray();
     }
 
     public static MetadataReference[] GetdefaultLocalReferences(Project project)
@@ -132,20 +153,21 @@ public static class NativeCompilerUtils
         IEnumerable<string> DefaultNamespaces = new[]
         {
             "System",
-            "System.IO",
-            "System.Net",
-            "System.Linq",
-            "System.Text",
-            "System.Text.RegularExpressions",
-            "System.Collections.Generic"
+            //"System.IO",
+            //"System.Net",
+            //"System.Linq",
+            //"System.Text",
+            "System.Console",
+            //"System.Text.RegularExpressions",
+            //"System.Collections.Generic"
         };
 
         var OutputKind = project.ResolvedProjectOutputKind();
 
         var DefaultCompilationOptions =
             new CSharpCompilationOptions(OutputKind)
-                .WithOverflowChecks(true).WithOptimizationLevel(OptimizationLevel.Debug)
-                .WithUsings(DefaultNamespaces).WithDeterministic(true);
+                .WithOptimizationLevel(OptimizationLevel.Debug)
+                .WithUsings(DefaultNamespaces);
 
         return DefaultCompilationOptions;
     }

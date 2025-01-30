@@ -8,7 +8,8 @@ namespace NativeCompiler;
 
 public static class AsemblyExtensions
 {
-    public static string ResolveSdkLocation => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.18\";
+    //public static string ResolveSdkLocation => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.7\"; // shared dlls are for running, have to be copied near exe.
+    public static string ResolveSdkLocation => @"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.7\ref\net8.0"; // refs are for compiling
 
     //public static string AOTLocation(this Assembly asembly)
     //{

@@ -6,7 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <PublishAot>true</PublishAot>
-	  <SelfContained>true</SelfContained>
+    <!--//dotnet publish -r win-x64 -c Release-->
+    <!--<SelfContained>true</SelfContained>-->
+    <!--<PublishSingleFile>true</PublishSingleFile>-->
 	<WarningsAsErrors>Nullable</WarningsAsErrors>
   </PropertyGroup>
 

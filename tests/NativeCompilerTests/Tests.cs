@@ -51,7 +51,7 @@ public class ConsoleAppTests
     [Fact]
     public void ITShouldCompileSelfProject()
     {
-        var csprojFolderPath = @"C:\Mp\pocs\Pocs\NativeCompiler\src\NativeCompiler";
+        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompiler";
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.success.ShouldBeTrue(result.errors);
     }
@@ -59,7 +59,7 @@ public class ConsoleAppTests
     [Fact]
     public void ITShouldCompileSelfCliProject()
     {
-        var csprojFolderPath = @"C:\Mp\pocs\Pocs\NativeCompiler\src\NativeCompilerCLI";
+        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.success.ShouldBeTrue(result.errors);
     }
