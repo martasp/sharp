@@ -138,6 +138,8 @@ public class Target
 [XmlRoot(ElementName = "Project")]
 public class Project
 {
+    public Project() { }
+
     [XmlElement(ElementName = "PropertyGroup")]
     public List<PropertyGroup>? PropertyGroup { get; set; }
 
