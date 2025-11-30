@@ -14,6 +14,9 @@ public class PropertyGroup
     [XmlElement(ElementName = "RuntimeFrameworkVersion")]
     public string? RuntimeFrameworkVersion { get; set; }
 
+    [XmlElement(ElementName = "ImplicitUsings")]
+    public string? ImplicitUsings { get; set; }
+
     [XmlElement(ElementName = "TargetsForTfmSpecificBuildOutput")]
     public string? TargetsForTfmSpecificBuildOutput { get; set; }
 

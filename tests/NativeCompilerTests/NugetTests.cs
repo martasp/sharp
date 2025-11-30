@@ -12,7 +12,7 @@ public class NuGetPackageFinderTests
     {
         // Arrange
         var packageName = "Microsoft.CodeAnalysis.CSharp".ToLower();
-        var packageVersion = "4.7.0";
+        var packageVersion = "5.0.0";
         var globalPackagesFolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".nuget", "packages");
@@ -30,7 +30,7 @@ public class NuGetPackageFinderTests
     {
         // Arrange
         var packageName = "Microsoft.CodeAnalysis.CSharp".ToLower();
-        var packageVersion = "4.7.0";
+        var packageVersion = "5.0.0";
         var globalPackagesFolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".nuget", "packages");

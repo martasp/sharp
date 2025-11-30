@@ -1,8 +1,9 @@
-﻿using System.Text;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Text;
+using System.Text;
+using XML;
 //See https://aka.ms/new-console-template for more information
 
 namespace NativeCompiler;
@@ -12,7 +13,8 @@ public static class NativeCompilerUtils
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) Parse(ProjectFile projectFile,
         CSharpParseOptions options)
     {
-        var stringText = SourceText.From(File.ReadAllText(projectFile.FilePath), Encoding.UTF8);
+        var fileContent = projectFile.FileContent;
+        var stringText = SourceText.From(fileContent, Encoding.UTF8);
         var embeddedText = EmbeddedText.FromSource(projectFile.FilePath, stringText);
         var SyntaxTree = SyntaxFactory.ParseSyntaxTree(stringText, options, projectFile.FilePath);
         return (SyntaxTree, embeddedText);
@@ -29,7 +31,7 @@ public static class NativeCompilerUtils
         return project.CSFiles.Select(file => ParseFile(file)).ToArray();
     }
 
-    public static MetadataReference[] GetdefaultReferences(string dotNetAssemblyPath)
+    public static MetadataReference[] GetdefaultReferencesForRunning(string dotNetAssemblyPath)
     {
         var exclude = new List<string>
         {
@@ -99,28 +101,25 @@ public static class NativeCompilerUtils
         var directory = new DirectoryInfo(dotNetAssemblyPath);
         var files = directory
             .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
-            //.Where(f => exclude.Contains(f.Name) == false)
+            .Where(f => exclude.Contains(f.Name) == false)
             .ToArray();
-
-        // Explicitly add runtime assemblies for .NET 8
-        //var references = new List<MetadataReference>
-        //{
-        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Private.CoreLib.dll")),
-        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Runtime.dll")),
-        //    MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, "System.Console.dll"))
-        //};
 
         var defaultReferences = files.Select(f =>
             (MetadataReference)MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, f.Name))).ToArray();
 
-        //var executingEsemblies = AppDomain.CurrentDomain.GetAssemblies().Where(a => a.IsDynamic == false).ToArray();
-        //var defaultReferences =  executingEsemblies.Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToArray();
+        return defaultReferences.ToArray();
+    }
 
-        // fix System.Exception: './Program.cs(2,1): error CS0103: The name 'Console' does not exist in the current context'
-        //var mscorlib = MetadataReference.CreateFromFile(typeof(object).Assembly.Location);
-        //defaultReferences = defaultReferences.Append(mscorlib).ToArray();
+    public static MetadataReference[] GetdefaultReferencesForCompiling(string dotNetAssemblyRefPath)
+    {
+        var directory = new DirectoryInfo(dotNetAssemblyRefPath);
+        var files = directory
+            .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
+            .ToArray();
 
-
+        var defaultReferences = files.Select(f =>
+            (MetadataReference)MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyRefPath, f.Name))).ToArray();
+        
         return defaultReferences.ToArray();
     }
 
@@ -150,19 +149,28 @@ public static class NativeCompilerUtils
 
     public static CSharpCompilationOptions GetCompilationOptions(Project project)
     {
-        IEnumerable<string> DefaultNamespaces = new[]
+        IEnumerable<string> Namespaces = new[]
         {
             "System",
-            //"System.IO",
-            //"System.Net",
-            //"System.Linq",
-            //"System.Text",
-            "System.Console",
-            //"System.Text.RegularExpressions",
-            //"System.Collections.Generic"
+        };
+
+        IEnumerable<string> DefaultNamespacesWithGloBalUsingsForTopLevelExe = new[]
+        {
+            "System",
+            //"global using global::System;",
+            //"global using global::System.Collections.Generic;",
+            //"global using global::System.IO;",
+            //"global using global::System.Linq;",
+            //"global using global::System.Net.Http;",
+            //"global using global::System.Threading;",
+            //"global using global::System.Threading.Tasks;",
         };
 
         var OutputKind = project.ResolvedProjectOutputKind();
+
+        var DefaultNamespaces = OutputKind == OutputKind.ConsoleApplication
+            ? DefaultNamespacesWithGloBalUsingsForTopLevelExe
+            : Namespaces;
 
         var DefaultCompilationOptions =
             new CSharpCompilationOptions(OutputKind)
@@ -201,13 +209,13 @@ public static class NativeCompilerUtils
         var traversedFiles = foldersExceptObjAndBin.Select(folder =>
             Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories));
         var files = traversedFiles.SelectMany(folder => folder).Concat(rootFiles);
-
         return files.ToArray(); //todo make everything enumerable maybe faster
     }
 
     public static List<ProjectFile> ReadAllFilesInMemory(string[] projectFiles)
     {
-        return projectFiles.Select(item => new ProjectFile(item, File.ReadAllText(item))).ToList();
+        var files = projectFiles.Select(item => new ProjectFile(item, File.ReadAllText(item))).ToList();
+        return files;
     }
 
     public static Project GetProjectDetails(List<ProjectFile> projectFiles, string projectRootPath)
@@ -218,9 +226,36 @@ public static class NativeCompilerUtils
         var CSFiles = projectFiles.Where(item => Path.GetExtension(item.FilePath) == ".cs").ToList()
                       ?? throw new ArgumentException("Project does not have c sharp files");
 
+        var project = new Project(CsProjFile, CSFiles, projectRootPath);
+
+        if (project.ImplicitUsings)
+        {
+            var globalUsingFile =
+            """
+            global using global::System;
+            global using global::System.Collections.Generic;
+            global using global::System.IO;
+            global using global::System.Linq;
+            global using global::System.Net.Http;
+            global using global::System.Threading;
+            global using global::System.Threading.Tasks;
+            """;
+            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", globalUsingFile));
+        }
+
+        //Todo read from csproj and add this file currently will be ignored
+        var versionInfoSource = @"
+            using System.Reflection;
+            [assembly: AssemblyVersion(""1.0.0.0"")]
+            [assembly: AssemblyFileVersion(""1.0.0.0"")]
+            [assembly: AssemblyInformationalVersion(""1.0.0.0"")]
+        ";
+
+        project.CSFiles.Add(new ProjectFile("VersionInfo.g.cs", versionInfoSource));
+
         //var Appsettings = projectFiles.FirstOrDefault(item => Path.GetExtension(item.FilePath) == ".json") // Todo latter will need ConsoleProject, WebApi proeject
         //    ?? throw new ArgumentException("Project does not have c sharp files");
 
-        return new Project(CsProjFile, CSFiles, projectRootPath);
+        return project;
     }
 }

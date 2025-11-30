@@ -120,10 +120,6 @@
     FilePath: ./System.Composition.TypedParts.dll
   },
   {
-    Display: ./System.IO.Pipelines.dll,
-    FilePath: ./System.IO.Pipelines.dll
-  },
-  {
     Display: ./System.Management.dll,
     FilePath: ./System.Management.dll
   },

@@ -23,11 +23,11 @@ public class Project : IProject
     public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
     public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath);
     private XML.Project XMLProject => DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
-
-
+    public bool ImplicitUsings => XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false ? true : false;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
-    public string DllPathName => Path.Combine(SharpBinFolderPath, ExtensionName);
+    public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
+    public string DllPathName => Path.Combine(SharpBinFolderPath, Path.ChangeExtension(ProjectName, "dll"));
     public string PDBName => Path.ChangeExtension(ProjectName, "pdb");
     public string NugetPackagesRootPath => GetNuGetCacheDirectory();
 

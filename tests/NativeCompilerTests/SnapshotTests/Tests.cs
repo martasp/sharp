@@ -12,7 +12,7 @@ public class Sample
     [Fact]
     public Task Verify_GetdefaultReferences()
     {
-        return Verify(GetdefaultReferences("./"));
+        return Verify(GetdefaultReferencesForCompiling("./"));
     }
 
     [Fact]

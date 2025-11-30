@@ -4,6 +4,11 @@
       "commandName": "Project",
       "commandLineArgs": "./",
       "workingDirectory": "D:\\main\\Pocs\\NativeCompiler\\src\\NativeCompilerCLI\\bin\\Debug\\net8.0\\win-x64\\publish\\testcon"
+    },
+    "MangedDebug": {
+      "commandName": "Project",
+      "commandLineArgs": "./",
+      "workingDirectory": "D:\\main\\Pocs\\NativeCompiler\\tests\\TestExampleProjects\\ConsoleAppWorking"
     }
   }
 }

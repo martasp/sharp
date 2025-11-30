@@ -8,8 +8,8 @@ namespace NativeCompiler;
 
 public static class AsemblyExtensions
 {
-    //public static string ResolveSdkLocation => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.7\"; // shared dlls are for running, have to be copied near exe.
-    public static string ResolveSdkLocation => @"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.7\ref\net8.0"; // refs are for compiling
+    public static string ResolveSdkRuntimeAssemblyPath => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.0\"; // shared dlls are for running, have to be copied near exe.
+    public static string ResolveSdkRefLocation => @"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\10.0.0\ref\net10.0"; // refs are for compiling
 
     //public static string AOTLocation(this Assembly asembly)
     //{
@@ -18,7 +18,7 @@ public static class AsemblyExtensions
     //    Debug.Assert(asembly.ManifestModule != null);
     //    Debug.Assert(asembly.ManifestModule != null);
 
-    //    var fullFilePath = @$"{ResolveSdkLocation}{asembly.ManifestModule}";
+    //    var fullFilePath = @$"{ResolveSdkRefLocation}{asembly.ManifestModule}";
 
     //    Debug.Assert(fullFilePath != null);
     //    Debug.Assert(fullFilePath.Length > 0);
@@ -86,7 +86,9 @@ public static class AsemblyExtensions
         assemblyStream.Seek(0, SeekOrigin.Begin);
         symbolsStream?.Seek(0, SeekOrigin.Begin);
 
-        var assembly = AssemblyLoadContext.Default.LoadFromStream(assemblyStream, symbolsStream);
+        var context = new AssemblyLoadContext("OneTimeContext", isCollectible: true);
+        var assembly = context.LoadFromStream(assemblyStream, symbolsStream);
+
         return assembly;
     }
 }

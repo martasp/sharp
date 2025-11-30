@@ -14,22 +14,32 @@ namespace Tests;
 [UsesVerify]
 public class DllSnapshotTests
 {
-    //private const string DllPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI\bin\Debug\net8.0\win-x64\publish\testcon\bin\Debug\net8.0\testcon.dll"; // Change to your DLL path
-    //private const string DllPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI\bin\Debug\net8.0\win-x64\publish\testcon\bin\sharpbin\testcon.exe";
-    private const string DllPath = @"D:\main\Compiler\sharp\myTest.exe";
+    private const string MSCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MSCompiler";
+    private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
 
     [Fact]
-    public async void SnapshotTest_DllMetadata()
+    public async void CompareMSOriginalOutputWithMyCompilerOutput()
     {
-        var dllMetadata = ExtractDllMetadata(DllPath);
+        var MsCompilerDllMetadata = ExtractDllMetadata(MSCompiler + @"\bin\Debug\net10.0\MSCompiler.dll");
 
-        var json = JsonSerializer.Serialize(dllMetadata, new JsonSerializerOptions
+        var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
+        Assert.True(buildDetails.success, $"Build failed with errors: {buildDetails.errors}");
+
+        var MyCompilerDllMetadata = ExtractDllMetadata(MyCompiler + @"\bin\sharpbin\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
+
+        var MsCompilerDllMetadataJson = JsonSerializer.Serialize(MsCompilerDllMetadata, new JsonSerializerOptions
         {
             WriteIndented = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         });
 
-        await Verifier.Verify(json).UseDirectory("Snapshots");
+        var MyCompilerDllMetadataJson = JsonSerializer.Serialize(MyCompilerDllMetadata, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        });
+
+        Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
     }
 
     private static object ExtractDllMetadata(string dllPath)

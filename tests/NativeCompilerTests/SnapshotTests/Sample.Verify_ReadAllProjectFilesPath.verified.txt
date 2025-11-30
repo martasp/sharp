@@ -219,7 +219,6 @@
   ./System.Composition.Hosting.dll,
   ./System.Composition.Runtime.dll,
   ./System.Composition.TypedParts.dll,
-  ./System.IO.Pipelines.dll,
   ./System.Management.dll,
   ./testhost.dll,
   ./testhost.exe,

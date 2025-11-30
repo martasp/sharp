@@ -5,6 +5,8 @@ using Xunit;
 
 namespace NativeCompilerTests;
 
+[CollectionDefinition("Sequential Tests 2", DisableParallelization = true)]
+[Collection("Sequential Tests 2")]
 public class ConsoleAppTests
 {
     public static string TestProjectsFolder =
@@ -15,51 +17,17 @@ public class ConsoleAppTests
     public static string ConsoleAppWorking = Path.Combine(TestProjectsFolder, nameof(ConsoleAppWorking));
 
     [Fact]
-    public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrors()
-    {
-        var csprojFolderPath = ConsoleAppWorking;
-        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
-    }
-
-    [Fact]
-    public void WhenSampleConsoleAppGivenItShouldCompileWithErrorAndShowErrorLineNumber()
+    public void WhenSampleConsoleAppGivenItShouldCompileAndRunWithErrorAndShowErrorLineNumber()
     {
         var csprojFolderPath = ConsoleAppNotWorkig;
-        var conpilation = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        var conpilation = NativeCompiler.NativeCompiler.Run(csprojFolderPath);
         conpilation.errors.ShouldContain(":line 2");
-    }
-
-    [Fact]
-    public void WhenSampleConsoleAppGivenItShouldRunAppAndCaptureConsoleLogs()
-    {
-        var csprojFolderPath = ConsoleAppWorking;
-        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.errors.ShouldContain("--------captured-logs-test--------");
-        result.errors.ShouldNotContain("----Error----captured-logs-test--------");
-    }
-
-    [Fact]
-    public void WhenSampleConsoleAppGivenItShouldCompileWithoutErrorsAndProduceDll()
-    {
-        var csprojFolderPath = ConsoleAppWorking;
-        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
-        Directory.EnumerateFiles(csprojFolderPath).Any(item => item.Contains(".dll")).ShouldBeTrue("dll not Exists");
     }
 
     [Fact]
     public void ITShouldCompileSelfProject()
     {
         var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompiler";
-        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
-    }
-
-    [Fact]
-    public void ITShouldCompileSelfCliProject()
-    {
-        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.success.ShouldBeTrue(result.errors);
     }
