@@ -55,7 +55,7 @@ public static class NativeCompiler
         var compilationOptions = GetCompilationOptions(project);
 
         var defaultReferencesForCompiling = GetdefaultReferencesForCompiling(dotNetAssemblyRefPath);
-        var defaultReferencesForRunning   = GetdefaultReferencesForCompiling(dotNetAssemblyRuntimePath);
+        var defaultReferencesForRunning   = GetdefaultReferencesForRunning(dotNetAssemblyRuntimePath);
 
         var parsedData = ParseProject(project);
         var syntaxTrees = parsedData.Select(item => item.syntaxTree);

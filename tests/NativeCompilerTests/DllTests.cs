@@ -1,31 +1,44 @@
+using Shouldly;
 using System;
+using System;
+using System.Collections.Generic;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.Loader;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Collections.Generic;
-using Xunit;
+using System.Threading.Tasks;
 using VerifyTests;
 using VerifyXunit;
-using System.Linq;
+using Xunit;
 
 namespace Tests;
 
-[UsesVerify]
+
+[CollectionDefinition("Sequential Tests 3", DisableParallelization = true)]
+[Collection("Sequential Tests 3")]
 public class DllSnapshotTests
 {
     private const string MSCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MSCompiler";
     private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
 
+
+
     [Fact]
-    public async void CompareMSOriginalOutputWithMyCompilerOutput()
+    public async Task TypeDefinitionUsage()
     {
-        var MsCompilerDllMetadata = ExtractDllMetadata(MSCompiler + @"\bin\Debug\net10.0\MSCompiler.dll");
+        var MsCompilerDllMetadata = ExtractAll(MSCompiler + @"\bin\Debug\net10.0\MSCompiler.dll");
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
         Assert.True(buildDetails.success, $"Build failed with errors: {buildDetails.errors}");
 
-        var MyCompilerDllMetadata = ExtractDllMetadata(MyCompiler + @"\bin\sharpbin\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
+        var MyCompilerDllMetadata = ExtractAll(MyCompiler + @"\bin\sharpbin\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
 
         var MsCompilerDllMetadataJson = JsonSerializer.Serialize(MsCompilerDllMetadata, new JsonSerializerOptions
         {
@@ -39,16 +52,74 @@ public class DllSnapshotTests
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         });
 
+        var both =
+            $"""
+            ------------------- MSCompiler Output -------------------
+            {MsCompilerDllMetadataJson}
+
+
+            ------------------- MyCompiler Output -------------------
+            {MyCompilerDllMetadataJson}
+            """;
+
+        var bingPath = @"CompareMSOriginalOutputWithMyCompilerOutput.txt";
+        File.WriteAllText(bingPath, both);
+        Debug.WriteLine($"Wrote to full path: {Path.GetFullPath(bingPath)}");
+
         Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
     }
 
-    private static object ExtractDllMetadata(string dllPath)
+    public static FullDllMetadata ExtractAll(string dllPath)
     {
-        if (!File.Exists(dllPath))
-            throw new FileNotFoundException($"DLL not found: {dllPath}");
+        var context = new AssemblyLoadContext("OneTimeContext" + dllPath, isCollectible: true);
 
-        Assembly assembly = Assembly.LoadFile(Path.GetFullPath(dllPath));
+        var assembly = context.LoadFromAssemblyPath(dllPath);
+        var name = assembly.GetName();
+        var metadata = new FullDllMetadata
+        {
+            AssemblyName = name.Name,
+            Version = name.Version.ToString(),
+            RuntimeVersion = assembly.ImageRuntimeVersion,
+            Architecture = name.ProcessorArchitecture.ToString(),
+            EntryPoint = assembly.EntryPoint?.Name ?? "None",
+            Resources = new List<string>(assembly.GetManifestResourceNames()),
+            AssemblyMetadata = new SortedDictionary<string, string>(),
+            DllMetadata = ExtractDllMetadata(assembly)
+        };
 
+        // Assembly metadata attributes
+        foreach (var attr in assembly.GetCustomAttributesData())
+        {
+            metadata.AssemblyMetadata[attr.AttributeType.Name] = attr.ToString();
+        }
+
+        // All types and their members
+        foreach (var type in assembly.GetTypes())
+        {
+            metadata.Types.Add(new TypeInfo(type));
+        }
+
+        // PE headers (simplified; for full details use dnlib or PE parsing)
+        using var fs = new FileStream(dllPath, FileMode.Open, FileAccess.Read);
+        using var br = new BinaryReader(fs);
+        metadata.PEHeaders["Magic"] = br.ReadUInt16();
+        metadata.PEHeaders["Machine"] = br.ReadUInt16();
+        metadata.PEHeaders["NumberOfSections"] = br.ReadUInt16();
+        metadata.PEHeaders["TimeDateStamp"] = br.ReadUInt32();
+        metadata.PEHeaders["PointerToSymbolTable"] = br.ReadUInt32();
+        metadata.PEHeaders["NumberOfSymbols"] = br.ReadUInt32();
+        metadata.PEHeaders["SizeOfOptionalHeader"] = br.ReadUInt16();
+        metadata.PEHeaders["Characteristics"] = br.ReadUInt16();
+
+        metadata.Types = metadata.Types.OrderByDescending(type => type.Name).ToList();
+        metadata.Resources = metadata.Resources.OrderByDescending(r=>r).ToList();
+
+        //sort assembly metadata
+        return metadata;
+    }
+
+    private static object ExtractDllMetadata(Assembly assembly)
+    {
         return new
         {
             AssemblyName = assembly.GetName().Name,
@@ -61,7 +132,7 @@ public class DllSnapshotTests
                 Version = a.Version?.ToString(),
                 Culture = a.CultureName,
                 PublicKeyToken = BitConverter.ToString(a.GetPublicKeyToken()).Replace("-", "").ToLower()
-            }).ToList(),
+            }).OrderByDescending(item=>item.Name).ToList(),
             Types = assembly.GetTypes().Select(type => new
             {
                 Type = type.FullName,
@@ -77,7 +148,7 @@ public class DllSnapshotTests
                 Methods = GetMethods(type),
                 Properties = GetProperties(type),
                 Fields = GetFields(type)
-            }).ToList()
+            }).OrderByDescending(item => item.Type).ToList(),
         };
     }
     private static List<object> GetMethods(Type type)
@@ -131,5 +202,40 @@ public class DllSnapshotTests
                    })
                    .Cast<object>() // Convert anonymous type list to List<object>
                    .ToList();
+    }
+
+
+
+}
+
+
+public class FullDllMetadata
+{
+    public string AssemblyName { get; set; }
+    public string Version { get; set; }
+    public string RuntimeVersion { get; set; }
+    public string Architecture { get; set; }
+    public string EntryPoint { get; set; }
+    public List<TypeInfo> Types { get; set; } = new List<TypeInfo>();
+    public List<string> Resources { get; set; } = new List<string>();
+    public SortedDictionary<string, string> AssemblyMetadata { get; set; } = new SortedDictionary<string, string>();
+    public SortedDictionary<string, object> PEHeaders { get; set; } = new SortedDictionary<string, object>();
+    public object DllMetadata { get; set; }
+}
+
+
+public class TypeInfo
+{
+    public string Name { get; set; }
+    public List<string> Methods { get; set; } = new List<string>();
+    public List<string> Fields { get; set; } = new List<string>();
+    public List<string> Properties { get; set; } = new List<string>();
+
+    public TypeInfo(Type type)
+    {
+        Name = type.FullName;
+        Methods.AddRange(type.GetMethods().Select(m => m.ToString()));
+        Fields.AddRange(type.GetFields().Select(f => f.ToString()));
+        Properties.AddRange(type.GetProperties().Select(p => p.ToString()));
     }
 }

@@ -2,8 +2,9 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Text;
+using System;
+using System.Diagnostics;
 using System.Text;
-using XML;
 //See https://aka.ms/new-console-template for more information
 
 namespace NativeCompiler;
@@ -95,7 +96,7 @@ public static class NativeCompilerUtils
             @"api-ms-win-core-fibers-l1-1-0.dll",
             @"mscordaccore_amd64_amd64_8.0.724.31311.dll",
             @"clrgc.dll",
-           // @"System.Private.CoreLib.dll"
+            @"System.Private.CoreLib.dll"
         };
 
         var directory = new DirectoryInfo(dotNetAssemblyPath);
@@ -244,12 +245,22 @@ public static class NativeCompilerUtils
         }
 
         //Todo read from csproj and add this file currently will be ignored
-        var versionInfoSource = @"
-            using System.Reflection;
-            [assembly: AssemblyVersion(""1.0.0.0"")]
-            [assembly: AssemblyFileVersion(""1.0.0.0"")]
-            [assembly: AssemblyInformationalVersion(""1.0.0.0"")]
-        ";
+        //TODO What is this number 936242573a0bbf456eb83abb29521666de5e44d5 checked git git rev-parse HEAD its not the commit hash.
+        var versionInfoSource =
+        """
+        using System;
+        using System.Reflection;
+
+        [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
+        
+        [assembly: System.Reflection.AssemblyCompanyAttribute("MSCompiler")]
+        [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+        [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+        [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+936242573a0bbf456eb83abb29521666de5e44d5")] 
+        [assembly: System.Reflection.AssemblyProductAttribute("MSCompiler")]
+        [assembly: System.Reflection.AssemblyTitleAttribute("MSCompiler")]
+        [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+        """;
 
         project.CSFiles.Add(new ProjectFile("VersionInfo.g.cs", versionInfoSource));
 
