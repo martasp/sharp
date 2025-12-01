@@ -96,7 +96,7 @@ public static class NativeCompilerUtils
             @"api-ms-win-core-fibers-l1-1-0.dll",
             @"mscordaccore_amd64_amd64_8.0.724.31311.dll",
             @"clrgc.dll",
-            @"System.Private.CoreLib.dll"
+            //@"System.Private.CoreLib.dll"
         };
 
         var directory = new DirectoryInfo(dotNetAssemblyPath);

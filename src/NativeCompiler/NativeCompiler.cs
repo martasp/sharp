@@ -25,8 +25,8 @@ public static class NativeCompiler
                 // Combine the folder path and file name to create the full file path.
                 var destinationFilePath = Path.Combine(folderPath, fileName);
 
-                // Copy the file to the specified folder.
-                File.Copy(filePath, destinationFilePath);
+                // overwrite files
+                File.Copy(filePath, destinationFilePath, true);
             }
 
             // All files were copied successfully.
@@ -34,8 +34,7 @@ public static class NativeCompiler
         }
         catch (Exception ex)
         {
-            // Handle any exceptions that may occur during the file copy operation.
-            Console.WriteLine($"Error copying files: {ex.Message}");
+            Debug.Assert(false, "Failes to write files "+ ex.Message);
             return false;
         }
     }
