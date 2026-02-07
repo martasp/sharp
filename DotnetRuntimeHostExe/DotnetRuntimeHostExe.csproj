@@ -6,7 +6,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
+    <PublishSingleFile>true</PublishSingleFile>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <DebugType>embedded</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <SourceLinkCreate>true</SourceLinkCreate>
+    <DebugSymbols>true</DebugSymbols>
+    
   </PropertyGroup>
+  
+  <!--dotnet publish -r win-x64 -c Release-->
+
+  <!--LibraryImportAttribute requires unsafe code. Project must be updated with '<AllowUnsafeBlocks>true</AllowUnsafeBlocks>'. (https://learn.microsoft.com/dotnet/fundamentals/syslib-diagnostics/syslib1062)-->
 
 </Project>

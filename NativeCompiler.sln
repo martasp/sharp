@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11217.181 d18.0
+VisualStudioVersion = 18.0.11217.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NativeCompilerCLI", "src\NativeCompilerCLI\NativeCompilerCLI.csproj", "{83774C8E-6B29-46B2-A3A2-8DB0CA8B2D8B}"
 EndProject
@@ -14,16 +14,19 @@ EndProject
 Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "MyApp", "SimplePlayground\bin\Debug\net10.0\MyApp.exe", "{0802B535-3B2F-1231-3784-83F41447C652}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = D:\main\Pocs\NativeCompiler\SimplePlayground\bin\Debug\net10.0\MyApp.exe
+		Executable = D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Debug\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe
 		RemoteMachine = DESKTOP-C93TGFG
-		StartingDirectory = D:\main\Pocs\NativeCompiler\SimplePlayground\bin\Debug\net10.0
-		Environment = Default
-		LaunchingEngine = 00000000-0000-0000-0000-000000000000
+		StartingDirectory = D:\main\Pocs\NativeCompiler\testProjects\MyCompiler\bin\sharpbin
+		Arguments = MSCompiler.runtimeconfig.json
+		Environment = corehost_trace=1	
+		LaunchingEngine = 92ef0900-2251-11d2-b72e-0000f87572ef
 		UseLegacyDebugEngines = No
 		LaunchSQLEngine = No
 		AttachLaunchAction = No
 		IORedirection = Auto
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntimeHostExe", "DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj", "{3B06D313-389D-4A72-8B3B-992491813507}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -49,6 +52,10 @@ Global
 		{44C9B7CA-7908-4638-BA6C-F859E880FF93}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0802B535-3B2F-1231-3784-83F41447C652}.Debug|Any CPU.ActiveCfg = Release|Any CPU
 		{0802B535-3B2F-1231-3784-83F41447C652}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -10,6 +10,8 @@ public static class AsemblyExtensions
 {
     public static string ResolveSdkRuntimeAssemblyPath => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.0\"; // shared dlls are for running, have to be copied near exe.
     public static string ResolveSdkRefLocation => @"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\10.0.0\ref\net10.0"; // refs are for compiling
+    public static string ResolveSdkHostLocation => @"C:\Program Files\dotnet\host\fxr\10.0.0"; // refs are for compiling
+
 
     //public static string AOTLocation(this Assembly asembly)
     //{

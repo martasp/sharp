@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Diagnostics;
 using System.IO;
 
 var syntaxTree = CSharpSyntaxTree.ParseText(@"
@@ -191,7 +192,7 @@ MetadataReference.CreateFromFile(@"C:\Program Files\dotnet\packs\Microsoft.NETCo
 //references = [mscorlib];
 
 var optionsExe = new CSharpCompilationOptions(OutputKind.ConsoleApplication);
-optionsExe.WithPlatform(Platform.X64);
+optionsExe.WithPlatform(Platform.AnyCpu);
 optionsExe.WithOptimizationLevel(OptimizationLevel.Debug);
 
 var optionsDll = new CSharpCompilationOptions(OutputKind.ConsoleApplication);
@@ -229,16 +230,36 @@ if (!emitResult.Success)
 else
 {
     Console.WriteLine("Compilation succeeded.");
-    // writing app to path:
-    Console.WriteLine(Path.GetFullPath("MyApp.exe"));
-    //File.WriteAllBytes("MyApp.exe", ms.ToArray());
 
-    // Running app
-    Console.WriteLine("Running app "+ Path.GetFullPath("MyApp.exe"));
+    // copy dll to output dir
 
     //run executable
-    var process = System.Diagnostics.Process.Start("MyApp.exe");
-    process.WaitForExit();
+    // 1. Create a new ProcessStartInfo object
+    var startInfo = new ProcessStartInfo
+    {
+        FileName = @"D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Release\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe",
+        Arguments = "MyApp.runtimeconfig.json",
+        RedirectStandardOutput = true,
+        UseShellExecute = false,
+        // Optional: Hide the process window
+        CreateNoWindow = true
+    };
+
+    // 2. Start the process using the ProcessStartInfo
+    using (var process = Process.Start(startInfo))
+    {
+        // 3. Read the entire output stream synchronously
+        // NOTE: To avoid a deadlock, it's best practice to read the output BEFORE calling WaitForExit 
+        // when using synchronous reading methods like ReadToEnd.
+        string result = process.StandardOutput.ReadToEnd();
+
+        // 4. Wait for the process to exit
+        process.WaitForExit();
+
+        // 5. Print the captured output
+        Console.WriteLine("Output:");
+        Console.WriteLine(result);
+    }
 
     Console.ReadKey();
 
