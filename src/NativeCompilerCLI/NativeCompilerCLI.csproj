@@ -7,9 +7,12 @@
     <Nullable>enable</Nullable>
 	  <!--<PublishAot>true</PublishAot>-->
     <!--//dotnet publish -r win-x64 -c Release-->
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-	<WarningsAsErrors>Nullable</WarningsAsErrors>
+    <!--<SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>-->
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,3 +27,4 @@
 
 
 </Project>
+

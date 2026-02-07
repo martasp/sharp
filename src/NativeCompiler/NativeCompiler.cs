@@ -128,12 +128,91 @@ public static class NativeCompiler
         }
     }
 
+    public static (bool success, string errors) BuildNative(CSharpCompilation compilation, Project project,
+    List<EmbeddedText> embeddedTexts)
+    {
+
+        //Todo just use exes and process spwaning. !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!11
+
+        string inputAssembly = "MyLibrary.dll";
+        string outputObjectFile = "MyLibrary.obj";
+
+        // 1. Setup the Type System Context (Target Architecture: x64)
+        // This loads the metadata from your IL assembly.
+        TargetDetails target = new TargetDetails(TargetArchitecture.X64, TargetOS.Windows, TargetAbi.NativeAot);
+        var context = new CompilerTypeSystemContext(target, SharedGenericsMode.CanonicalReferenceTypes, DelegateFeature.All);
+
+        // 2. Load the Input Assembly
+        context.InputFilePaths.Add(inputAssembly);
+        context.ReferenceFilePaths.Add(typeof(object).Assembly.Location); // Reference CoreLib
+
+        EcmaModule module = context.GetModuleFromPath(inputAssembly);
+
+        // 3. Define Compilation Roots
+        // You must tell the compiler "start here". For a DLL, this is usually all exported methods.
+        var compilationRoots = new List<ICompilationRootProvider>();
+
+        // (Simplified) Add a root for a specific method "DoWork" in "MyClass"
+        var type = module.GetType("MyNamespace", "MyClass");
+        var method = type.GetMethod("DoWork", null);
+
+        compilationRoots.Add(new SingleMethodRootProvider(method));
+
+        // 4. Configure the Dependency Analyzer
+        // This is the engine that crawls the IL to find everything else that needs compiling.
+        var nodeFactory = new NodeFactory(
+            context,
+            new CompilerOptions() { TargetOS = TargetOS.Windows },
+            new NameMangler(true),
+            "MyNativeLib"
+        );
+
+        // 5. Instantiate RyuJIT Compilation
+        // RyuJitCompilation is the specific class that connects the ILCompiler to the RyuJIT backend.
+        var compilation = new RyuJitCompilation(
+            nodeFactory,
+            compilationRoots,
+            null, // logger
+            new RyuJitCompilationOptions()
+        );
+
+        // 6. Run Compilation
+        Console.WriteLine("Compiling methods...");
+        DependencyAnalyzerBase<NodeFactory> analyzer = compilation.GetDependencyAnalyzer();
+
+        // This triggers the crawl. It generates the dependency graph of all methods/types needed.
+        analyzer.ComputeMarkedNodes();
+
+        // 7. Emit Native Object File (ObjectWriter)
+        // The compiler produces an .obj/.o file, which must then be linked by a platform linker (link.exe/ld).
+        Console.WriteLine($"Emitting object file: {outputObjectFile}");
+
+        using (var fileStream = File.Create(outputObjectFile))
+        {
+            // Internal API to write the object file containing machine code
+            compilation.WriteObjectFile(fileStream);
+        }
+
+        Console.WriteLine("Done. You must now link this object file using link.exe (MSVC) or clang.");
+    }
+
     public static (bool success, string errors) RunAssembly(CSharpCompilation compilation, Project project,
         List<EmbeddedText> embeddedTexts)
     {
         // Emit the byte result of the compilation
         var assembly = compilation.CreateAssembly(project.ProjectName, embeddedTexts); // Do this without reflection
 
+        //-----------------
+        //var entryPoint = assembly.EntryPoint;
+
+        //if (entryPoint != null)
+        //{
+        //    entryPoint.Invoke(null, new object[] { project.ProjectRootPath });
+        //}
+
+        // you  can also use entry point insted of assuming Program class 
+
+        //-----------------------
 
         var programType = assembly.GetType("Program") ?? throw new Exception("assembly Prgoram do not have main");
         var sourceInstance = Activator.CreateInstance(programType);
@@ -161,6 +240,12 @@ public static class NativeCompiler
             return (false,
                 ex?.InnerException?.ToString() ?? "No errors"); // Todo : Implement better global error handling 
         }
+    }
+
+    public static (bool success, string errors) RunAssemblyAot(CSharpCompilation compilation, Project project,
+    List<EmbeddedText> embeddedTexts)
+    {
+        throw new NotImplementedException();    
     }
 }
 

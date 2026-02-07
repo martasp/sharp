@@ -1,13 +1,20 @@
-﻿using System;
-using NativeCompiler;
+﻿using NativeCompiler;
+using System;
+using System.Diagnostics;
 using static System.Console;
 
-Console.WriteLine(args);
-Console.WriteLine(args.FirstOrDefault());
+//Console.WriteLine(args);
+//Console.WriteLine(args.FirstOrDefault());
 
+// time the compilation and running
+
+var timer = Stopwatch.StartNew();
+timer.Start();
 var csprojFolderPath = args.FirstOrDefault() ?? throw new Exception("add console argument");
-var _ = NativeCompiler.NativeCompiler.Run(csprojFolderPath);
+var _ = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+timer.Stop();
 
+WriteLine($"Total time: {timer.ElapsedMilliseconds}ms");
 //Todo !!!!!!!!!!!!!!!!!!!!!!
 //Fixes to do 
 //Use dlls from refs folder for nativecompiler
@@ -19,24 +26,24 @@ var _ = NativeCompiler.NativeCompiler.Run(csprojFolderPath);
 
 
 //Native aot works for build but not run method, consider just running exe not without loading assembly
-    //Errors are In xml reading proj files
- //       Unhandled Exception: System.InvalidOperationException: There is an error in XML document(0, 0).
- //--->System.InvalidOperationException: XML.Project cannot be serialized because it does not have a parameterless constructor.
- //  at System.Xml.Serialization.TypeDesc.CheckSupported() + 0x42
- //  at System.Xml.Serialization.TypeScope.GetTypeDesc(Type, MemberInfo, Boolean, Boolean) + 0xbd
- //  at System.Xml.Serialization.ModelScope.GetTypeModel(Type, Boolean) + 0x5a
- //  at System.Xml.Serialization.XmlReflectionImporter.ImportTypeMapping(Type, XmlRootAttribute, String) + 0x50
- //  at System.Xml.Serialization.XmlSerializer.GetMapping() + 0x4f
- //  at System.Xml.Serialization.XmlSerializer.Deserialize(XmlReader xmlReader, String encodingStyle, XmlDeserializationEvents events) + 0x98
- //  --- End of inner exception stack trace ---
- //  at System.Xml.Serialization.XmlSerializer.Deserialize(XmlReader xmlReader, String encodingStyle, XmlDeserializationEvents events) + 0x209
- //  at System.Xml.Serialization.XmlSerializer.Deserialize(TextReader textReader) + 0x99
- //  at NativeCompiler.Project.DeserializeObject(String) + 0x94
- //  at NativeCompiler.Project.ResolvedProjectOutputKind() + 0x11
- //  at NativeCompiler.NativeCompilerUtils.GetCompilationOptions(Project) + 0x4a
- //  at NativeCompiler.NativeCompiler.Build(String) + 0x77
- //  at Program.<Main>$(String[] args) +0x59
- //  at NativeCompilerCLI!<BaseAddress>+0x101e3c3
+//Errors are In xml reading proj files
+//       Unhandled Exception: System.InvalidOperationException: There is an error in XML document(0, 0).
+//--->System.InvalidOperationException: XML.Project cannot be serialized because it does not have a parameterless constructor.
+//  at System.Xml.Serialization.TypeDesc.CheckSupported() + 0x42
+//  at System.Xml.Serialization.TypeScope.GetTypeDesc(Type, MemberInfo, Boolean, Boolean) + 0xbd
+//  at System.Xml.Serialization.ModelScope.GetTypeModel(Type, Boolean) + 0x5a
+//  at System.Xml.Serialization.XmlReflectionImporter.ImportTypeMapping(Type, XmlRootAttribute, String) + 0x50
+//  at System.Xml.Serialization.XmlSerializer.GetMapping() + 0x4f
+//  at System.Xml.Serialization.XmlSerializer.Deserialize(XmlReader xmlReader, String encodingStyle, XmlDeserializationEvents events) + 0x98
+//  --- End of inner exception stack trace ---
+//  at System.Xml.Serialization.XmlSerializer.Deserialize(XmlReader xmlReader, String encodingStyle, XmlDeserializationEvents events) + 0x209
+//  at System.Xml.Serialization.XmlSerializer.Deserialize(TextReader textReader) + 0x99
+//  at NativeCompiler.Project.DeserializeObject(String) + 0x94
+//  at NativeCompiler.Project.ResolvedProjectOutputKind() + 0x11
+//  at NativeCompiler.NativeCompilerUtils.GetCompilationOptions(Project) + 0x4a
+//  at NativeCompiler.NativeCompiler.Build(String) + 0x77
+//  at Program.<Main>$(String[] args) +0x59
+//  at NativeCompilerCLI!<BaseAddress>+0x101e3c3
 
 
 //if you want rewrite roslyn:

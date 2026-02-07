@@ -28,6 +28,8 @@ Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "MyApp", "SimplePlayground\b
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntimeHostExe", "DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj", "{3B06D313-389D-4A72-8B3B-992491813507}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntime10", "DotnetRuntime10\DotnetRuntime10.csproj", "{DADA7AEC-98D3-4CF9-A3A5-E38902619802}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +58,10 @@ Global
 		{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
