@@ -1,4 +1,5 @@
-﻿using System.Xml.Serialization;
+﻿using System.Xml.Linq;
+using System.Xml.Serialization;
 
 namespace XML;
 
@@ -152,4 +153,86 @@ public class Project
     [XmlElement(ElementName = "Target")] public Target? Target { get; set; }
 
     [XmlAttribute(AttributeName = "Sdk")] public string? Sdk { get; set; }
+
+    //XmlSerializer relies on runtime code generation (Reflection.Emit) which is not
+    //available under NativeAOT, so csproj files are parsed with System.Xml.Linq instead.
+    public static Project Parse(string path)
+    {
+        var root = XElement.Load(path);
+        if (root.Name.LocalName != "Project")
+            throw new InvalidOperationException($"\"{path}\" is not a .csproj file (<Project> root element expected).");
+
+        return new Project
+        {
+            Sdk = AttributeValue(root, "Sdk"),
+            PropertyGroup = Children(root, "PropertyGroup").Select(ParsePropertyGroup).ToList(),
+            ItemGroup = Children(root, "ItemGroup").Select(ParseItemGroup).ToList(),
+            Target = Children(root, "Target").Select(ParseTarget).FirstOrDefault(),
+        };
+    }
+
+    private static IEnumerable<XElement> Children(XElement parent, string localName) =>
+        parent.Elements().Where(e => e.Name.LocalName == localName);
+
+    private static string? AttributeValue(XElement parent, string localName) =>
+        (string?)parent.Attributes().FirstOrDefault(a => a.Name.LocalName == localName);
+
+    private static string? ElementValue(XElement? parent, string localName) =>
+        parent is null ? null : (string?)Children(parent, localName).FirstOrDefault();
+
+    private static PropertyGroup ParsePropertyGroup(XElement element) => new()
+    {
+        TargetFramework = ElementValue(element, "TargetFramework"),
+        RuntimeIdentifier = ElementValue(element, "RuntimeIdentifier"),
+        RuntimeFrameworkVersion = ElementValue(element, "RuntimeFrameworkVersion"),
+        ImplicitUsings = ElementValue(element, "ImplicitUsings"),
+        TargetsForTfmSpecificBuildOutput = ElementValue(element, "TargetsForTfmSpecificBuildOutput"),
+        PreserveCompilationContext = ElementValue(element, "PreserveCompilationContext"),
+        AssemblyName = ElementValue(element, "AssemblyName"),
+        OutputType = ElementValue(element, "OutputType"),
+        PackageId = ElementValue(element, "PackageId"),
+        GenerateAssemblyTitleAttribute = ElementValue(element, "GenerateAssemblyTitleAttribute"),
+        GenerateAssemblyDescriptionAttribute = ElementValue(element, "GenerateAssemblyDescriptionAttribute"),
+        GenerateAssemblyConfigurationAttribute = ElementValue(element, "GenerateAssemblyConfigurationAttribute"),
+        GenerateAssemblyCompanyAttribute = ElementValue(element, "GenerateAssemblyCompanyAttribute"),
+        GenerateAssemblyProductAttribute = ElementValue(element, "GenerateAssemblyProductAttribute"),
+        GenerateAssemblyCopyrightAttribute = ElementValue(element, "GenerateAssemblyCopyrightAttribute"),
+        GenerateAssemblyVersionAttribute = ElementValue(element, "GenerateAssemblyVersionAttribute"),
+        GenerateAssemblyFileVersionAttribute = ElementValue(element, "GenerateAssemblyFileVersionAttribute"),
+        DocumentationFile = ElementValue(element, "DocumentationFile"),
+        Authors = ElementValue(element, "Authors"),
+        PublishWithAspNetCoreTargetManifest = ElementValue(element, "PublishWithAspNetCoreTargetManifest"),
+        VersionPrefix = ElementValue(element, "VersionPrefix"),
+        VersionSuffix = ElementValue(element, "VersionSuffix"),
+        IsPackable = ElementValue(element, "IsPackable"),
+    };
+
+    private static ItemGroup ParseItemGroup(XElement element) => new()
+    {
+        Content = Children(element, "Content").Select(content => new Content
+        {
+            Update = AttributeValue(content, "Update"),
+            CopyToOutputDirectory = ElementValue(content, "CopyToOutputDirectory"),
+        }).ToList(),
+        PackageReferences = Children(element, "PackageReference").Select(reference => new PackageReference
+        {
+            Include = AttributeValue(reference, "Include"),
+            Version = AttributeValue(reference, "Version"),
+        }).ToList(),
+        ProjectReferences = Children(element, "ProjectReference").Select(reference => new ProjectReference
+        {
+            Include = AttributeValue(reference, "Include"),
+            PrivateAssets = AttributeValue(reference, "PrivateAssets"),
+        }).ToList(),
+        BuildOutputInPackage = Children(element, "BuildOutputInPackage")
+            .Select(item => new BuildOutputInPackage { Include = AttributeValue(item, "Include") })
+            .FirstOrDefault(),
+    };
+
+    private static Target ParseTarget(XElement element) => new()
+    {
+        Name = AttributeValue(element, "Name"),
+        DependsOnTargets = AttributeValue(element, "DependsOnTargets"),
+        ItemGroup = Children(element, "ItemGroup").Select(ParseItemGroup).FirstOrDefault(),
+    };
 }

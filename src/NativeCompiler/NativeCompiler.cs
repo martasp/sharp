@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
@@ -102,25 +103,34 @@ public static class NativeCompiler
     {
         try
         {
-            //var emitOptions = new EmitOptions(
-            //    debugInformationFormat: DebugInformationFormat.PortablePdb,
-            //    pdbFilePath: project.ProjectName);
+            //EmitOptions must use PortablePdb: the string Emit overload forces the native Windows PDB
+            //format which relies on COM (DiaSymReader) and is not supported under NativeAOT.
+            var emitOptions = new EmitOptions(
+                debugInformationFormat: DebugInformationFormat.PortablePdb,
+                pdbFilePath: project.PDBPathName);
 
-            //EmitResult result = compilation.Emit(
-            //    peStream: assemblyStream,
-            //    pdbStream: symbolsStream,
-            //    embeddedTexts: embeddedTexts,
-            //    options: emitOptions);
+            using (var dllStream = File.Create(project.DllPathName))
+            using (var pdbStream = File.Create(project.PDBPathName))
+            {
+                var dllResult = compilation.Emit(dllStream, pdbStream, options: emitOptions);
+                if (!dllResult.Success)
+                {
+                    return (false, dllResult.PrintErrors());
+                }
+            }
 
-            //dotnet publish -r win-x64 -c release
-            var result1 = compilation.Emit(project.DllPathName, project.PDBPathName);
-            var result = compilation.Emit(project.ExePathName, project.PDBPathName);
-            var buildErrors = result.PrintErrors();
+            using (var exeStream = File.Create(project.ExePathName))
+            using (var pdbStream = File.Create(project.PDBPathName))
+            {
+                var result = compilation.Emit(exeStream, pdbStream, options: emitOptions);
+                var buildErrors = result.PrintErrors();
+                if (!result.Success)
+                {
+                    return (false, buildErrors);
+                }
+            }
 
-            //Todo top level program for dll is not suported.s
-
-            Debug.Assert(result.Success, @$"Compilation failed.{buildErrors}");
-            return (result.Success, buildErrors);
+            return (true, "");
         }
         catch (Exception ex)
         {

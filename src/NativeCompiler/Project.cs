@@ -1,5 +1,4 @@
-﻿using System.Xml.Serialization;
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using XML;
 using ProjectReference = XML.ProjectReference;
 
@@ -22,7 +21,8 @@ public class Project : IProject
     public string ProjectRootPath { get; set; }
     public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
     public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath);
-    private XML.Project XMLProject => DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
+    private XML.Project? _xmlProject;
+    private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
     public bool ImplicitUsings => XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false ? true : false;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
@@ -50,13 +50,7 @@ public class Project : IProject
 
     private XML.Project DeserializeObject(string path)
     {
-        var xml = File.ReadAllText(path);
-
-        var serializer = new XmlSerializer(typeof(XML.Project));
-        using TextReader reader = new StringReader(xml);
-        var result = (XML.Project?)serializer.Deserialize(reader) ?? throw new Exception("Can not Deserialize");
-
-        return result;
+        return XML.Project.Parse(path);
     }
 
     private static string GetNuGetCacheDirectory()

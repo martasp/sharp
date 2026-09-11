@@ -8,9 +8,78 @@ namespace NativeCompiler;
 
 public static class AsemblyExtensions
 {
-    public static string ResolveSdkRuntimeAssemblyPath => @"C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.0\"; // shared dlls are for running, have to be copied near exe.
-    public static string ResolveSdkRefLocation => @"C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\10.0.0\ref\net10.0"; // refs are for compiling
-    public static string ResolveSdkHostLocation => @"C:\Program Files\dotnet\host\fxr\10.0.0"; // refs are for compiling
+    public static string ResolveSdkRuntimeAssemblyPath
+    {
+        get
+        {
+            var runtimeRoot = Path.Combine(ResolveDotnetRoot(), "shared", "Microsoft.NETCore.App"); // shared dlls are for running, have to be copied near exe.
+            return SelectBestVersionDirectory(runtimeRoot, preferredMajor: Environment.Version.Major);
+        }
+    }
+
+    public static string ResolveSdkRefLocation
+    {
+        get
+        {
+            var refPackRoot = Path.Combine(ResolveDotnetRoot(), "packs", "Microsoft.NETCore.App.Ref"); // refs are for compiling
+            var versionDir = SelectBestVersionDirectory(refPackRoot, preferredMajor: Environment.Version.Major);
+            return SelectBestVersionDirectory(Path.Combine(versionDir, "ref"));
+        }
+    }
+
+    public static string ResolveSdkHostLocation => Path.Combine(ResolveDotnetRoot(), "host", "fxr");
+
+    private static string ResolveDotnetRoot()
+    {
+        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+        if (!string.IsNullOrWhiteSpace(dotnetRoot) && Directory.Exists(dotnetRoot))
+            return dotnetRoot;
+
+        foreach (var candidate in new[]
+                 {
+                     @"C:\Program Files\dotnet",
+                     @"C:\Program Files (x86)\dotnet",
+                     @"/usr/share/dotnet",
+                 })
+        {
+            if (Directory.Exists(candidate)) return candidate;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Could not locate the .NET SDK install directory. Set the DOTNET_ROOT environment variable.");
+    }
+
+    private static string SelectBestVersionDirectory(string parent, int? preferredMajor = null)
+    {
+        if (!Directory.Exists(parent))
+            throw new DirectoryNotFoundException($"Could not find a part of the path '{parent}'.");
+
+        var paths = Directory.EnumerateDirectories(parent)
+            .Select(directory => new { Path = directory, Version = ParseVersion(Path.GetFileName(directory)) })
+            .Where(item => item.Version is not null)
+            .OrderByDescending(item => item.Version)
+            .Select(item => item.Path)
+            .ToArray();
+
+        string? best = null;
+
+        if (preferredMajor is not null)
+        {
+            best = paths.FirstOrDefault(path => ParseVersion(Path.GetFileName(path))?.Major == preferredMajor);
+        }
+
+        best ??= paths.FirstOrDefault();
+
+        return best ?? throw new DirectoryNotFoundException($"Could not find a part of the path '{parent}'.");
+    }
+
+    private static Version? ParseVersion(string? value)
+    {
+        if (value is null) return null;
+
+        var digits = new string(value.SkipWhile(character => !char.IsDigit(character)).ToArray());
+        return Version.TryParse(digits, out var version) ? version : null;
+    }
 
 
     //public static string AOTLocation(this Assembly asembly)
