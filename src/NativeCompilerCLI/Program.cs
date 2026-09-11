@@ -11,10 +11,16 @@ using static System.Console;
 var timer = Stopwatch.StartNew();
 timer.Start();
 var csprojFolderPath = args.FirstOrDefault() ?? throw new Exception("add console argument");
-var _ = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+var buildResult = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
 timer.Stop();
 
 WriteLine($"Total time: {timer.ElapsedMilliseconds}ms");
+
+if (!buildResult.success)
+{
+    Error.WriteLine($"Build failed: {buildResult.errors}");
+    Environment.Exit(1);
+}
 //Todo !!!!!!!!!!!!!!!!!!!!!!
 //Fixes to do 
 //Use dlls from refs folder for nativecompiler

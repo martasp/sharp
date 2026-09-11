@@ -298,8 +298,28 @@ public static class NativeCompilerUtils
     public static void WriteAppHost(Project project)
     {
         var appHostTemplate = FindAppHostTemplate();
-        if (appHostTemplate is not null)
-            File.Copy(appHostTemplate, project.ExePathName, overwrite: true);
+        if (appHostTemplate is null)
+        {
+            Console.WriteLine(
+                $"Skipping apphost: no AppHostTemplate found under '{Path.Combine(AsemblyExtensions.ResolveSdkRoot, "sdk")}'.");
+            return;
+        }
+
+        //The SDK template is read-only and File.Copy preserves that attribute, which would make the
+        //destination unwritable for the patch below (and block the next overwrite). Clear it first.
+        MakeWritableIfExists(project.ExePathName);
+        File.Copy(appHostTemplate, project.ExePathName, overwrite: true);
+        File.SetAttributes(project.ExePathName, FileAttributes.Normal);
+
+        var appDllName = Path.GetFileName(project.DllPathName);
+        BindAppHost(project.ExePathName, appDllName);
+        Console.WriteLine($"Apphost '{project.ExePathName}' bound to '{appDllName}'.");
+    }
+
+    private static void MakeWritableIfExists(string path)
+    {
+        if (!File.Exists(path)) return;
+        File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
     }
 
     private static string? FindAppHostTemplate()
@@ -308,7 +328,66 @@ public static class NativeCompilerUtils
         if (!Directory.Exists(sdkDir)) return null;
 
         return Directory.EnumerateDirectories(sdkDir)
+            .OrderByDescending(ParseSdkVersion)
             .Select(sdkVersionDir => Path.Combine(sdkVersionDir, "AppHostTemplate", "apphost.exe"))
             .FirstOrDefault(File.Exists);
     }
+
+    private static Version? ParseSdkVersion(string sdkDirectoryPath)
+    {
+        var name = Path.GetFileName(sdkDirectoryPath) ?? "";
+        var digits = new string(name.SkipWhile(character => !char.IsDigit(character)).ToArray());
+        return Version.TryParse(digits, out var version) ? version : null;
+    }
+
+    private static void BindAppHost(string appHostPath, string appDllName)
+    {
+        var placeholder = Encoding.ASCII.GetBytes(AppBinaryPathPlaceholder);
+        var appName = Encoding.UTF8.GetBytes(appDllName);
+
+        if (appName.Length > placeholder.Length)
+            throw new InvalidOperationException($"App DLL name '{appDllName}' is too long for the apphost.");
+
+        var bytes = File.ReadAllBytes(appHostPath);
+        var position = IndexOf(bytes, placeholder);
+        if (position < 0)
+            throw new InvalidOperationException("AppHost template is missing the placeholder hash; cannot bind it.");
+
+        for (var i = 0; i < placeholder.Length; i++)
+            bytes[position + i] = i < appName.Length ? appName[i] : (byte)0;
+
+        File.WriteAllBytes(appHostPath, bytes);
+
+        //Verify the placeholder is gone so a silent failure cannot leave an unbound apphost behind.
+        var verify = File.ReadAllBytes(appHostPath);
+        if (IndexOf(verify, placeholder) >= 0)
+            throw new InvalidOperationException("Failed to bind apphost: the placeholder hash is still present.");
+    }
+
+    private static int IndexOf(byte[] haystack, byte[] needle)
+    {
+        for (var i = 0; i <= haystack.Length - needle.Length; i++)
+        {
+            var found = true;
+            for (var j = 0; j < needle.Length; j++)
+            {
+                if (haystack[i + j] != needle[j])
+                {
+                    found = false;
+                    break;
+                }
+            }
+
+            if (found) return i;
+        }
+
+        return -1;
+    }
+
+    //The apphost template embeds a placeholder hash (SHA-256 of "foobar") where the managed DLL
+    //name is stored. 'dotnet build' replaces it via the SDK's HostWriter, which hardcodes the same
+    //constant (AppBinaryPathPlaceholder) in https://github.com/dotnet/runtime/blob/main/src/installer/
+    //managed/Microsoft.NET.HostModel/AppHost/HostWriter.cs. The value never changes between runtime
+    //versions or machines, so embedding it here mirrors the SDK exactly.
+    private const string AppBinaryPathPlaceholder = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2";
 }

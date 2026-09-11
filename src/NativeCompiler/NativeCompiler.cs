@@ -73,11 +73,14 @@ public static class NativeCompiler
         var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences,compilationOptions);
         
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
-        
+
         var paths = mergedDefaultReferencesForRunning.Select(item => item?.Display ?? "").ToList();
         WriteFiles(project.SharpBinFolderPath, paths);
 
-        Console.WriteLine($"Compiled {project.ProjectName} successfully");
+        if (produceDll.success)
+            Console.WriteLine($"Compiled {project.ProjectName} successfully");
+        else
+            Console.Error.WriteLine($"Failed to compile {project.ProjectName}: {produceDll.errors}");
         
         return (produceDll.success, produceDll.errors, compilation, project, embeddedTexts);
     }
