@@ -112,22 +112,18 @@ public static class NativeCompiler
             using (var dllStream = File.Create(project.DllPathName))
             using (var pdbStream = File.Create(project.PDBPathName))
             {
-                var dllResult = compilation.Emit(dllStream, pdbStream, options: emitOptions);
-                if (!dllResult.Success)
-                {
-                    return (false, dllResult.PrintErrors());
-                }
-            }
-
-            using (var exeStream = File.Create(project.ExePathName))
-            using (var pdbStream = File.Create(project.PDBPathName))
-            {
-                var result = compilation.Emit(exeStream, pdbStream, options: emitOptions);
+                var result = compilation.Emit(dllStream, pdbStream, options: emitOptions);
                 var buildErrors = result.PrintErrors();
                 if (!result.Success)
                 {
                     return (false, buildErrors);
                 }
+            }
+
+            WriteRuntimeConfig(project);
+            if (project.ResolvedProjectOutputKind() == OutputKind.ConsoleApplication)
+            {
+                WriteAppHost(project);
             }
 
             return (true, "");

@@ -29,6 +29,8 @@ public static class AsemblyExtensions
 
     public static string ResolveSdkHostLocation => Path.Combine(ResolveDotnetRoot(), "host", "fxr");
 
+    public static string ResolveSdkRoot => ResolveDotnetRoot();
+
     private static string ResolveDotnetRoot()
     {
         var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");

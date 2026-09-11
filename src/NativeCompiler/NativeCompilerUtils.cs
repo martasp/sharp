@@ -269,4 +269,46 @@ public static class NativeCompilerUtils
 
         return project;
     }
+
+    public static void WriteRuntimeConfig(Project project)
+    {
+        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
+        var versionParts = runtimeVersion.Split('.');
+        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+
+        var runtimeConfig =
+        $$"""
+        {
+          "runtimeOptions": {
+            "tfm": "{{tfm}}",
+            "framework": {
+              "name": "Microsoft.NETCore.App",
+              "version": "{{runtimeVersion}}"
+            },
+            "configProperties": {
+              "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
+            }
+          }
+        }
+        """;
+
+        File.WriteAllText(Path.Combine(project.SharpBinFolderPath, $"{project.ProjectName}.runtimeconfig.json"), runtimeConfig);
+    }
+
+    public static void WriteAppHost(Project project)
+    {
+        var appHostTemplate = FindAppHostTemplate();
+        if (appHostTemplate is not null)
+            File.Copy(appHostTemplate, project.ExePathName, overwrite: true);
+    }
+
+    private static string? FindAppHostTemplate()
+    {
+        var sdkDir = Path.Combine(AsemblyExtensions.ResolveSdkRoot, "sdk");
+        if (!Directory.Exists(sdkDir)) return null;
+
+        return Directory.EnumerateDirectories(sdkDir)
+            .Select(sdkVersionDir => Path.Combine(sdkVersionDir, "AppHostTemplate", "apphost.exe"))
+            .FirstOrDefault(File.Exists);
+    }
 }
