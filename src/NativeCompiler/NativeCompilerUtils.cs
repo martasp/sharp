@@ -30,7 +30,26 @@ public static class NativeCompilerUtils
 
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText)[] ParseProject(Project project)
     {
-        return project.CSFiles.Select(file => ParseFile(file)).ToArray();
+        var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(ResolveLanguageVersion(project.LangVersion));
+
+        if (!string.IsNullOrWhiteSpace(project.DefineConstants))
+        {
+            var constants = project.DefineConstants
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(constant => constant.Trim())
+                .Where(constant => constant.Length > 0);
+            parseOptions = parseOptions.WithPreprocessorSymbols(constants);
+        }
+
+        return project.CSFiles.Select(file => Parse(file, parseOptions)).ToArray();
+    }
+
+    private static LanguageVersion ResolveLanguageVersion(string? langVersion)
+    {
+        if (!string.IsNullOrWhiteSpace(langVersion) &&
+            Enum.TryParse(langVersion.Trim(), ignoreCase: true, out LanguageVersion resolved))
+            return resolved;
+        return LanguageVersion.Latest;
     }
 
     public static MetadataReference[] GetdefaultReferencesForRunning(string dotNetAssemblyPath)
@@ -127,31 +146,56 @@ public static class NativeCompilerUtils
 
     public static MetadataReference[] GetdefaultLocalReferences(Project project)
     {
-        var projectReferences = project.ProjectReferences;
-        var defaultReferences = new List<MetadataReference>();
+        var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var item in projectReferences)
-        {
-            var include = item.Include ?? "";
-            var dllPath = ProjectReferenceFinder.FindReferencedDLL(include, project.ProjectRootPath);
-            defaultReferences.Add(MetadataReference.CreateFromFile(dllPath));
+        CollectProjectReferences(project.ProjectRootPath, project.TargetFramework, visitedProjects, referenceFiles);
 
-            var referencedProjectCsproj = ProjectReferenceFinder.FindReferencedCsproj(include, project.ProjectRootPath);
-            if (referencedProjectCsproj != null)
-            {
-                var transitivePackages = GetTransitiveNugetPackages(referencedProjectCsproj);
-                defaultReferences.AddRange(transitivePackages.Select(f => (MetadataReference)MetadataReference.CreateFromFile(f)));
-            }
-        }
-
-        return defaultReferences.ToArray();
+        return referenceFiles
+            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
+            .ToArray();
     }
 
-    private static List<string> GetTransitiveNugetPackages(string csprojPath)
+    private static void CollectProjectReferences(string projectRootPath, string? targetTfm,
+        HashSet<string> visitedProjects, HashSet<string> referenceFiles)
+    {
+        var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+        if (csprojFile is null) return;
+
+        if (!visitedProjects.Add(Path.GetFullPath(csprojFile))) return;
+
+        var xml = XML.Project.Parse(csprojFile);
+        var projectReferences = xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences);
+
+        foreach (var reference in projectReferences)
+        {
+            var include = reference.Include ?? "";
+            if (string.IsNullOrEmpty(include)) continue;
+
+            var referencedProjectDir = Path.GetFullPath(
+                Path.Combine(projectRootPath, Path.GetDirectoryName(include) ?? ""));
+            var referencedCsproj = ProjectReferenceFinder.FindReferencedCsproj(include, projectRootPath);
+
+            if (referencedCsproj is not null)
+            {
+                foreach (var transitiveNuget in GetTransitiveNugetPackages(referencedCsproj, targetTfm))
+                    referenceFiles.Add(transitiveNuget);
+
+                CollectProjectReferences(referencedProjectDir, targetTfm, visitedProjects, referenceFiles);
+            }
+
+            // Builds the referenced project on demand, then resolves its produced DLL.
+            referenceFiles.Add(ProjectReferenceFinder.FindReferencedDLL(include, projectRootPath));
+        }
+    }
+
+    private static List<string> GetTransitiveNugetPackages(string csprojPath, string? targetTfm)
     {
         var results = new List<string>();
         if (!File.Exists(csprojPath)) return results;
 
+        var tfm = targetTfm ?? "net10.0";
         var xml = XML.Project.Parse(csprojPath);
         var packages = xml.ItemGroup.SelectMany(ig => ig.PackageReferences);
 
@@ -164,25 +208,37 @@ public static class NativeCompilerUtils
             var pkgPath = NuGetPackage.FindPackagePath(pkgName, pkgVersion);
             if (string.IsNullOrEmpty(pkgPath)) continue;
 
-            var dllPath = NuGetPackage.FindPackageDLL(pkgPath);
-            if (!string.IsNullOrEmpty(dllPath))
-                results.Add(dllPath);
+            results.AddRange(NuGetPackage.FindPackageDLLs(pkgPath, tfm));
+            results.AddRange(NuGetPackage.GetTransitivePackageDlls(pkgPath, tfm));
         }
 
-        return results;
+        return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
     {
-        var packages = project.PackageReferences;
+        var tfm = project.TargetFramework ?? "net10.0";
+        var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var files = packages
-            .Select(item =>
-                NuGetPackage.FindPackageDLL(NuGetPackage.FindPackagePath(item.Include ?? "", item.Version ?? "")))
-            .Where(item => item != string.Empty);
+        foreach (var item in project.PackageReferences)
+        {
+            var packageName = item.Include ?? "";
+            var packageVersion = item.Version ?? NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
+            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
 
-        var defaultReferences = files.Select(f => (MetadataReference)MetadataReference.CreateFromFile(f)).ToArray();
-        return defaultReferences;
+            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
+            if (string.IsNullOrEmpty(packagePath)) continue;
+
+            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, tfm))
+                referenceFiles.Add(dll);
+
+            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, tfm))
+                referenceFiles.Add(dll);
+        }
+
+        return referenceFiles
+            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
+            .ToArray();
     }
 
     public static CSharpCompilationOptions GetCompilationOptions(Project project)
@@ -213,9 +269,41 @@ public static class NativeCompilerUtils
         var DefaultCompilationOptions =
             new CSharpCompilationOptions(OutputKind)
                 .WithOptimizationLevel(OptimizationLevel.Debug)
-                .WithUsings(DefaultNamespaces);
+                .WithUsings(DefaultNamespaces)
+                .WithAllowUnsafe(project.AllowUnsafeBlocks);
+
+        if (project.Nullable?.Contains("enable", StringComparison.OrdinalIgnoreCase) ?? false)
+            DefaultCompilationOptions = DefaultCompilationOptions.WithNullableContextOptions(NullableContextOptions.Enable);
 
         return DefaultCompilationOptions;
+    }
+
+    // Mirrors NuGet's framework-assembly suppression: assemblies that are inbox in the runtime/ref pack
+    // are dropped from package/project references so duplicate simple names (e.g. System.Collections.Immutable)
+    // do not produce conflicting references.
+    public static MetadataReference[] MergeFrameworkSuppression(
+        IEnumerable<MetadataReference> nugetAndLocal,
+        IEnumerable<MetadataReference> frameworkReferences)
+    {
+        var frameworkNames = new HashSet<string>(
+            frameworkReferences.Select(reference =>
+                Path.GetFileNameWithoutExtension(reference.Display) ?? ""),
+            StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var merged = new List<MetadataReference>();
+
+        foreach (var reference in nugetAndLocal)
+        {
+            var name = Path.GetFileNameWithoutExtension(reference.Display) ?? "";
+            if (name.Length == 0) continue;
+            if (frameworkNames.Contains(name)) continue;
+            if (!seen.Add(name)) continue;
+            merged.Add(reference);
+        }
+
+        merged.AddRange(frameworkReferences);
+        return merged.ToArray();
     }
 
     public static void ThrowErrors(EmitResult result)

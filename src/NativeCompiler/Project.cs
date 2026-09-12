@@ -24,6 +24,12 @@ public class Project : IProject
     private XML.Project? _xmlProject;
     private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
     public bool ImplicitUsings => XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false ? true : false;
+    public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework;
+    public bool AllowUnsafeBlocks =>
+        XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+    public string? Nullable => XMLProject.PropertyGroup?.FirstOrDefault()?.Nullable;
+    public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion;
+    public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);

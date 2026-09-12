@@ -1,45 +1,83 @@
 using System;
 using System.IO;
-using NativeCompiler;
+using System.Linq;
+using Shouldly;
 using Xunit;
+using NativeCompiler;
 
 namespace NativeCompilerTests;
 
-public class NuGetPackageFinderTests
+public class NuGetTests
 {
     [Fact]
-    public void FindPackagePath_GivenExistingPackageInGlobalCache_ShouldReturnPackagePath()
+    public void FindPackageDLLs_SelectsBestMatchingLibForTargetTfm()
     {
-        // Arrange
-        var packageName = "Microsoft.CodeAnalysis.CSharp".ToLower();
-        var packageVersion = "5.0.0";
-        var globalPackagesFolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages");
-        var expectedPackagePath = Path.Combine(globalPackagesFolderPath, packageName, packageVersion);
+        var packagePath = NuGetPackage.FindPackagePath("Microsoft.CodeAnalysis.CSharp", "5.3.0");
+        packagePath.ShouldNotBeEmpty();
 
-        // Act
-        var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
+        var dlls = NuGetPackage.FindPackageDLLs(packagePath, "net8.0");
 
-        // Assert
-        Assert.Equal(expectedPackagePath, packagePath);
+        dlls.ShouldNotBeEmpty();
+        dlls.ShouldAllBe(dll => dll.Replace('\\', '/').Contains("/lib/net8.0/",
+            StringComparison.OrdinalIgnoreCase));
+        dlls.Select(Path.GetFileName).ShouldContain("Microsoft.CodeAnalysis.CSharp.dll",
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void FindPackagePath_GivenExistingPackageInNuGetSources_ShouldReturnPackagePath()
+    public void FindPackageDLLs_ScoringPrefersExactCoreTfmOverNetStandard()
     {
-        // Arrange
-        var packageName = "Microsoft.CodeAnalysis.CSharp".ToLower();
-        var packageVersion = "5.0.0";
-        var globalPackagesFolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages");
-        var expectedPackagePath = Path.Combine(globalPackagesFolderPath, packageName, packageVersion);
+        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("netstandard2.0", "net10.0"));
+        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("net472", "net10.0"));
+        NuGetTfm.Score("net10.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("net8.0", "net10.0"));
+    }
 
-        // Act
-        var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
+    [Fact]
+    public void FindPackageDLLs_MetaPackageWithoutLibReturnsEmpty()
+    {
+        var packagePath = NuGetPackage.FindPackagePath("Microsoft.CodeAnalysis", "5.0.0");
+        packagePath.ShouldNotBeNull();
 
-        // Assert
-        Assert.Equal(expectedPackagePath, packagePath);
+        var dlls = NuGetPackage.FindPackageDLLs(packagePath, "net10.0");
+        dlls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void GetTransitivePackageDlls_IncludesNuSpecDependencies()
+    {
+        var packagePath = NuGetPackage.FindPackagePath("Testcontainers", "4.4.0");
+        packagePath.ShouldNotBeEmpty();
+
+        var dlls = NuGetPackage.GetTransitivePackageDlls(packagePath, "net10.0");
+
+        dlls.ShouldNotBeEmpty();
+        dlls.Select(Path.GetFileName)
+            .ShouldContain(file => file.Equals("Renci.SshNet.dll", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ResolveCentralVersion_ReadsGlobalPackagesProps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "SlnFixturesCentralTest", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "Directory.Packages.props"),
+                "<Project><ItemGroup><PackageVersion Include=\"DemoPkg\" Version=\"1.2.3\" /></ItemGroup></Project>");
+
+            NuGetPackage.ResolveCentralVersion("DemoPkg", root).ShouldBe("1.2.3");
+            NuGetPackage.ResolveCentralVersion("Unknown", root).ShouldBeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveCentralVersion_ReturnsEmptyWithoutGlobalPackagesProps()
+    {
+        var root = Path.GetTempPath();
+        NuGetPackage.ResolveCentralVersion("DemoPkg", root).ShouldBeEmpty();
     }
 }

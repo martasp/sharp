@@ -1,0 +1,26 @@
+﻿[
+  {
+    Name: DotnetRuntime10,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: DotnetRuntime10\DotnetRuntime10.csproj,
+    FlatPath: {SolutionDirectory}DotnetRuntime10/DotnetRuntime10.csproj
+  },
+  {
+    Name: NativeCompiler,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: src\NativeCompiler\NativeCompiler.csproj,
+    FlatPath: {SolutionDirectory}src/NativeCompiler/NativeCompiler.csproj
+  },
+  {
+    Name: NativeCompilerCLI,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: src\NativeCompilerCLI\NativeCompilerCLI.csproj,
+    FlatPath: {SolutionDirectory}src/NativeCompilerCLI/NativeCompilerCLI.csproj
+  },
+  {
+    Name: SimplePlayground,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: SimplePlayground\SimplePlayground.csproj,
+    FlatPath: {SolutionDirectory}SimplePlayground/SimplePlayground.csproj
+  }
+]

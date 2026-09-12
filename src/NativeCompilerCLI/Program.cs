@@ -3,19 +3,51 @@ using System;
 using System.Linq;
 using static System.Console;
 
-var csprojFolderPath = args.FirstOrDefault() ?? throw new Exception("add console argument");
-var buildResult = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+var targetPath = args.FirstOrDefault() ?? throw new Exception("add console argument (.sln, .csproj or project folder)");
 
-WriteLine($"Total time: {buildResult.Duration.TotalMilliseconds:0}ms");
-foreach (var line in buildResult.Outputs)
+if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
 {
-    WriteLine(line);
+    var solutionResult = NativeCompiler.NativeCompiler.BuildSolution(targetPath);
+
+    WriteLine($"Solution total time: {solutionResult.Duration.TotalMilliseconds:0}ms");
+    foreach (var error in solutionResult.Errors)
+    {
+        Error.WriteLine(error);
+    }
+
+    foreach (var project in solutionResult.Projects)
+    {
+        WriteLine($"{(project.Result.Success ? "OK   " : "FAIL ")} {project.ProjectName}\t{project.Result.Duration.TotalMilliseconds:0}ms");
+        foreach (var output in project.Result.Outputs)
+        {
+            WriteLine($"      {output}");
+        }
+        if (!project.Result.Success)
+        {
+            Error.WriteLine($"      {project.Result.Errors}");
+        }
+    }
+
+    if (!solutionResult.Success)
+    {
+        Environment.Exit(1);
+    }
 }
-
-if (!buildResult.Success)
+else
 {
-    Error.WriteLine($"Build failed: {buildResult.Errors}");
-    Environment.Exit(1);
+    var buildResult = NativeCompiler.NativeCompiler.Build(targetPath);
+
+    WriteLine($"Total time: {buildResult.Duration.TotalMilliseconds:0}ms");
+    foreach (var line in buildResult.Outputs)
+    {
+        WriteLine(line);
+    }
+
+    if (!buildResult.Success)
+    {
+        Error.WriteLine($"Build failed: {buildResult.Errors}");
+        Environment.Exit(1);
+    }
 }
 
 //if you want rewrite roslyn:

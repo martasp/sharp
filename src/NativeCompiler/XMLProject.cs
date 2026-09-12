@@ -73,6 +73,18 @@ public class PropertyGroup
 
     [XmlElement(ElementName = "IsPackable")]
     public string? IsPackable { get; set; }
+
+    [XmlElement(ElementName = "AllowUnsafeBlocks")]
+    public string? AllowUnsafeBlocks { get; set; }
+
+    [XmlElement(ElementName = "LangVersion")]
+    public string? LangVersion { get; set; }
+
+    [XmlElement(ElementName = "Nullable")]
+    public string? Nullable { get; set; }
+
+    [XmlElement(ElementName = "DefineConstants")]
+    public string? DefineConstants { get; set; }
 }
 
 [XmlRoot(ElementName = "Content")]
@@ -205,6 +217,10 @@ public class Project
         VersionPrefix = ElementValue(element, "VersionPrefix"),
         VersionSuffix = ElementValue(element, "VersionSuffix"),
         IsPackable = ElementValue(element, "IsPackable"),
+        AllowUnsafeBlocks = ElementValue(element, "AllowUnsafeBlocks"),
+        LangVersion = ElementValue(element, "LangVersion"),
+        Nullable = ElementValue(element, "Nullable"),
+        DefineConstants = ElementValue(element, "DefineConstants"),
     };
 
     private static ItemGroup ParseItemGroup(XElement element) => new()

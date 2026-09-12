@@ -7,8 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NativeCompilerCLI", "src\Na
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NativeCompiler", "src\NativeCompiler\NativeCompiler.csproj", "{B3AB336E-F0DC-499D-B637-6423036DB3BF}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NativeCompilerTests", "tests\NativeCompilerTests\NativeCompilerTests.csproj", "{D6D99807-5843-4A42-BD64-53E44A8F6949}"
-EndProject
+#Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NativeCompilerTests", "tests\NativeCompilerTests\NativeCompilerTests.csproj", "{D6D99807-5843-4A42-BD64-53E44A8F6949}"
+#EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimplePlayground", "SimplePlayground\SimplePlayground.csproj", "{44C9B7CA-7908-4638-BA6C-F859E880FF93}"
 EndProject
 Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "MyApp", "SimplePlayground\bin\Debug\net10.0\MyApp.exe", "{0802B535-3B2F-1231-3784-83F41447C652}"
@@ -26,8 +26,8 @@ Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "MyApp", "SimplePlayground\b
 		IORedirection = Auto
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntimeHostExe", "DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj", "{3B06D313-389D-4A72-8B3B-992491813507}"
-EndProject
+#Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntimeHostExe", "DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj", "{3B06D313-389D-4A72-8B3B-992491813507}"
+#EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntime10", "DotnetRuntime10\DotnetRuntime10.csproj", "{DADA7AEC-98D3-4CF9-A3A5-E38902619802}"
 EndProject
 Global
@@ -44,20 +44,20 @@ Global
 		{B3AB336E-F0DC-499D-B637-6423036DB3BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B3AB336E-F0DC-499D-B637-6423036DB3BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B3AB336E-F0DC-499D-B637-6423036DB3BF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D6D99807-5843-4A42-BD64-53E44A8F6949}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D6D99807-5843-4A42-BD64-53E44A8F6949}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D6D99807-5843-4A42-BD64-53E44A8F6949}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D6D99807-5843-4A42-BD64-53E44A8F6949}.Release|Any CPU.Build.0 = Release|Any CPU
+		#{D6D99807-5843-4A42-BD64-53E44A8F6949}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		#{D6D99807-5843-4A42-BD64-53E44A8F6949}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		#{D6D99807-5843-4A42-BD64-53E44A8F6949}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		#{D6D99807-5843-4A42-BD64-53E44A8F6949}.Release|Any CPU.Build.0 = Release|Any CPU
 		{44C9B7CA-7908-4638-BA6C-F859E880FF93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{44C9B7CA-7908-4638-BA6C-F859E880FF93}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{44C9B7CA-7908-4638-BA6C-F859E880FF93}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{44C9B7CA-7908-4638-BA6C-F859E880FF93}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0802B535-3B2F-1231-3784-83F41447C652}.Debug|Any CPU.ActiveCfg = Release|Any CPU
 		{0802B535-3B2F-1231-3784-83F41447C652}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.Build.0 = Release|Any CPU
+		#{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		#{3B06D313-389D-4A72-8B3B-992491813507}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		#{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		#{3B06D313-389D-4A72-8B3B-992491813507}.Release|Any CPU.Build.0 = Release|Any CPU
 		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DADA7AEC-98D3-4CF9-A3A5-E38902619802}.Release|Any CPU.ActiveCfg = Release|Any CPU
