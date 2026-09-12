@@ -23,14 +23,29 @@ public class Project : IProject
     public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
     public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath);
     private XML.Project? _xmlProject;
-    private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure 
-    public bool ImplicitUsings => XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false ? true : false;
-    public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework;
+    private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure
+
+    // Feature: Directory.Build.props (see BuildPropsEvaluator.cs). Lazily evaluated, csproj values win.
+    private BuildProps? _buildProps;
+    private BuildProps BuildProps => _buildProps ??= BuildPropsEvaluator.Evaluate(ProjectRootPath);
+
+    public bool ImplicitUsings =>
+        (XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false)
+        || BuildProps.ImplicitUsings;
+
+    public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework
+                                      ?? BuildProps.TargetFramework;
+
     public bool AllowUnsafeBlocks =>
-        XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
-    public string? Nullable => XMLProject.PropertyGroup?.FirstOrDefault()?.Nullable;
-    public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion;
-    public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants;
+        (XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
+        || BuildProps.AllowUnsafeBlocks;
+
+    public string? Nullable => XMLProject.PropertyGroup?.FirstOrDefault()?.Nullable ?? BuildProps.Nullable;
+
+    public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion ?? BuildProps.LangVersion;
+
+    public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
+                                      ?? BuildProps.DefineConstants;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
