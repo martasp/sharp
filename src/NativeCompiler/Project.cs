@@ -47,10 +47,10 @@ public class Project : IProject
     public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
                                       ?? BuildProps.DefineConstants;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
-    public string ExtensionName => Path.ChangeExtension(ProjectName, ResolvedProjectExtensionType());
+    public string ExtensionName => ProjectName + "." + ResolvedProjectExtensionType();
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
-    public string DllPathName => Path.Combine(SharpBinFolderPath, Path.ChangeExtension(ProjectName, "dll"));
-    public string PDBName => Path.ChangeExtension(ProjectName, "pdb");
+    public string DllPathName => Path.Combine(SharpBinFolderPath, ProjectName + ".dll");
+    public string PDBName => ProjectName + ".pdb";
     public string NugetPackagesRootPath => GetNuGetCacheDirectory();
 
     public List<ProjectReference> ProjectReferences =>

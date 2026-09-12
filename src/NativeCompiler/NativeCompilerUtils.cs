@@ -224,7 +224,8 @@ public static class NativeCompilerUtils
         foreach (var pkg in packages)
         {
             var pkgName = pkg.Include ?? "";
-            var pkgVersion = pkg.Version ?? "";
+            var pkgVersion = pkg.Version
+                ?? NuGetPackage.ResolveCentralVersion(pkgName, Path.GetDirectoryName(csprojPath) ?? "");
             if (string.IsNullOrEmpty(pkgName) || string.IsNullOrEmpty(pkgVersion)) continue;
 
             var pkgPath = NuGetPackage.FindPackagePath(pkgName, pkgVersion);
@@ -393,17 +394,24 @@ public static class NativeCompilerUtils
 
         //Todo read from csproj and add this file currently will be ignored
         //TODO What is this number 936242573a0bbf456eb83abb29521666de5e44d5 checked git git rev-parse HEAD its not the commit hash.
+        // Only inject assembly attributes when the project does not declare any itself
+        // (projects with their own AssemblyInfo.cs / [assembly:] attributes will have duplicates).
+        var hasExistingAssemblyAttributes = project.CSFiles.Any(item => item.FileContent.Contains("[assembly:", StringComparison.OrdinalIgnoreCase));
         var versionInfoSource =
+        hasExistingAssemblyAttributes
+        ? """
+        [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
         """
+        : """
         using System;
         using System.Reflection;
 
         [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
-        
+
         [assembly: System.Reflection.AssemblyCompanyAttribute("MSCompiler")]
         [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
         [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-        [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+936242573a0bbf456eb83abb29521666de5e44d5")] 
+        [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+936242573a0bbf456eb83abb29521666de5e44d5")]
         [assembly: System.Reflection.AssemblyProductAttribute("MSCompiler")]
         [assembly: System.Reflection.AssemblyTitleAttribute("MSCompiler")]
         [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

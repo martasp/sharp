@@ -36,4 +36,25 @@ public class CompilerApiTests
         result.Outputs.ShouldContain($"Compiled {result.Project.ProjectName} successfully");
         File.Exists(result.Project.DllPathName).ShouldBeTrue($"Expected dll at {result.Project.DllPathName}");
     }
+
+    [Fact]
+    public void Build_DottedProjectName_ProducesFullyNamedAssembly()
+    {
+        var projectDir = Path.Combine(Path.GetTempPath(), "dottedname-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(projectDir);
+        File.WriteAllText(Path.Combine(projectDir, "Dotted.Name.csproj"),
+            File.ReadAllText(Path.Combine(MyCompilerSrc, "MSCompiler.csproj"))
+                .Replace("OutputType>Exe", "OutputType>Library"));
+        File.WriteAllText(Path.Combine(projectDir, "DottedThing.cs"),
+            "namespace Dotted.Name; public class DottedThing { public int Value => 42; }");
+
+        var result = NativeCompiler.NativeCompiler.Build(projectDir);
+
+        result.Success.ShouldBeTrue(result.Errors);
+        StringComparer.Ordinal.Equals(Path.GetFileName(result.Project.DllPathName), "Dotted.Name.dll")
+            .ShouldBeTrue($"Expected dotted assembly name, got: {result.Project.DllPathName}");
+        File.Exists(result.Project.DllPathName).ShouldBeTrue($"Expected dll at {result.Project.DllPathName}");
+        var dotless = Path.Combine(Path.GetDirectoryName(result.Project.DllPathName), "Dotted.dll");
+        File.Exists(dotless).ShouldBeFalse("Dotted project name must not be mangled into Dotted.dll");
+    }
 }

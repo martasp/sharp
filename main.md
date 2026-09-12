@@ -79,13 +79,35 @@ Pilot led to real fixes (`.slnx` parsing, CLI routing) and this prioritized gap 
 | # | Status | Feature needed | Why | Unlocks |
 |---|--------|----------------|-----|---------|
 | 1 | **DONE** | `FrameworkReference` / shared-framework resolution (`Microsoft.AspNetCore.App`) | 209/245 csprojs declare it; compiler only resolved base `Microsoft.NETCore.App` | all modules + core + abstractions (~200) |
-| 2 | open | Evaluate `Directory.Build.props`/`.targets` + `Import` (TFM, `ImplicitUsings`, nullable, common items) | csprojs are skeletal; `TargetFramework`/`ImplicitUsings` live in `src\OrchardCore.Build\TargetFrameworks.props` | same tower (pairs with #1) |
+| 2 | **DONE** | Evaluate `Directory.Build.props` + `Import` (TFM, `ImplicitUsings`, nullable, common items) | csprojs are skeletal; `TargetFramework`/`ImplicitUsings` live in `src\OrchardCore.Build\TargetFrameworks.props` | same tower (pairs with #1) |
 | 3 | open | Source generator pipeline (see below) | only `test\OrchardCore.Tests` + `.Benchmarks` use `OrchardCore.SourceGenerators`; xunit.v3/MTP entry points | test projects |
 | 4 | open | Razor SDK views + `buildTransitive` target assets | modules are `Microsoft.NET.Sdk.Razor`; some packages inject refs via targets | runtime parity, not strictly compile-blocking |
 
 Measurement after #1: AspNetCore-wall gone (CS0234 122→20, zero `Microsoft.AspNetCore.*` namespace
 errors); count still 3/239 because the ImplicitUsings wall (#2) now dominates (256 `'Task'/'IEnumerable'`
 missing). Error trail: `harness\OrchardCore\ours2.err`.
+
+Measurement after #2: **8 OK / 231 FAIL** (40.6s). ImplicitUsings wall gone (`'Task'/'IEnumerable'` = 0);
+`error CS` collapsed 1644 → ~70; 229 = cascade `Cant find dll path` from a dotted-name output bug (see
+below). Trail: `ours4.err`.
+
+Further canary fixes found during the sharpbin audit (also regressions for any dotted project name):
+- **Dotted-name output bug**: `Path.ChangeExtension("X.Y", ".dll")` drops the tail segment (`X.dll`), so
+  `OrchardCore.Abstractions.dll` was emitted as `OrchardCore.dll` and every dependent failed
+  `Cant find dll path`. Fixed in `Project.cs` (concatenate `ProjectName + ".dll"`, never `ChangeExtension`);
+  regression test in `CompilerApiTests.Build_DottedProjectName_ProducesFullyNamedAssembly`.
+- **Empty DLL leftovers**: an emit failure left a 0-byte `*.dll`/`*.pdb`; dependents then hit
+  `CS0009 PE image doesn't contain managed metadata`. `ProduceDll` now deletes the files on failure.
+- **Assembly-attribute duplicates**: injected `VersionInfo.g.cs` hardcoded `AssemblyCompany/Product/Title`
+  attributes → `CS0579` on projects with their own `[assembly:]` (all OrchardCore `Properties\AssemblyInfo.cs`).
+  Now only injected when the project declares none (MSCompiler/MyCompiler snapshot parity kept).
+- **Central Package Management for transitive refs**: `GetTransitiveNugetPackages` skipped versionless
+  `<PackageReference>` (OrchardCore centralizes versions in `Directory.Packages.props`); now falls back to
+  `ResolveCentralVersion` like the direct path. Unlocks YesSql/Fluid-powered modules.
+
+Measurement after fixes: **80 OK / 159 FAIL** (54.6s; `.slnx`). Remaining walls: `Microsoft.NET.Sdk.Razor`
+SDK-injected references (modules), remaining `Microsoft.AspNetCore.App` type gaps, real long-tail compile
+errors. Trail: `ours10.err`.
 
 Canary command:
 ```

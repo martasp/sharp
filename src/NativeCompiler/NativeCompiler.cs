@@ -278,15 +278,19 @@ public static class NativeCompiler
                 debugInformationFormat: DebugInformationFormat.PortablePdb,
                 pdbFilePath: project.PDBPathName);
 
+            (bool success, string errors) result;
             using (var dllStream = File.Create(project.DllPathName))
             using (var pdbStream = File.Create(project.PDBPathName))
             {
-                var result = compilation.Emit(dllStream, pdbStream, options: emitOptions);
-                var buildErrors = result.PrintErrors();
-                if (!result.Success)
-                {
-                    return (false, buildErrors);
-                }
+                var emitResult = compilation.Emit(dllStream, pdbStream, options: emitOptions);
+                result = (emitResult.Success, emitResult.PrintErrors());
+            }
+
+            if (!result.success)
+            {
+                File.Delete(project.DllPathName);
+                File.Delete(project.PDBPathName);
+                return result;
             }
 
             WriteRuntimeConfig(project);
