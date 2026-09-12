@@ -87,9 +87,11 @@ public static class NativeCompiler
 
         var defaultLocalReferences = GetdefaultLocalReferences(project);
         var defaultNugetReferences = GetdefaultNugetReferences(project);
+        var frameworkReferenceRefs = GetFrameworkReferenceCompilingRefs(project);
 
         var mergedDefaultReferences = MergeFrameworkSuppression(
-            defaultNugetReferences.Concat(defaultLocalReferences), defaultReferencesForCompiling);
+            defaultNugetReferences.Concat(defaultLocalReferences),
+            defaultReferencesForCompiling.Concat(frameworkReferenceRefs));
         var mergedDefaultReferencesForRunning = MergeFrameworkSuppression(
             defaultNugetReferences.Concat(defaultLocalReferences), defaultReferencesForRunning);
 

@@ -1,6 +1,7 @@
 ﻿using Microsoft.CodeAnalysis;
 using XML;
 using ProjectReference = XML.ProjectReference;
+using FrameworkReference = XML.FrameworkReference;
 
 namespace NativeCompiler;
 
@@ -42,6 +43,9 @@ public class Project : IProject
 
     public List<PackageReference> PackageReferences =>
         XMLProject.ItemGroup.SelectMany(item => item.PackageReferences).ToList();
+
+    public List<FrameworkReference> FrameworkReferences =>
+        XMLProject.ItemGroup.SelectMany(item => item.FrameworkReferences).ToList();
 
     public OutputKind ResolvedProjectOutputKind()
     {

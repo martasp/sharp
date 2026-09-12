@@ -108,6 +108,9 @@ public class ItemGroup
     [XmlElement(ElementName = "ProjectReference")]
     public List<ProjectReference> ProjectReferences { get; set; } = new();
 
+    [XmlElement(ElementName = "FrameworkReference")]
+    public List<FrameworkReference> FrameworkReferences { get; set; } = new();
+
     [XmlElement(ElementName = "BuildOutputInPackage")]
     public BuildOutputInPackage? BuildOutputInPackage { get; set; }
 }
@@ -130,6 +133,13 @@ public class ProjectReference
 
     [XmlAttribute(AttributeName = "PrivateAssets")]
     public string? PrivateAssets { get; set; }
+}
+
+[XmlRoot(ElementName = "FrameworkReference")]
+public class FrameworkReference
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
 }
 
 [XmlRoot(ElementName = "BuildOutputInPackage")]
@@ -239,6 +249,10 @@ public class Project
         {
             Include = AttributeValue(reference, "Include"),
             PrivateAssets = AttributeValue(reference, "PrivateAssets"),
+        }).ToList(),
+        FrameworkReferences = Children(element, "FrameworkReference").Select(reference => new FrameworkReference
+        {
+            Include = AttributeValue(reference, "Include"),
         }).ToList(),
         BuildOutputInPackage = Children(element, "BuildOutputInPackage")
             .Select(item => new BuildOutputInPackage { Include = AttributeValue(item, "Include") })

@@ -27,6 +27,25 @@ public static class AsemblyExtensions
         }
     }
 
+    // Resolves the targeting-pack ref folder for a shared-framework <FrameworkReference> item, e.g.
+    // "Microsoft.AspNetCore.App" -> <dotnet>/packs/Microsoft.AspNetCore.App.Ref/<ver>/ref/<tfm>.
+    public static string ResolveFrameworkRefLocation(string frameworkName, string? targetTfm)
+    {
+        if (!frameworkName.EndsWith(".Ref", StringComparison.OrdinalIgnoreCase))
+            frameworkName += ".Ref";
+
+        var packRoot = Path.Combine(ResolveDotnetRoot(), "packs", frameworkName);
+        var versionDir = SelectBestVersionDirectory(packRoot, preferredMajor: Environment.Version.Major);
+
+        var refDir = Path.Combine(versionDir, "ref");
+        var tfm = string.IsNullOrWhiteSpace(targetTfm) ? "net" + Environment.Version.Major + ".0" : targetTfm;
+
+        var exactTfmDir = Path.Combine(refDir, tfm);
+        if (Directory.Exists(exactTfmDir)) return exactTfmDir;
+
+        return SelectBestVersionDirectory(refDir);
+    }
+
     public static string ResolveSdkHostLocation => Path.Combine(ResolveDotnetRoot(), "host", "fxr");
 
     public static string ResolveSdkRoot => ResolveDotnetRoot();

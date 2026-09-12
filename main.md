@@ -26,6 +26,7 @@ NativeCompilerCLI <target>
 - **NuGet packages** – TFM-aware `lib/<tfm>` selection (exact match preferred, then older core, then netstandard; legacy `net4x` handled), best-match `.nuspec` dependency group chosen for the target TFM, transitive dependencies resolved from `.nuspec` recursively
 - **Central package management** – versionless `<PackageReference>` resolved from `Directory.Packages.props` (`<PackageVersion Include=… Version=…>`), searched up the directory tree
 - **Framework references** – from the installed SDK/ref pack + runtime dirs; merged with NuGet/local references, suppressing duplicates whose simple name collides with a framework assembly (NuGet-style suppression)
+- **Shared frameworks (`FrameworkReference`)** – `Microsoft.AspNetCore.App` and any other targeting pack resolved from `<dotnet>\packs\<Name>.Ref\<ver>\ref\<tfm>`; only the base `Microsoft.NETCore.App` is assumed inbox
 - Referenced DLLs copied into the output folder so the built app can run standalone
 
 ### Running
@@ -68,6 +69,30 @@ exact failure modes below.
 - **AOT for other platforms** – NativeCompilerCLI has `PublishAot=true`; emitting linux-x64 native requires the host machine's AOT cross toolchain (see `publish.sh`)
 
 ## Future work
+
+### OrchardCore canary
+`OrchardCore.slnx` (239 projects, .NET 10, ASP.NET Core CMS) is the external stress test. Fresh clone +
+`dotnet restore` (warms the NuGet cache), then `NativeCompilerCLI OrchardCore.slnx`. Baseline
+measurement: **3 OK / 236 FAIL** (42.3s) vs `dotnet build OrchardCore.slnx --no-restore` (149.4s, exit 0).
+Pilot led to real fixes (`.slnx` parsing, CLI routing) and this prioritized gap list:
+
+| # | Status | Feature needed | Why | Unlocks |
+|---|--------|----------------|-----|---------|
+| 1 | **DONE** | `FrameworkReference` / shared-framework resolution (`Microsoft.AspNetCore.App`) | 209/245 csprojs declare it; compiler only resolved base `Microsoft.NETCore.App` | all modules + core + abstractions (~200) |
+| 2 | open | Evaluate `Directory.Build.props`/`.targets` + `Import` (TFM, `ImplicitUsings`, nullable, common items) | csprojs are skeletal; `TargetFramework`/`ImplicitUsings` live in `src\OrchardCore.Build\TargetFrameworks.props` | same tower (pairs with #1) |
+| 3 | open | Source generator pipeline (see below) | only `test\OrchardCore.Tests` + `.Benchmarks` use `OrchardCore.SourceGenerators`; xunit.v3/MTP entry points | test projects |
+| 4 | open | Razor SDK views + `buildTransitive` target assets | modules are `Microsoft.NET.Sdk.Razor`; some packages inject refs via targets | runtime parity, not strictly compile-blocking |
+
+Measurement after #1: AspNetCore-wall gone (CS0234 122→20, zero `Microsoft.AspNetCore.*` namespace
+errors); count still 3/239 because the ImplicitUsings wall (#2) now dominates (256 `'Task'/'IEnumerable'`
+missing). Error trail: `harness\OrchardCore\ours2.err`.
+
+Canary command:
+```
+git clone --depth 1 https://github.com/OrchardCMS/OrchardCore.git
+dotnet restore OrchardCore.slnx          # populate ~/.nuget/packages once
+NativeCompilerCLI OrchardCore.slnx       # then: OK/FAIL counts + ours2.err analysis
+```
 
 ### Source generator support (GENERATOR_PIPELINE)
 `[LibraryImport]` partial methods, xunit's generated `Main`, regex/json source generation, etc. fail (CS8795, CS5001)

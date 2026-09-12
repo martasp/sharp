@@ -144,6 +144,28 @@ public static class NativeCompilerUtils
         return defaultReferences.ToArray();
     }
 
+    // Resolves <FrameworkReference> items (e.g. Microsoft.AspNetCore.App) to their targeting-pack
+    // reference assemblies. The base Microsoft.NETCore.App pack is already merged as the default
+    // compiling reference set, so it is skipped here.
+    public static MetadataReference[] GetFrameworkReferenceCompilingRefs(Project project)
+    {
+        var tfm = project.TargetFramework ?? "net" + Environment.Version.Major + ".0";
+        var references = new List<MetadataReference>();
+
+        foreach (var framework in project.FrameworkReferences)
+        {
+            var include = framework.Include ?? "";
+            if (string.IsNullOrEmpty(include)) continue;
+            if (include.Equals("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var refLocation = AsemblyExtensions.ResolveFrameworkRefLocation(include, tfm);
+            foreach (var file in Directory.EnumerateFiles(refLocation, "*.dll", SearchOption.TopDirectoryOnly))
+                references.Add(MetadataReference.CreateFromFile(file));
+        }
+
+        return references.ToArray();
+    }
+
     public static MetadataReference[] GetdefaultLocalReferences(Project project)
     {
         var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
