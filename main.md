@@ -67,6 +67,25 @@ exact failure modes below.
 - **Configuration matrix** – a single build configuration is compiled; `Debug`/`Release`-conditional csproj items are not evaluated (MSBuild condition evaluation)
 - **AOT for other platforms** – NativeCompilerCLI has `PublishAot=true`; emitting linux-x64 native requires the host machine's AOT cross toolchain (see `publish.sh`)
 
+## Future work
+
+### Source generator support (GENERATOR_PIPELINE)
+`[LibraryImport]` partial methods, xunit's generated `Main`, regex/json source generation, etc. fail (CS8795, CS5001)
+because no generator pipeline runs. Fix is a single compiler feature, not a language/compat issue — the
+`CSharpGeneratorDriver` API is MSBuild-free:
+
+1. NuGet resolver: surface `analyzers/dotnet/cs/` DLLs (and the SDK implicit analyzers folder) as generator
+   assemblies, listed per project.
+2. `NativeCompiler.Build`: load those assemblies, run
+   `CSharpGeneratorDriver.RunGeneratorsAndUpdateTree(compilation)`, merge the generated syntax trees and
+   recompile, and relay generator diagnostics.
+3. Feed generators the standard context they expect (`ParseOptions` LangVersion, `AnalyzerConfigOptions`,
+   `MSBuildProjectFullPath` shim, nullable/unsafe settings, generated file naming).
+
+Once green, un-comment `DotnetRuntimeHostExe` (and possibly a hand-rolled `Main` shim for test projects) in
+`NativeCompiler.sln`. Microsoft's docs: `Microsoft.CodeAnalysis.CSharp` ships everything needed
+(`CSharpGeneratorDriver`, `ISourceGenerator`/`IIncrementalGenerator`).
+
 ## Known behaviors
 
 - `bin\sharpbin` is the output folder per project; no cache invalidation between runs yet

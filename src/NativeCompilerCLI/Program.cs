@@ -5,7 +5,8 @@ using static System.Console;
 
 var targetPath = args.FirstOrDefault() ?? throw new Exception("add console argument (.sln, .csproj or project folder)");
 
-if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase))
+if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+    targetPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
 {
     var solutionResult = NativeCompiler.NativeCompiler.BuildSolution(targetPath);
 

@@ -26,6 +26,8 @@ public class SolutionTests
 
     public static string SlnFixturesSln = Path.Combine(SlnFixturesDir, "SlnFixtures.sln");
 
+    public static string SlnxFixturesSln = Path.Combine(RepoRoot, "tests", "TestExampleProjects", "SlnxFixtures.slnx");
+
     [Fact]
     public void Parse_RootSolution_ShouldListOnlyCsprojProjects()
     {
@@ -55,6 +57,15 @@ public class SolutionTests
             .OrderBy(entry => entry.Name);
 
         return Verify(view);
+    }
+
+    [Fact]
+    public void Parse_Slnx_ShouldListOnlyCsprojProjects()
+    {
+        var solution = SolutionFile.Parse(SlnxFixturesSln);
+        solution.Projects.Count.ShouldBe(3);
+        solution.Projects.Select(project => project.Name).ShouldBe(new[] { "LibA", "LibB", "SlnApp" });
+        solution.Projects[0].ProjectPath.ShouldEndWith("LibA.csproj");
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace NativeCompiler;
 
@@ -25,6 +26,13 @@ public sealed class SolutionFile
             throw new FileNotFoundException("Solution file not found", fullPath);
 
         var solutionDir = Path.GetDirectoryName(fullPath) ?? "";
+        return fullPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)
+            ? ParseSlnx(fullPath, solutionDir)
+            : ParseSln(fullPath, solutionDir);
+    }
+
+    private static SolutionFile ParseSln(string fullPath, string solutionDir)
+    {
         var projects = new List<SolutionProject>();
 
         foreach (var rawLine in File.ReadLines(fullPath))
@@ -43,6 +51,30 @@ public sealed class SolutionFile
                 match.Groups["type"].Value,
                 relativePath,
                 match.Groups["guid"].Value,
+                Path.GetFullPath(Path.Combine(solutionDir, normalized))));
+        }
+
+        return new SolutionFile { SolutionPath = fullPath, Projects = projects };
+    }
+
+    private static SolutionFile ParseSlnx(string fullPath, string solutionDir)
+    {
+        var projects = new List<SolutionProject>();
+        var document = XDocument.Load(fullPath);
+
+        foreach (var element in document.Descendants("Project"))
+        {
+            var relativePath = (string?)element.Attribute("Path") ?? "";
+            if (!relativePath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var normalized = relativePath.Replace('/', Path.DirectorySeparatorChar)
+                .Replace('\\', Path.DirectorySeparatorChar);
+
+            projects.Add(new SolutionProject(
+                Path.GetFileNameWithoutExtension(relativePath),
+                "",
+                relativePath,
+                "",
                 Path.GetFullPath(Path.Combine(solutionDir, normalized))));
         }
 
