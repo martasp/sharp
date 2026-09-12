@@ -1,0 +1,34 @@
+D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI>D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI\bin\sharpbinFirst\NativeCompilerCLI.exe  .
+Sucess!!
+The using directive for 'System' appeared previously as global using.\Program.cs(2,7): hidden CS8933: The using directive for 'System' appeared previously as global using
+The using directive for 'System.Linq' appeared previously as global using.\Program.cs(3,7): hidden CS8933: The using directive for 'System.Linq' appeared previously as global using
+The using directive for 'System' appeared previously as global usingVersionInfo.g.cs(1,7): hidden CS8933: The using directive for 'System' appeared previously as global using
+The using directive for 'System' appeared previously as global usingGlobalUsings.g.cs(1,14): hidden CS8933: The using directive for 'System' appeared previously as global using
+The using directive for 'System.Collections.Generic' appeared previously as global usingGlobalUsings.g.cs(2,14): hidden CS8933: The using directive for 'System.Collections.Generic' appeared previously as global using
+The using directive for 'System.IO' appeared previously as global usingGlobalUsings.g.cs(3,14): hidden CS8933: The using directive for 'System.IO' appeared previously as global using
+The using directive for 'System.Linq' appeared previously as global usingGlobalUsings.g.cs(4,14): hidden CS8933: The using directive for 'System.Linq' appeared previously as global using
+The using directive for 'System.Net.Http' appeared previously as global usingGlobalUsings.g.cs(5,14): hidden CS8933: The using directive for 'System.Net.Http' appeared previously as global using
+The using directive for 'System.Threading' appeared previously as global usingGlobalUsings.g.cs(6,14): hidden CS8933: The using directive for 'System.Threading' appeared previously as global using
+The using directive for 'System.Threading.Tasks' appeared previously as global usingGlobalUsings.g.cs(7,14): hidden CS8933: The using directive for 'System.Threading.Tasks' appeared previously as global using
+Unnecessary using directive.GlobalUsings.g.cs(6,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\Program.cs(1,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(3,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(7,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.VersionInfo.g.cs(2,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(4,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(5,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(1,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\Program.cs(3,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\Program.cs(2,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\GlobalUsings.cs(3,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\GlobalUsings.cs(5,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.GlobalUsings.g.cs(2,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive.VersionInfo.g.cs(1,1): hidden CS8019: Unnecessary using directive.
+Unnecessary using directive..\GlobalUsings.cs(6,1): hidden CS8019: Unnecessary using directive.
+Apphost '.\bin\sharpbin\NativeCompilerCLI.exe' bound to 'NativeCompilerCLI.dll'.
+Total time: 1598ms
+Merged default references count: 170
+Compiled NativeCompilerCLI successfully
+
+D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI>
+Works, TODO need insfrasture changes for sharpbin and test. How we diferiantiate sharpbin. Posible ideas to use BinDebug(Date) as folder name. But for Relase use orginal Bin. 
