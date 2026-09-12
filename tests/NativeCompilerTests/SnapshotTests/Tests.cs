@@ -6,7 +6,6 @@ using static NativeCompiler.NativeCompilerUtils;
 
 namespace NativeCompilerTests.SnapshotTests;
 
-[UsesVerify]
 public class Sample
 {
     [Fact]

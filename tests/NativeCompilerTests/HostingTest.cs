@@ -27,7 +27,7 @@ public class HostingTest
 {
     private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
 
-    [Fact]
+    // [Fact] Delete obsolete, we already have docker tests.
     public async Task TypeDefinitionUsage()
     {
         //publis host shell 

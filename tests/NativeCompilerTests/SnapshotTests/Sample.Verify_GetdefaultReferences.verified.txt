@@ -1,11 +1,19 @@
 ﻿[
   {
+    Display: ./Argon.dll,
+    FilePath: ./Argon.dll
+  },
+  {
     Display: ./BouncyCastle.Cryptography.dll,
     FilePath: ./BouncyCastle.Cryptography.dll
   },
   {
     Display: ./DiffEngine.dll,
     FilePath: ./DiffEngine.dll
+  },
+  {
+    Display: ./DiffPlex.dll,
+    FilePath: ./DiffPlex.dll
   },
   {
     Display: ./Docker.DotNet.dll,
@@ -26,6 +34,10 @@
   {
     Display: ./ICSharpCode.SharpZipLib.dll,
     FilePath: ./ICSharpCode.SharpZipLib.dll
+  },
+  {
+    Display: ./Microsoft.ApplicationInsights.dll,
+    FilePath: ./Microsoft.ApplicationInsights.dll
   },
   {
     Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
@@ -62,6 +74,22 @@
   {
     Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.MSBuild.dll,
+    FilePath: ./Microsoft.Testing.Extensions.MSBuild.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.Telemetry.dll,
+    FilePath: ./Microsoft.Testing.Extensions.Telemetry.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.TrxReport.Abstractions.dll,
+    FilePath: ./Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Platform.dll,
+    FilePath: ./Microsoft.Testing.Platform.dll
   },
   {
     Display: ./Microsoft.TestPlatform.CommunicationUtilities.dll,
@@ -104,14 +132,6 @@
     FilePath: ./NativeCompilerTests.dll
   },
   {
-    Display: ./Newtonsoft.Json.dll,
-    FilePath: ./Newtonsoft.Json.dll
-  },
-  {
-    Display: ./NuGet.Frameworks.dll,
-    FilePath: ./NuGet.Frameworks.dll
-  },
-  {
     Display: ./Renci.SshNet.dll,
     FilePath: ./Renci.SshNet.dll
   },
@@ -122,10 +142,6 @@
   {
     Display: ./SimpleInfoName.dll,
     FilePath: ./SimpleInfoName.dll
-  },
-  {
-    Display: ./System.CodeDom.dll,
-    FilePath: ./System.CodeDom.dll
   },
   {
     Display: ./System.Composition.AttributedModel.dll,
@@ -148,10 +164,6 @@
     FilePath: ./System.Composition.TypedParts.dll
   },
   {
-    Display: ./System.Management.dll,
-    FilePath: ./System.Management.dll
-  },
-  {
     Display: ./Testcontainers.dll,
     FilePath: ./Testcontainers.dll
   },
@@ -160,39 +172,51 @@
     FilePath: ./testhost.dll
   },
   {
+    Display: ./Verify.DiffPlex.dll,
+    FilePath: ./Verify.DiffPlex.dll
+  },
+  {
     Display: ./Verify.dll,
     FilePath: ./Verify.dll
   },
   {
-    Display: ./Verify.Xunit.dll,
-    FilePath: ./Verify.Xunit.dll
+    Display: ./Verify.XunitV3.dll,
+    FilePath: ./Verify.XunitV3.dll
   },
   {
     Display: ./xunit.abstractions.dll,
     FilePath: ./xunit.abstractions.dll
   },
   {
-    Display: ./xunit.assert.dll,
-    FilePath: ./xunit.assert.dll
+    Display: ./xunit.runner.visualstudio.testadapter.dll,
+    FilePath: ./xunit.runner.visualstudio.testadapter.dll
   },
   {
-    Display: ./xunit.core.dll,
-    FilePath: ./xunit.core.dll
+    Display: ./xunit.v3.assert.dll,
+    FilePath: ./xunit.v3.assert.dll
   },
   {
-    Display: ./xunit.execution.dotnet.dll,
-    FilePath: ./xunit.execution.dotnet.dll
+    Display: ./xunit.v3.common.dll,
+    FilePath: ./xunit.v3.common.dll
   },
   {
-    Display: ./xunit.runner.reporters.netcoreapp10.dll,
-    FilePath: ./xunit.runner.reporters.netcoreapp10.dll
+    Display: ./xunit.v3.core.dll,
+    FilePath: ./xunit.v3.core.dll
   },
   {
-    Display: ./xunit.runner.utility.netcoreapp10.dll,
-    FilePath: ./xunit.runner.utility.netcoreapp10.dll
+    Display: ./xunit.v3.mtp-v1.dll,
+    FilePath: ./xunit.v3.mtp-v1.dll
   },
   {
-    Display: ./xunit.runner.visualstudio.dotnetcore.testadapter.dll,
-    FilePath: ./xunit.runner.visualstudio.dotnetcore.testadapter.dll
+    Display: ./xunit.v3.runner.common.dll,
+    FilePath: ./xunit.v3.runner.common.dll
+  },
+  {
+    Display: ./xunit.v3.runner.inproc.console.dll,
+    FilePath: ./xunit.v3.runner.inproc.console.dll
+  },
+  {
+    Display: ./xunit.v3.runner.utility.netcore.dll,
+    FilePath: ./xunit.v3.runner.utility.netcore.dll
   }
 ]

@@ -22,8 +22,6 @@
   "AssemblyMetadata": {
     "AssemblyCompanyAttribute": "[System.Reflection.AssemblyCompanyAttribute(\u0022MSCompiler\u0022)]",
     "AssemblyConfigurationAttribute": "[System.Reflection.AssemblyConfigurationAttribute(\u0022Debug\u0022)]",
-    "AssemblyFileVersionAttribute": "[System.Reflection.AssemblyFileVersionAttribute(\u00221.0.0.0\u0022)]",
-    "AssemblyInformationalVersionAttribute": "[System.Reflection.AssemblyInformationalVersionAttribute(\u00221.0.0\u002B74f5b7f1de41fe2d8ef9156d8561736f5566adc3\u0022)]",
     "AssemblyProductAttribute": "[System.Reflection.AssemblyProductAttribute(\u0022MSCompiler\u0022)]",
     "AssemblyTitleAttribute": "[System.Reflection.AssemblyTitleAttribute(\u0022MSCompiler\u0022)]",
     "CompilationRelaxationsAttribute": "[System.Runtime.CompilerServices.CompilationRelaxationsAttribute((Int32)8)]",
@@ -195,8 +193,6 @@
   "AssemblyMetadata": {
     "AssemblyCompanyAttribute": "[System.Reflection.AssemblyCompanyAttribute(\u0022MSCompiler\u0022)]",
     "AssemblyConfigurationAttribute": "[System.Reflection.AssemblyConfigurationAttribute(\u0022Debug\u0022)]",
-    "AssemblyFileVersionAttribute": "[System.Reflection.AssemblyFileVersionAttribute(\u00221.0.0.0\u0022)]",
-    "AssemblyInformationalVersionAttribute": "[System.Reflection.AssemblyInformationalVersionAttribute(\u00221.0.0\u002B936242573a0bbf456eb83abb29521666de5e44d5\u0022)]",
     "AssemblyProductAttribute": "[System.Reflection.AssemblyProductAttribute(\u0022MSCompiler\u0022)]",
     "AssemblyTitleAttribute": "[System.Reflection.AssemblyTitleAttribute(\u0022MSCompiler\u0022)]",
     "CompilationRelaxationsAttribute": "[System.Runtime.CompilerServices.CompilationRelaxationsAttribute((Int32)8)]",

@@ -23,13 +23,10 @@ namespace Tests;
 
 [CollectionDefinition("Sequential Tests 3", DisableParallelization = true)]
 [Collection("Sequential Tests 3")]
-[UsesVerify]
 public class DllSnapshotTests
 {
     private const string MSCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MSCompiler";
     private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
-
-
 
     [Fact]
     public async Task TypeDefinitionUsage()
@@ -53,6 +50,10 @@ public class DllSnapshotTests
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         });
 
+        // trim from both AssemblyFileVersionAttribute both. 
+        MsCompilerDllMetadataJson = TrimVersionAttributes(MsCompilerDllMetadataJson);
+        MyCompilerDllMetadataJson = TrimVersionAttributes(MyCompilerDllMetadataJson);
+
         var both =
             $"""
             ------------------- MSCompiler Output -------------------
@@ -63,13 +64,14 @@ public class DllSnapshotTests
             {MyCompilerDllMetadataJson}
             """;
 
-        var bingPath = @"CompareMSOriginalOutputWithMyCompilerOutput.txt";
-        File.WriteAllText(bingPath, both);
-        Debug.WriteLine($"Wrote to full path: {Path.GetFullPath(bingPath)}");
-
+        Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
         await Verifier.Verify(both);
-       // Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
     }
+
+    private static string TrimVersionAttributes(string json) =>
+        string.Join('\n', json.Split('\n').Where(line =>
+            !line.Contains("AssemblyFileVersionAttribute") &&
+            !line.Contains("AssemblyInformationalVersionAttribute")));
 
     public static FullDllMetadata ExtractAll(string dllPath)
     {
