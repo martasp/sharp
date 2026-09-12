@@ -33,7 +33,7 @@ public class ConsoleAppTestsSelf
     {
         var csprojFolderPath = ConsoleAppWorking;
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
+        result.Success.ShouldBeTrue(result.Errors);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class ConsoleAppTestsSelf
     {
         var csprojFolderPath = ConsoleAppWorking;
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
+        result.Success.ShouldBeTrue(result.Errors);
         Directory.EnumerateFiles(csprojFolderPath).Any(item => item.Contains(".dll")).ShouldBeTrue("dll not Exists");
     }
 

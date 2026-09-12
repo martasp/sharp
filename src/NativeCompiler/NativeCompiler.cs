@@ -40,11 +40,15 @@ public static class NativeCompiler
         }
     }
 
-    public static (bool success, string errors, CSharpCompilation Compilation, Project project, IEnumerable<EmbeddedText> EmbeddedTexts) Build(string projectPath)
+    public static BuildResult Build(string projectPath)
     {
         _ = Directory.Exists(projectPath)
             ? ""
             : throw new ArgumentException($"Project path not exists, given path {projectPath}");
+
+        var timer = Stopwatch.StartNew();
+        var outputs = new List<string>();
+
         var projectFiles = ReadAllProjectFilesPath(projectPath);
         var files = ReadAllFilesInMemory(projectFiles); //slow part 300ms;
         var project = GetProjectDetails(files, projectPath);
@@ -67,39 +71,41 @@ public static class NativeCompiler
         var mergedDefaultReferences = defaultNugetReferences.Concat(defaultLocalReferences).Concat(defaultReferencesForCompiling);
         var mergedDefaultReferencesForRunning = defaultNugetReferences.Concat(defaultLocalReferences).Concat(defaultReferencesForRunning);
 
-        // Write count of mergedDefaultReferences use nice format:
-        Console.WriteLine($"Merged default references count: {mergedDefaultReferences.Count()}");
-        
+        outputs.Add($"Merged default references count: {mergedDefaultReferences.Count()}");
+
         var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences,compilationOptions);
-        
+
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
 
         var paths = mergedDefaultReferencesForRunning.Select(item => item?.Display ?? "").ToList();
         WriteFiles(project.SharpBinFolderPath, paths);
 
         if (produceDll.success)
-            Console.WriteLine($"Compiled {project.ProjectName} successfully");
-        else
-            Console.Error.WriteLine($"Failed to compile {project.ProjectName}: {produceDll.errors}");
-        
-        return (produceDll.success, produceDll.errors, compilation, project, embeddedTexts);
+            outputs.Add($"Compiled {project.ProjectName} successfully");
+
+        return new BuildResult(
+            produceDll.success,
+            produceDll.errors,
+            outputs,
+            timer.Elapsed,
+            compilation,
+            project,
+            embeddedTexts);
     }
 
     public static (bool success, string errors) Run(string projectPath)
     {
-        var buildDetails = Build(projectPath);
+        var build = Build(projectPath);
 
-        var project = buildDetails.project;
-        var compilation = buildDetails.Compilation;
-        var embeddedTexts = buildDetails.EmbeddedTexts.ToList();
+        var project = build.Project;
+        var compilation = build.Compilation;
+        var embeddedTexts = build.EmbeddedTexts.ToList();
 
         var runErrors = project.ResolvedProjectOutputKind() == OutputKind.ConsoleApplication
             ? RunAssembly(compilation, project, embeddedTexts)
             : (success: true, errors: "");
 
-        Console.WriteLine($"Run {project.ProjectName} successfully");
-
-        return (runErrors.success && buildDetails.success, runErrors.errors + buildDetails.errors);
+        return (runErrors.success && build.Success, runErrors.errors + build.Errors);
     }
 
     public static (bool success, string errors) ProduceDll(CSharpCompilation compilation, Project project)
@@ -259,4 +265,11 @@ public static class NativeCompiler
     }
 }
 
-record BuildResult(bool Success, string Errors, CSharpCompilation Compilation, Project Project, IEnumerable<EmbeddedText> EmbeddedTexts);
+public sealed record BuildResult(
+    bool Success,
+    string Errors,
+    IReadOnlyList<string> Outputs,
+    TimeSpan Duration,
+    CSharpCompilation Compilation,
+    Project Project,
+    IEnumerable<EmbeddedText> EmbeddedTexts);

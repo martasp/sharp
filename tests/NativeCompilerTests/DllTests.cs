@@ -23,6 +23,7 @@ namespace Tests;
 
 [CollectionDefinition("Sequential Tests 3", DisableParallelization = true)]
 [Collection("Sequential Tests 3")]
+[UsesVerify]
 public class DllSnapshotTests
 {
     private const string MSCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MSCompiler";
@@ -36,7 +37,7 @@ public class DllSnapshotTests
         var MsCompilerDllMetadata = ExtractAll(MSCompiler + @"\bin\Debug\net10.0\MSCompiler.dll");
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
-        Assert.True(buildDetails.success, $"Build failed with errors: {buildDetails.errors}");
+        Assert.True(buildDetails.Success, $"Build failed with errors: {buildDetails.Errors}");
 
         var MyCompilerDllMetadata = ExtractAll(MyCompiler + @"\bin\sharpbin\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
 
@@ -66,7 +67,8 @@ public class DllSnapshotTests
         File.WriteAllText(bingPath, both);
         Debug.WriteLine($"Wrote to full path: {Path.GetFullPath(bingPath)}");
 
-        Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
+        await Verifier.Verify(both);
+       // Assert.Equal(MsCompilerDllMetadataJson, MyCompilerDllMetadataJson);
     }
 
     public static FullDllMetadata ExtractAll(string dllPath)

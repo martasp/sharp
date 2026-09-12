@@ -1,7 +1,19 @@
 ﻿[
   {
+    Display: ./BouncyCastle.Cryptography.dll,
+    FilePath: ./BouncyCastle.Cryptography.dll
+  },
+  {
     Display: ./DiffEngine.dll,
     FilePath: ./DiffEngine.dll
+  },
+  {
+    Display: ./Docker.DotNet.dll,
+    FilePath: ./Docker.DotNet.dll
+  },
+  {
+    Display: ./Docker.DotNet.X509.dll,
+    FilePath: ./Docker.DotNet.X509.dll
   },
   {
     Display: ./EmptyFiles.dll,
@@ -10,6 +22,10 @@
   {
     Display: ./Humanizer.dll,
     FilePath: ./Humanizer.dll
+  },
+  {
+    Display: ./ICSharpCode.SharpZipLib.dll,
+    FilePath: ./ICSharpCode.SharpZipLib.dll
   },
   {
     Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
@@ -38,6 +54,14 @@
   {
     Display: ./Microsoft.CodeAnalysis.Workspaces.dll,
     FilePath: ./Microsoft.CodeAnalysis.Workspaces.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll,
+    FilePath: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
+    FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
   },
   {
     Display: ./Microsoft.TestPlatform.CommunicationUtilities.dll,
@@ -88,6 +112,10 @@
     FilePath: ./NuGet.Frameworks.dll
   },
   {
+    Display: ./Renci.SshNet.dll,
+    FilePath: ./Renci.SshNet.dll
+  },
+  {
     Display: ./Shouldly.dll,
     FilePath: ./Shouldly.dll
   },
@@ -122,6 +150,10 @@
   {
     Display: ./System.Management.dll,
     FilePath: ./System.Management.dll
+  },
+  {
+    Display: ./Testcontainers.dll,
+    FilePath: ./Testcontainers.dll
   },
   {
     Display: ./testhost.dll,

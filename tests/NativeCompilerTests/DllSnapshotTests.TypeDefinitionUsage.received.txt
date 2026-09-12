@@ -1,0 +1,344 @@
+﻿------------------- MSCompiler Output -------------------
+{
+  "AssemblyName": "MSCompiler",
+  "Version": "1.0.0.0",
+  "RuntimeVersion": "v4.0.30319",
+  "Architecture": "MSIL",
+  "EntryPoint": "\u003CMain\u003E$",
+  "Types": [
+    {
+      "Name": "Program",
+      "Methods": [
+        "System.Type GetType()",
+        "System.String ToString()",
+        "Boolean Equals(System.Object)",
+        "Int32 GetHashCode()"
+      ],
+      "Fields": [],
+      "Properties": []
+    }
+  ],
+  "Resources": [],
+  "AssemblyMetadata": {
+    "AssemblyCompanyAttribute": "[System.Reflection.AssemblyCompanyAttribute(\u0022MSCompiler\u0022)]",
+    "AssemblyConfigurationAttribute": "[System.Reflection.AssemblyConfigurationAttribute(\u0022Debug\u0022)]",
+    "AssemblyFileVersionAttribute": "[System.Reflection.AssemblyFileVersionAttribute(\u00221.0.0.0\u0022)]",
+    "AssemblyInformationalVersionAttribute": "[System.Reflection.AssemblyInformationalVersionAttribute(\u00221.0.0\u002B74f5b7f1de41fe2d8ef9156d8561736f5566adc3\u0022)]",
+    "AssemblyProductAttribute": "[System.Reflection.AssemblyProductAttribute(\u0022MSCompiler\u0022)]",
+    "AssemblyTitleAttribute": "[System.Reflection.AssemblyTitleAttribute(\u0022MSCompiler\u0022)]",
+    "CompilationRelaxationsAttribute": "[System.Runtime.CompilerServices.CompilationRelaxationsAttribute((Int32)8)]",
+    "DebuggableAttribute": "[System.Diagnostics.DebuggableAttribute((System.Diagnostics.DebuggableAttribute\u002BDebuggingModes)263)]",
+    "RuntimeCompatibilityAttribute": "[System.Runtime.CompilerServices.RuntimeCompatibilityAttribute(WrapNonExceptionThrows = True)]",
+    "TargetFrameworkAttribute": "[System.Runtime.Versioning.TargetFrameworkAttribute(\u0022.NETCoreApp,Version=v10.0\u0022, FrameworkDisplayName = \u0022.NET 10.0\u0022)]"
+  },
+  "PEHeaders": {
+    "Characteristics": 0,
+    "Machine": 144,
+    "Magic": 23117,
+    "NumberOfSections": 3,
+    "NumberOfSymbols": 12058624,
+    "PointerToSymbolTable": 4294901760,
+    "SizeOfOptionalHeader": 0,
+    "TimeDateStamp": 262144
+  },
+  "DllMetadata": {
+    "AssemblyName": "MSCompiler",
+    "Version": "1.0.0.0",
+    "Culture": "",
+    "PublicKeyToken": "",
+    "ReferencedAssemblies": [
+      {
+        "Name": "System.Runtime",
+        "Version": "10.0.0.0",
+        "Culture": "",
+        "PublicKeyToken": "b03f5f7f11d50a3a"
+      },
+      {
+        "Name": "System.Console",
+        "Version": "10.0.0.0",
+        "Culture": "",
+        "PublicKeyToken": "b03f5f7f11d50a3a"
+      }
+    ],
+    "Types": [
+      {
+        "Type": "Program",
+        "IsClass": true,
+        "IsInterface": false,
+        "IsEnum": false,
+        "IsPublic": false,
+        "IsAbstract": false,
+        "BaseType": "System.Object",
+        "Interfaces": [],
+        "Attributes": [
+          "System.Runtime.CompilerServices.CompilerGeneratedAttribute"
+        ],
+        "Methods": [
+          {
+            "Name": "\u003CMain\u003E$",
+            "ReturnType": "System.Void",
+            "IsPublic": false,
+            "IsPrivate": true,
+            "IsStatic": true,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": [
+              {
+                "Name": "args",
+                "Type": "System.String[]"
+              }
+            ]
+          },
+          {
+            "Name": "GetType",
+            "ReturnType": "System.Type",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.CompilerServices.NullableContextAttribute",
+              "System.Runtime.CompilerServices.IntrinsicAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "MemberwiseClone",
+            "ReturnType": "System.Object",
+            "IsPublic": false,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.CompilerServices.NullableContextAttribute",
+              "System.Runtime.CompilerServices.IntrinsicAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "Finalize",
+            "ReturnType": "System.Void",
+            "IsPublic": false,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.Versioning.NonVersionableAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "ToString",
+            "ReturnType": "System.String",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": []
+          },
+          {
+            "Name": "Equals",
+            "ReturnType": "System.Boolean",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": [
+              {
+                "Name": "obj",
+                "Type": "System.Object"
+              }
+            ]
+          },
+          {
+            "Name": "GetHashCode",
+            "ReturnType": "System.Int32",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": []
+          }
+        ],
+        "Properties": [],
+        "Fields": []
+      }
+    ]
+  }
+}
+
+
+------------------- MyCompiler Output -------------------
+{
+  "AssemblyName": "MSCompiler",
+  "Version": "1.0.0.0",
+  "RuntimeVersion": "v4.0.30319",
+  "Architecture": "MSIL",
+  "EntryPoint": "\u003CMain\u003E$",
+  "Types": [
+    {
+      "Name": "Program",
+      "Methods": [
+        "System.Type GetType()",
+        "System.String ToString()",
+        "Boolean Equals(System.Object)",
+        "Int32 GetHashCode()"
+      ],
+      "Fields": [],
+      "Properties": []
+    }
+  ],
+  "Resources": [],
+  "AssemblyMetadata": {
+    "AssemblyCompanyAttribute": "[System.Reflection.AssemblyCompanyAttribute(\u0022MSCompiler\u0022)]",
+    "AssemblyConfigurationAttribute": "[System.Reflection.AssemblyConfigurationAttribute(\u0022Debug\u0022)]",
+    "AssemblyFileVersionAttribute": "[System.Reflection.AssemblyFileVersionAttribute(\u00221.0.0.0\u0022)]",
+    "AssemblyInformationalVersionAttribute": "[System.Reflection.AssemblyInformationalVersionAttribute(\u00221.0.0\u002B936242573a0bbf456eb83abb29521666de5e44d5\u0022)]",
+    "AssemblyProductAttribute": "[System.Reflection.AssemblyProductAttribute(\u0022MSCompiler\u0022)]",
+    "AssemblyTitleAttribute": "[System.Reflection.AssemblyTitleAttribute(\u0022MSCompiler\u0022)]",
+    "CompilationRelaxationsAttribute": "[System.Runtime.CompilerServices.CompilationRelaxationsAttribute((Int32)8)]",
+    "DebuggableAttribute": "[System.Diagnostics.DebuggableAttribute((System.Diagnostics.DebuggableAttribute\u002BDebuggingModes)263)]",
+    "RuntimeCompatibilityAttribute": "[System.Runtime.CompilerServices.RuntimeCompatibilityAttribute(WrapNonExceptionThrows = True)]",
+    "TargetFrameworkAttribute": "[System.Runtime.Versioning.TargetFrameworkAttribute(\u0022.NETCoreApp,Version=v10.0\u0022, FrameworkDisplayName = \u0022.NET 10.0\u0022)]"
+  },
+  "PEHeaders": {
+    "Characteristics": 0,
+    "Machine": 144,
+    "Magic": 23117,
+    "NumberOfSections": 3,
+    "NumberOfSymbols": 12058624,
+    "PointerToSymbolTable": 4294901760,
+    "SizeOfOptionalHeader": 0,
+    "TimeDateStamp": 262144
+  },
+  "DllMetadata": {
+    "AssemblyName": "MSCompiler",
+    "Version": "1.0.0.0",
+    "Culture": "",
+    "PublicKeyToken": "",
+    "ReferencedAssemblies": [
+      {
+        "Name": "System.Runtime",
+        "Version": "10.0.0.0",
+        "Culture": "",
+        "PublicKeyToken": "b03f5f7f11d50a3a"
+      },
+      {
+        "Name": "System.Console",
+        "Version": "10.0.0.0",
+        "Culture": "",
+        "PublicKeyToken": "b03f5f7f11d50a3a"
+      }
+    ],
+    "Types": [
+      {
+        "Type": "Program",
+        "IsClass": true,
+        "IsInterface": false,
+        "IsEnum": false,
+        "IsPublic": false,
+        "IsAbstract": false,
+        "BaseType": "System.Object",
+        "Interfaces": [],
+        "Attributes": [
+          "System.Runtime.CompilerServices.CompilerGeneratedAttribute"
+        ],
+        "Methods": [
+          {
+            "Name": "\u003CMain\u003E$",
+            "ReturnType": "System.Void",
+            "IsPublic": false,
+            "IsPrivate": true,
+            "IsStatic": true,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": [
+              {
+                "Name": "args",
+                "Type": "System.String[]"
+              }
+            ]
+          },
+          {
+            "Name": "GetType",
+            "ReturnType": "System.Type",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.CompilerServices.NullableContextAttribute",
+              "System.Runtime.CompilerServices.IntrinsicAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "MemberwiseClone",
+            "ReturnType": "System.Object",
+            "IsPublic": false,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.CompilerServices.NullableContextAttribute",
+              "System.Runtime.CompilerServices.IntrinsicAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "Finalize",
+            "ReturnType": "System.Void",
+            "IsPublic": false,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [
+              "System.Runtime.Versioning.NonVersionableAttribute"
+            ],
+            "Parameters": []
+          },
+          {
+            "Name": "ToString",
+            "ReturnType": "System.String",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": []
+          },
+          {
+            "Name": "Equals",
+            "ReturnType": "System.Boolean",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": [
+              {
+                "Name": "obj",
+                "Type": "System.Object"
+              }
+            ]
+          },
+          {
+            "Name": "GetHashCode",
+            "ReturnType": "System.Int32",
+            "IsPublic": true,
+            "IsPrivate": false,
+            "IsStatic": false,
+            "IsAbstract": false,
+            "Attributes": [],
+            "Parameters": []
+          }
+        ],
+        "Properties": [],
+        "Fields": []
+      }
+    ]
+  }
+}

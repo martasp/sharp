@@ -24,4 +24,14 @@ public class ProjectReferenceFinder
 
         throw new Exception("Cant find dll path"); // Package not found in NuGet package cache.
     }
+
+    public static string? FindReferencedCsproj(string projectFilePath, string projectPath)
+    {
+        var projectDirectory = Path.GetDirectoryName(projectFilePath) ?? throw new Exception("Directory not found");
+
+        var referencedProjectDir = Path.Combine(projectPath, projectDirectory);
+        var csprojFile = Path.Combine(referencedProjectDir, Path.GetFileName(projectFilePath));
+
+        return File.Exists(csprojFile) ? csprojFile : null;
+    }
 }

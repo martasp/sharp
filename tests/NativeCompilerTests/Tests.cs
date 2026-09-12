@@ -29,7 +29,7 @@ public class ConsoleAppTests
     {
         var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompiler";
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-        result.success.ShouldBeTrue(result.errors);
+        result.Success.ShouldBeTrue(result.Errors);
     }
 }
 

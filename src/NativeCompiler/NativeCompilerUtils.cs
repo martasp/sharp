@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Diagnostics;
 using System.Text;
+using XML;
 //See https://aka.ms/new-console-template for more information
 
 namespace NativeCompiler;
@@ -127,12 +128,48 @@ public static class NativeCompilerUtils
     public static MetadataReference[] GetdefaultLocalReferences(Project project)
     {
         var projectReferences = project.ProjectReferences;
+        var defaultReferences = new List<MetadataReference>();
 
-        var files = projectReferences.Select(item =>
-            ProjectReferenceFinder.FindReferencedDLL(item.Include ?? "", project.ProjectRootPath));
+        foreach (var item in projectReferences)
+        {
+            var include = item.Include ?? "";
+            var dllPath = ProjectReferenceFinder.FindReferencedDLL(include, project.ProjectRootPath);
+            defaultReferences.Add(MetadataReference.CreateFromFile(dllPath));
 
-        var defaultReferences = files.Select(f => (MetadataReference)MetadataReference.CreateFromFile(f)).ToArray();
-        return defaultReferences;
+            var referencedProjectCsproj = ProjectReferenceFinder.FindReferencedCsproj(include, project.ProjectRootPath);
+            if (referencedProjectCsproj != null)
+            {
+                var transitivePackages = GetTransitiveNugetPackages(referencedProjectCsproj);
+                defaultReferences.AddRange(transitivePackages.Select(f => (MetadataReference)MetadataReference.CreateFromFile(f)));
+            }
+        }
+
+        return defaultReferences.ToArray();
+    }
+
+    private static List<string> GetTransitiveNugetPackages(string csprojPath)
+    {
+        var results = new List<string>();
+        if (!File.Exists(csprojPath)) return results;
+
+        var xml = XML.Project.Parse(csprojPath);
+        var packages = xml.ItemGroup.SelectMany(ig => ig.PackageReferences);
+
+        foreach (var pkg in packages)
+        {
+            var pkgName = pkg.Include ?? "";
+            var pkgVersion = pkg.Version ?? "";
+            if (string.IsNullOrEmpty(pkgName) || string.IsNullOrEmpty(pkgVersion)) continue;
+
+            var pkgPath = NuGetPackage.FindPackagePath(pkgName, pkgVersion);
+            if (string.IsNullOrEmpty(pkgPath)) continue;
+
+            var dllPath = NuGetPackage.FindPackageDLL(pkgPath);
+            if (!string.IsNullOrEmpty(dllPath))
+                results.Add(dllPath);
+        }
+
+        return results;
     }
 
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
