@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using VerifyXunit;
 using Xunit;
@@ -18,15 +20,17 @@ public class Sample
     [Fact]
     public Task Verify_ReadAllProjectFilesPath()
     {
-        // Test-runner artifacts are transient (MTP diagnostic logs get unique names per run,
-        // stale .received.txt files linger after a previous failure) - clear them so the
-        // snapshot only reflects real project output.
-        var logDir = Path.Combine(Directory.GetCurrentDirectory(), "Log");
-        if (Directory.Exists(logDir))
-            Directory.Delete(logDir, true);
-        foreach (var staleReceived in Directory.GetFiles(Directory.GetCurrentDirectory(), "Sample.*.received.txt"))
-            File.Delete(staleReceived);
+        // Filter transient test-runner artifacts (MTP diagnostic logs, Verify .received.txt files)
+        // out of the snapshot rather than deleting them — the log directory is locked by the
+        // diagnostic logger process during the test run.
+        var files = ReadAllProjectFilesPath("./")
+            .Where(path =>
+                !path.Contains(Path.DirectorySeparatorChar + "Log" + Path.DirectorySeparatorChar)
+                && !path.Contains(Path.DirectorySeparatorChar + "Log" + Path.AltDirectorySeparatorChar)
+                && !path.EndsWith(".diag", StringComparison.OrdinalIgnoreCase)
+                && !Path.GetFileName(path).Contains(".received.", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
 
-        return Verify(ReadAllProjectFilesPath("./"));
+        return Verify(files);
     }
 }
