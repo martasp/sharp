@@ -186,6 +186,7 @@ not OrchardCore-specific.
 | 3 | `Microsoft.NET.Sdk.Razor` project support | module csprojs use the Razor SDK; implicit `FrameworkReference` + razor generators are SDK-injected | remaining modules behind the Razor wall |
 | 4 | Package `build`/`buildTransitive`-injected compile references | some packages inject `<Reference>` items via target files we don't run; `xunit.v3` ships zero `lib/` DLLs | packages without `lib` assemblies |
 | 5 | MSBuild condition evaluation (configuration matrix) | Debug/Release-conditional csproj items are currently skipped | correct multi-configuration output |
+| 6 | **DONE** | Visual output-behavior parity | pin our CLI output side-by-side against real `dotnet build` in a Verify snapshot (`CliComparisonTests`), so output drift toward/away from the SDK is reviewable; exposes leftover debug noise (`Sucess!!` banner, hidden CS8019 relayed from generators, missing project->path lines) | ~ `dotnet build` parity review |
 
 ## Known behaviors
 

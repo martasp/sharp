@@ -434,6 +434,7 @@ var parsedData = ParseProject(project);
 
 
         Debug.WriteLine(Directory.GetCurrentDirectory());
+        var originalDirectory = Directory.GetCurrentDirectory();
         Directory.SetCurrentDirectory(project.SharpBinFolderPath);
         Debug.WriteLine(Directory.GetCurrentDirectory());
         try
@@ -450,6 +451,10 @@ var parsedData = ParseProject(project);
         {
             return (false,
                 ex?.InnerException?.ToString() ?? "No errors"); // Todo : Implement better global error handling 
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalDirectory);
         }
     }
 

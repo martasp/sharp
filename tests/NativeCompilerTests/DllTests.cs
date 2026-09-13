@@ -31,12 +31,12 @@ public class DllSnapshotTests
     [Fact]
     public async Task TypeDefinitionUsage()
     {
-        var MsCompilerDllMetadata = ExtractAll(MSCompiler + @"\bin\Debug\net10.0\MSCompiler.dll");
+        var MsCompilerDllMetadata = ExtractAll(MSCompiler + @"\myc\Debug\net10.0\MSCompiler.dll");
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
         Assert.True(buildDetails.Success, $"Build failed with errors: {buildDetails.Errors}");
 
-        var MyCompilerDllMetadata = ExtractAll(MyCompiler + @"\bin\sharpbin\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
+        var MyCompilerDllMetadata = ExtractAll(MyCompiler + @"\myc\Debug\net10.0\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
 
         var MsCompilerDllMetadataJson = JsonSerializer.Serialize(MsCompilerDllMetadata, new JsonSerializerOptions
         {

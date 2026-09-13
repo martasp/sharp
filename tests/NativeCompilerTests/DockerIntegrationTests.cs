@@ -60,13 +60,23 @@ public class DockerIntegrationTests
         build.ExitCode.ShouldBe(0, $"Build failed.\n{build.Stdout}\n{build.Stderr}");
         build.Stdout.ShouldContain("Build succeeded");
 
+        // Microsoft compiler (real SDK): /app/hello -> bin\Debug\net10.0\hello.dll
+        var msBuild = await container.ExecAsync(
+            new[] { "dotnet", "build", "/app/hello" });
+        msBuild.ExitCode.ShouldBe(0, $"Microsoft build failed.\n{msBuild.Stdout}\n{msBuild.Stderr}");
+        var msRun = await container.ExecAsync(
+            new[] { "dotnet", "/app/hello/bin/Debug/net10.0/hello.dll" });
+        msRun.ExitCode.ShouldBe(0, $"Microsoft run failed.\n{msRun.Stderr}");
+        msRun.Stdout.Trim().ShouldBe("Hello from NativeCompiler!");
+
+        // Our compiler: /app/hello -> myc\Debug\net10.0\hello.dll (own tree, never touches bin\)
         var compile = await container.ExecAsync(
             new[] { "dotnet", "/src/src/NativeCompilerCLI/bin/Release/net10.0/NativeCompilerCLI.dll", "/app/hello" });
         compile.ExitCode.ShouldBe(0, $"Compilation failed.\n{compile.Stdout}\n{compile.Stderr}");
-        compile.Stdout.ShouldContain("Compiled hello successfully");
+        compile.Stdout.ShouldContain("Build succeeded");
 
         var run = await container.ExecAsync(
-            new[] { "dotnet", "/app/hello/bin/sharpbin/hello.dll" });
+            new[] { "dotnet", "/app/hello/myc/Debug/net10.0/hello.dll" });
         run.ExitCode.ShouldBe(0, $"Run failed.\n{run.Stderr}");
         run.Stdout.Trim().ShouldBe("Hello from NativeCompiler!");
     }
@@ -101,13 +111,23 @@ public class DockerIntegrationTests
         build.ExitCode.ShouldBe(0, $"Build failed.\n{build.Stdout}\n{build.Stderr}");
         build.Stdout.ShouldContain("Build succeeded");
 
+        // Microsoft compiler (real SDK): C:\app\hello -> bin\Debug\net10.0\hello.dll
+        var msBuild = await container.ExecAsync(
+            new[] { "dotnet", "build", "C:\\app\\hello" });
+        msBuild.ExitCode.ShouldBe(0, $"Microsoft build failed.\n{msBuild.Stdout}\n{msBuild.Stderr}");
+        var msRun = await container.ExecAsync(
+            new[] { "dotnet", "C:\\app\\hello\\bin\\Debug\\net10.0\\hello.dll" });
+        msRun.ExitCode.ShouldBe(0, $"Microsoft run failed.\n{msRun.Stderr}");
+        msRun.Stdout.Trim().ShouldBe("Hello from NativeCompiler!");
+
+        // Our compiler: C:\app\hello -> myc\Debug\net10.0\hello.dll (own tree, never touches bin\)
         var compile = await container.ExecAsync(
             new[] { "dotnet", "C:\\src\\src\\NativeCompilerCLI\\bin\\Release\\net10.0\\NativeCompilerCLI.dll", "C:\\app\\hello" });
         compile.ExitCode.ShouldBe(0, $"Compilation failed.\n{compile.Stdout}\n{compile.Stderr}");
-        compile.Stdout.ShouldContain("Compiled hello successfully");
+        compile.Stdout.ShouldContain("Build succeeded");
 
         var run = await container.ExecAsync(
-            new[] { "dotnet", "C:\\app\\hello\\bin\\sharpbin\\hello.dll" });
+            new[] { "dotnet", "C:\\app\\hello\\myc\\Debug\\net10.0\\hello.dll" });
         run.ExitCode.ShouldBe(0, $"Run failed.\n{run.Stderr}");
         run.Stdout.Trim().ShouldBe("Hello from NativeCompiler!");
     }

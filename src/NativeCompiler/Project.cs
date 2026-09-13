@@ -21,7 +21,7 @@ public class Project : IProject
     public List<ProjectFile> CSFiles { get; set; }
     public string ProjectRootPath { get; set; }
     public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
-    public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath);
+    public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath, TargetFramework);
     private XML.Project? _xmlProject;
     private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure
 
@@ -148,11 +148,28 @@ public class Project : IProject
         return path;
     }
 
-    private static string GetSharpBinDirectory(string projectRootPath)
+    public static string GetSharpBinDirectory(string projectRootPath, string? targetFramework)
     {
-        var path = Path.Combine(projectRootPath, "bin", "sharpbin");
+        // Dedicated output layout mirroring the SDK ("bin\Debug\<TFM>") but under our own "myc"
+        // folder, so the compiler never clobbers real dotnet build output while keeping the same
+        // path depth (printed `project -> output` lines stay structurally identical).
+        var path = Path.Combine(projectRootPath, "myc", "Debug", targetFramework ?? "net10.0");
         CreateFolderIfNotExists(path);
         return path;
+    }
+
+    // Reads the TargetFramework from an arbitrary csproj (used when a build output must be located
+    // for a referenced/analyzer project without constructing a full Project).
+    public static string? ResolveTargetFramework(string csprojPath)
+    {
+        try
+        {
+            return XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public static void CreateFolderIfNotExists(string folderPath)

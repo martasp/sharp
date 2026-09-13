@@ -728,7 +728,6 @@ public static class NativeCompilerUtils
 
         var appDllName = Path.GetFileName(project.DllPathName);
         BindAppHost(project.ExePathName, appDllName);
-        Console.WriteLine($"Apphost '{project.ExePathName}' bound to '{appDllName}'.");
     }
 
     private static void MakeWritableIfExists(string path)

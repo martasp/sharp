@@ -104,7 +104,7 @@ public class SolutionTests
 
         result.Projects.All(project => project.Result.Success).ShouldBeTrue();
 
-        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "bin", "sharpbin");
+        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net10.0");
         Directory.Exists(sharpBin).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "SlnApp.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibB.dll")).ShouldBeTrue();
@@ -118,7 +118,7 @@ public class SolutionTests
 
         build.Success.ShouldBeTrue(build.Errors);
 
-        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "bin", "sharpbin");
+        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net10.0");
         File.Exists(Path.Combine(sharpBin, "SlnApp.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibB.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibA.dll")).ShouldBeTrue();

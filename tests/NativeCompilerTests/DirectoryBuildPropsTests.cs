@@ -108,7 +108,7 @@ public class DirectoryBuildPropsTests
             var build = NativeCompiler.NativeCompiler.Build(root);
 
             build.Success.ShouldBeTrue(build.Errors);
-            File.Exists(Path.Combine(root, "bin", "sharpbin", "PropsOnly.dll")).ShouldBeTrue();
+            File.Exists(Path.Combine(root, "myc", "Debug", "net10.0", "PropsOnly.dll")).ShouldBeTrue();
         }
         finally
         {

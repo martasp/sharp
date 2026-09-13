@@ -34,8 +34,8 @@ public class HostingTest
         //publish.bat the tool is located here D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Release\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
-        var sharbin = MyCompiler + @"\bin\sharpbin";
-        var dll = MyCompiler + @"\bin\sharpbin\MSCompiler.dll";
+        var sharbin = MyCompiler + @"\myc\Debug\net10.0";
+        var dll = MyCompiler + @"\myc\Debug\net10.0\MSCompiler.dll";
 
         // copy tool to myCompiler output folder
         File.Copy(@"D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Release\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe", sharbin + @"\DotnetRuntimeHostExe.exe", true);

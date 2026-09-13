@@ -92,7 +92,7 @@ public static class SourceGeneratorRunner
     private static string ResolveAnalyzerProjectDll(string csprojPath)
     {
         var projectDir = Path.GetDirectoryName(csprojPath) ?? "";
-        var sharpBinDir = Path.Combine(projectDir, "bin", "sharpbin");
+        var sharpBinDir = Project.GetSharpBinDirectory(projectDir, Project.ResolveTargetFramework(csprojPath));
 
         if (!Directory.Exists(sharpBinDir)) NativeCompiler.Build(projectDir);
 

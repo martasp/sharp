@@ -134,11 +134,24 @@ public static class AsemblyExtensions
 
     public static string PrintErrors(this EmitResult result)
     {
-        Console.WriteLine(result.Success ? "Sucess!!" : "Failed");
-        var errors = result.Diagnostics.Select(item => item.GetMessage() + item).ToArray();
-        var allErrors = string.Join(Environment.NewLine, errors);
-        Console.WriteLine(allErrors);
-        return allErrors;
+        // Only surface real errors (emit result success is derived from them) and never write to
+        // the console from the library — hidden diagnostics like "unnecessary using" (CS8019) are
+        // not user-facing and must not leak into CLI output. Errors are formatted msbuild-style
+        // ("<path>(<line>,<col>): error <code>: <message>") so the CLI output matches dotnet build.
+        return string.Join(Environment.NewLine,
+            result.Diagnostics
+                .Where(item => item.Severity == DiagnosticSeverity.Error)
+                .Select(item =>
+                {
+                    if (item.Location.IsInSource)
+                    {
+                        var line = item.Location.GetMappedLineSpan();
+                        var position = line.StartLinePosition;
+                        return $"{line.Path}({position.Line + 1},{position.Character + 1}): error {item.Id}: {item.GetMessage()}";
+                    }
+
+                    return item.ToString();
+                }));
     }
 
     // emit the compilation result into a byte array.

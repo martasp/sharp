@@ -1,33 +1,52 @@
-﻿using NativeCompiler;
+using NativeCompiler;
 using System;
 using System.Linq;
 using static System.Console;
 
 var targetPath = args.FirstOrDefault() ?? throw new Exception("add console argument (.sln, .csproj or project folder)");
 
+// dotnet's safe sign-off: `dotnet build` prints the errors to stdout with the owning `[csproj]`
+// suffix, then re-echoes them after `Build FAILED.`.
+static string WithProjectSuffix(string errors, string? projectFile)
+{
+    if (string.IsNullOrWhiteSpace(errors) || projectFile is null) return errors;
+
+    return string.Join("\n", errors
+        .Replace("\r\n", "\n")
+        .Split('\n')
+        .Where(line => line.Length > 0)
+        .Select(line => line + $" [{projectFile}]"));
+}
+
 if (targetPath.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
     targetPath.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
 {
     var solutionResult = NativeCompiler.NativeCompiler.BuildSolution(targetPath);
 
-    WriteLine($"Solution total time: {solutionResult.Duration.TotalMilliseconds:0}ms");
     foreach (var error in solutionResult.Errors)
     {
-        Error.WriteLine(error);
+        WriteLine(error);
     }
 
+    // Mirror `dotnet build`: one "<project> -> <output>" mapping line per built project, and the
+    // build summary at the end. Project errors are printed inline like the SDK does.
     foreach (var project in solutionResult.Projects)
     {
-        WriteLine($"{(project.Result.Success ? "OK   " : "FAIL ")} {project.ProjectName}\t{project.Result.Duration.TotalMilliseconds:0}ms");
-        foreach (var output in project.Result.Outputs)
+        if (project.Result.Success)
         {
-            WriteLine($"      {output}");
+            var outputPath = project.Result.Project?.DllPathName ?? project.ProjectFile;
+            WriteLine($"  {project.ProjectName} -> {outputPath}");
         }
-        if (!project.Result.Success)
+        else
         {
-            Error.WriteLine($"      {project.Result.Errors}");
+            WriteLine(WithProjectSuffix(project.Result.Errors, project.ProjectFile));
         }
     }
+
+    var failedProjects = solutionResult.Projects.Count(project => !project.Result.Success);
+    WriteLine(solutionResult.Success ? "Build succeeded." : "Build FAILED.");
+    WriteLine("    0 Warning(s)");
+    WriteLine($"    {failedProjects} Error(s)");
 
     if (!solutionResult.Success)
     {
@@ -38,15 +57,29 @@ else
 {
     var buildResult = NativeCompiler.NativeCompiler.Build(targetPath);
 
-    WriteLine($"Total time: {buildResult.Duration.TotalMilliseconds:0}ms");
-    foreach (var line in buildResult.Outputs)
+    if (buildResult.Success && buildResult.Project is { } builtProject)
     {
-        WriteLine(line);
+        WriteLine($"  {builtProject.ProjectName} -> {builtProject.DllPathName}");
+        WriteLine();
+        WriteLine("Build succeeded.");
+        WriteLine("    0 Warning(s)");
+        WriteLine("    0 Error(s)");
+        WriteLine();
     }
-
-    if (!buildResult.Success)
+    else
     {
-        Error.WriteLine($"Build failed: {buildResult.Errors}");
+        // Layout mirrors `dotnet build`: the errors are printed inline, then again after the
+        // failure summary ("Build FAILED."), each line carrying its owning [csproj] suffix.
+        var errors = WithProjectSuffix(buildResult.Errors, buildResult.Project?.CsProjFile.FilePath);
+        WriteLine(errors);
+        WriteLine();
+        WriteLine("Build FAILED.");
+        WriteLine();
+        WriteLine(errors);
+        WriteLine("    0 Warning(s)");
+        WriteLine("    1 Error(s)");
+        WriteLine();
+
         Environment.Exit(1);
     }
 }

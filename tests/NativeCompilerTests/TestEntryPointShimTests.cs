@@ -33,7 +33,7 @@ public class TestEntryPointShimTests
             var build = NativeCompiler.NativeCompiler.Build(projectDir);
 
             build.Success.ShouldBeTrue(build.Errors);
-            File.Exists(Path.Combine(projectDir, "bin", "sharpbin", "ShimTest.dll")).ShouldBeTrue();
+            File.Exists(Path.Combine(projectDir, "myc", "Debug", "net10.0", "ShimTest.dll")).ShouldBeTrue();
         }
         finally
         {
