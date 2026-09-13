@@ -27,6 +27,19 @@ public static class AsemblyExtensions
         }
     }
 
+    // The targeting pack ships real Roslyn source generators (System.Text.RegularExpressions.Generator,
+    // System.Text.Json.SourceGeneration, Microsoft.Interop.*, ...) under analyzers/dotnet/cs. The same
+    // assemblies .NET SDK feeds to csc for every project. Used by the GENERATOR_PIPELINE feature.
+    public static string ResolveRefPackAnalyzersLocation
+    {
+        get
+        {
+            var refPackRoot = Path.Combine(ResolveDotnetRoot(), "packs", "Microsoft.NETCore.App.Ref");
+            var versionDir = SelectBestVersionDirectory(refPackRoot, preferredMajor: Environment.Version.Major);
+            return Path.Combine(versionDir, "analyzers", "dotnet", "cs");
+        }
+    }
+
     // Resolves the targeting-pack ref folder for a shared-framework <FrameworkReference> item, e.g.
     // "Microsoft.AspNetCore.App" -> <dotnet>/packs/Microsoft.AspNetCore.App.Ref/<ver>/ref/<tfm>.
     public static string ResolveFrameworkRefLocation(string frameworkName, string? targetTfm)

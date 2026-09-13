@@ -53,4 +53,17 @@ public class FrameworkReferenceTests
         build.Success.ShouldBeTrue(build.Errors);
         File.Exists(Path.Combine(FixtureDir, "bin", "sharpbin", "FrameworkRefFixture.dll")).ShouldBeTrue();
     }
+
+    public static string TransitiveFixtureDir =
+        Path.Combine(RepoRoot, "tests", "TestExampleProjects", "TransitiveFrameworkRefFixture");
+
+    [Fact]
+    public void Build_TransitiveFrameworkRefFixture_PropagatesViaProjectReference()
+    {
+        var build = NativeCompiler.NativeCompiler.Build(TransitiveFixtureDir);
+
+        build.Success.ShouldBeTrue(build.Errors);
+        File.Exists(Path.Combine(TransitiveFixtureDir, "bin", "sharpbin", "TransitiveFrameworkRefFixture.dll"))
+            .ShouldBeTrue();
+    }
 }

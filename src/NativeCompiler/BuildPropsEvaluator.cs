@@ -19,7 +19,9 @@ public sealed record BuildProps(
     string? Nullable,
     string? LangVersion,
     bool AllowUnsafeBlocks,
-    string? DefineConstants);
+    string? DefineConstants,
+    IReadOnlyList<string> AnalyzerProjectReferences,
+    string? InterceptorsNamespaces);
 
 public static class BuildPropsEvaluator
 {
@@ -31,13 +33,23 @@ public static class BuildPropsEvaluator
             if (propsFile is null) return Default;
 
             var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var analyzerRefs = new List<string>();
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Traverse(propsFile, props, visited);
+            Traverse(propsFile, props, analyzerRefs, visited);
 
             var targetFramework = Expand(props.GetValueOrDefault("TargetFramework"), props);
             if (string.IsNullOrEmpty(targetFramework))
             {
                 var frameworks = Expand(props.GetValueOrDefault("TargetFrameworks"), props);
+                if (string.IsNullOrEmpty(frameworks))
+                {
+                    // The project's own <TargetFrameworks>/<TargetFramework> declarations are read
+                    // last (the SDK is not imported, so Directory.Build.props alone may not define
+                    // the TFM). The outer property (e.g. $(CommonTargetFrameworks)) is expanded
+                    // against the props table collected above.
+                    frameworks = Expand(ReadProjectTfmElement(projectRootPath), props);
+                }
+
                 targetFramework = frameworks
                     .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .FirstOrDefault();
@@ -54,7 +66,10 @@ public static class BuildPropsEvaluator
                 EmptyToNull(Expand(props.GetValueOrDefault("Nullable"), props)),
                 EmptyToNull(Expand(props.GetValueOrDefault("LangVersion"), props)),
                 allowUnsafe,
-                EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)));
+                EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)),
+                analyzerRefs,
+                EmptyToNull(Expand(props.GetValueOrDefault("InterceptorsNamespaces") ??
+                       props.GetValueOrDefault("InterceptorsPreviewNamespaces"), props, "InterceptorsNamespaces")));
         }
         catch
         {
@@ -63,7 +78,7 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static readonly BuildProps Default = new(null, false, null, null, false, null);
+    private static readonly BuildProps Default = new(null, false, null, null, false, null, Array.Empty<string>(), null);
 
     private static string? FindNearestPropsFile(string projectRootPath)
     {
@@ -80,7 +95,33 @@ public static class BuildPropsEvaluator
         return null;
     }
 
-    private static void Traverse(string propsFilePath, Dictionary<string, string> props, HashSet<string> visited)
+    // Reads the project's own first <PropertyGroup> TFM declarations (<TargetFramework> then
+    // <TargetFrameworks>), so projects that only express the TFM via an outer property reference
+    // (e.g. <TargetFrameworks>$(CommonTargetFrameworks)</TargetFrameworks>) still resolve it.
+    private static string ReadProjectTfmElement(string projectRootPath)
+    {
+        try
+        {
+            var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault();
+            if (csprojFile is null) return string.Empty;
+
+            var document = XDocument.Load(csprojFile);
+            var firstPropertyGroup = document.Root?.Elements().FirstOrDefault(element => element.Name.LocalName == "PropertyGroup");
+            if (firstPropertyGroup is null) return string.Empty;
+
+            var targetFramework = firstPropertyGroup.Elements().FirstOrDefault(element => element.Name.LocalName == "TargetFramework")?.Value.Trim();
+            if (!string.IsNullOrEmpty(targetFramework)) return targetFramework;
+
+            return firstPropertyGroup.Elements().FirstOrDefault(element => element.Name.LocalName == "TargetFrameworks")?.Value.Trim() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static void Traverse(string propsFilePath, Dictionary<string, string> props, List<string> analyzerRefs, HashSet<string> visited)
     {
         var fullPath = Path.GetFullPath(propsFilePath);
         if (!visited.Add(fullPath)) return;
@@ -94,6 +135,7 @@ public static class BuildPropsEvaluator
         if (root is null) return;
 
         var directory = Path.GetDirectoryName(fullPath) ?? "";
+        props["MSBuildThisFileDirectory"] = directory + Path.DirectorySeparatorChar;
 
         foreach (var element in root.Elements())
         {
@@ -108,12 +150,33 @@ public static class BuildPropsEvaluator
                 var importPath = expanded
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
-                Traverse(Path.GetFullPath(Path.Combine(directory, importPath)), props, visited);
+                Traverse(Path.GetFullPath(Path.Combine(directory, importPath)), props, analyzerRefs, visited);
             }
             else if (localName == "PropertyGroup")
             {
                 foreach (var property in element.Elements())
                     props[property.Name.LocalName] = property.Value.Trim(); // last definition wins
+            }
+            else if (localName == "ItemGroup")
+            {
+                // Analyzer project references injected from evaluated props (e.g. OrchardCore's
+                // OrchardCore.Commons.props adds OrchardCore.SourceGenerators to every project).
+                foreach (var item in element.Elements())
+                {
+                    if (item.Name.LocalName != "ProjectReference") continue;
+                    var outputType = (string?)item.Attribute("OutputItemType") ?? "";
+                    if (!outputType.Contains("Analyzer", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var include = Expand((string?)item.Attribute("Include") ?? "", props);
+                    if (string.IsNullOrWhiteSpace(include)) continue;
+
+                    include = include
+                        .Replace('\\', Path.DirectorySeparatorChar)
+                        .Replace('/', Path.DirectorySeparatorChar);
+                    var full = Path.GetFullPath(Path.Combine(directory, include));
+                    if (!analyzerRefs.Contains(full, StringComparer.OrdinalIgnoreCase))
+                        analyzerRefs.Add(full);
+                }
             }
         }
     }
@@ -124,16 +187,20 @@ public static class BuildPropsEvaluator
         @"\$\(([^)]+)\)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static string Expand(string? value, IReadOnlyDictionary<string, string> props)
+    private static string Expand(string? value, IReadOnlyDictionary<string, string> props, string? selfReference = null)
     {
         if (string.IsNullOrEmpty(value) || value.IndexOf("$(", StringComparison.Ordinal) < 0) return value ?? "";
 
         var current = value;
         for (var i = 0; i < MaxExpansionDepth; i++)
         {
-            var next = PropertyToken.Replace(current, match => props.TryGetValue(match.Groups[1].Value, out var resolved)
-                ? resolved
-                : match.Value);
+            var next = PropertyToken.Replace(current, match =>
+            {
+                var name = match.Groups[1].Value;
+                if (props.TryGetValue(name, out var resolved))
+                    return string.Equals(name, selfReference, StringComparison.Ordinal) ? "" : resolved;
+                return match.Value;
+            });
             if (next == current) break;
             current = next;
         }

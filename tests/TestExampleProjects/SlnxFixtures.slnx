@@ -3,6 +3,9 @@
     <Project Path="SlnFixtures/LibA/LibA.csproj" />
     <Project Path="SlnFixtures/LibB/LibB.csproj" />
     <Project Path="SlnFixtures/SlnApp/SlnApp.csproj" />
+    <Project Path="SlnFixtures/SkipMe/SkipMe.csproj">
+      <Build Project="false" />
+    </Project>
     <File Path="SlnFixtures/README.md" />
   </Folder>
 </Solution>

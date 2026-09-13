@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No FrameworkReference declared inline: inherits Microsoft.AspNetCore.App transitively. -->
+    <ProjectReference Include="..\TransitiveFrameworkRefChild\TransitiveRefChild.csproj" />
+  </ItemGroup>
+
+</Project>

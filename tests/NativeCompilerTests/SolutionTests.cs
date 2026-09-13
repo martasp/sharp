@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 using System.Threading.Tasks;
 using Shouldly;
 using VerifyXunit;
@@ -66,6 +67,19 @@ public class SolutionTests
         solution.Projects.Count.ShouldBe(3);
         solution.Projects.Select(project => project.Name).ShouldBe(new[] { "LibA", "LibB", "SlnApp" });
         solution.Projects[0].ProjectPath.ShouldEndWith("LibA.csproj");
+        solution.Projects.ShouldNotContain(project => project.Name == "SkipMe");
+    }
+
+    [Fact]
+    public void Parse_Slnx_ShouldSkipBuildFalseProjects()
+    {
+        var document = XDocument.Load(SlnxFixturesSln);
+        document.Descendants("Project")
+            .Any(element => element.Element("Build")?.Attribute("Project")?.Value == "false")
+            .ShouldBeTrue("fixture contains a Build=false project to exercise the skip");
+
+        var solution = SolutionFile.Parse(SlnxFixturesSln);
+        solution.Projects.ShouldNotContain(project => project.Name == "SkipMe");
     }
 
     [Fact]

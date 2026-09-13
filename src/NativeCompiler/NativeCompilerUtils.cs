@@ -3,7 +3,9 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Text;
 using System;
+using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using XML;
 //See https://aka.ms/new-console-template for more information
@@ -30,18 +32,137 @@ public static class NativeCompilerUtils
 
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText)[] ParseProject(Project project)
     {
-        var parseOptions = CSharpParseOptions.Default.WithLanguageVersion(ResolveLanguageVersion(project.LangVersion));
-
-        if (!string.IsNullOrWhiteSpace(project.DefineConstants))
-        {
-            var constants = project.DefineConstants
-                .Split(';', StringSplitOptions.RemoveEmptyEntries)
-                .Select(constant => constant.Trim())
-                .Where(constant => constant.Length > 0);
-            parseOptions = parseOptions.WithPreprocessorSymbols(constants);
-        }
+        var parseOptions = CSharpParseOptions.Default
+            .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
+            .WithPreprocessorSymbols(GetSdkPreprocessorSymbols(project));
+        parseOptions = ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
 
         return project.CSFiles.Select(file => Parse(file, parseOptions)).ToArray();
+    }
+
+    // Enables C# interceptors for the configured namespaces, like the SDK's
+    // <InterceptorsNamespaces>/<InterceptorsPreviewNamespaces> do for csc. The Roslyn API exposes
+    // the property read-only, so the private backing field is seeded via reflection.
+    // Kept general. DELETABLE FEATURE.
+    public static CSharpParseOptions ApplyInterceptorsNamespaces(
+        CSharpParseOptions parseOptions, string? interceptorsNamespaces)
+    {
+        if (string.IsNullOrWhiteSpace(interceptorsNamespaces)) return parseOptions;
+
+        var namespaces = interceptorsNamespaces
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToImmutableArray();
+        if (namespaces.IsEmpty) return parseOptions;
+
+        var field = typeof(CSharpParseOptions)
+            .GetField("_interceptorsNamespaces", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // The backing field is ImmutableArray<ImmutableArray<string>> (one namespace list per
+        // /intercept-with segment); one segment matches the SDK's plain semicolon-separated value.
+        field?.SetValue(parseOptions, ImmutableArray.Create(namespaces));
+
+        return parseOptions;
+    }
+
+    // Debug helper: reads back the seeded interceptor namespaces for diagnostics.
+    public static string GetInterceptorsNamespacesOrEmpty(CSharpParseOptions parseOptions)
+    {
+        var field = typeof(CSharpParseOptions)
+            .GetField("_interceptorsNamespaces", BindingFlags.NonPublic | BindingFlags.Instance);
+        if (field?.GetValue(parseOptions) is not ImmutableArray<ImmutableArray<string>> stored)
+            return "<none>";
+
+        return string.Join(",", stored.SelectMany(inner => inner));
+    }
+
+    // SDK-style preprocessor symbols: the implicit TFM constants (NET10_0, NET9_0_OR_GREATER, ...)
+    // + DEBUG/TRACE + the project's DefineConstants. Mirrors what Microsoft.NET.Sdk feeds csc for
+    // a Debug build. Kept general. DELETABLE FEATURE.
+    public static IEnumerable<string> GetSdkPreprocessorSymbols(Project project)
+    {
+        var symbols = new HashSet<string>(StringComparer.Ordinal);
+
+        var tfm = project.TargetFramework?.Trim();
+        if (!string.IsNullOrWhiteSpace(tfm))
+            AddTargetFrameworkSymbols(symbols, tfm);
+
+        symbols.Add("DEBUG");
+        symbols.Add("TRACE");
+
+        var constants = project.DefineConstants;
+        if (!string.IsNullOrWhiteSpace(constants))
+        {
+            foreach (var constant in constants
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                symbols.Add(constant);
+        }
+
+        return symbols.OrderBy(symbol => symbol, StringComparer.Ordinal).ToList();
+    }
+
+    private static void AddTargetFrameworkSymbols(HashSet<string> symbols, string tfm)
+    {
+        var baseTfm = tfm.Split('-')[0];
+
+        if (baseTfm.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryParseVersion(baseTfm.Substring("netstandard".Length), out var major, out var minor)) return;
+            symbols.Add("NETSTANDARD");
+            symbols.Add($"NETSTANDARD{major}_{minor}");
+            var chain = new[] { "1_0", "1_1", "1_2", "1_3", "1_4", "1_5", "1_6", "2_0", "2_1" };
+            for (var i = 0; i < chain.Length; i++)
+            {
+                var symbol = $"NETSTANDARD{chain[i]}";
+                if (symbol == $"NETSTANDARD{major}_{minor}") continue;
+                symbols.Add(symbol + "_OR_GREATER");
+            }
+            return;
+        }
+
+        if (baseTfm == "net" || baseTfm.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+        {
+            var versionPart = baseTfm.Substring(3);
+            if (!TryParseVersion(versionPart, out var major, out var minor)) return;
+
+            symbols.Add("NET");
+            symbols.Add("NETCOREAPP");
+            symbols.Add($"NET{major}_{minor}");
+
+            if (major >= 5)
+            {
+                for (var m = 5; m < major; m++) symbols.Add($"NET{m}_0_OR_GREATER");
+                symbols.Add($"NET{major}_{minor}_OR_GREATER");
+                AddNetCoreAppChain(symbols);
+            }
+            else
+            {
+                // netcoreapp1.0..3.1 chain
+                AddNetCoreAppChain(symbols);
+                symbols.Add($"NETCOREAPP{major}_{minor}_OR_GREATER");
+            }
+        }
+    }
+
+    private static void AddNetCoreAppChain(HashSet<string> symbols)
+    {
+        symbols.Add("NETCOREAPP1_0_OR_GREATER");
+        symbols.Add("NETCOREAPP1_1_OR_GREATER");
+        symbols.Add("NETCOREAPP2_0_OR_GREATER");
+        symbols.Add("NETCOREAPP2_1_OR_GREATER");
+        symbols.Add("NETCOREAPP2_2_OR_GREATER");
+        symbols.Add("NETCOREAPP3_0_OR_GREATER");
+        symbols.Add("NETCOREAPP3_1_OR_GREATER");
+    }
+
+    private static bool TryParseVersion(string version, out int major, out int minor)
+    {
+        major = 0;
+        minor = 0;
+        var dotIndex = version.IndexOf('.');
+        var majorText = dotIndex < 0 ? version : version.Substring(0, dotIndex);
+        var minorText = dotIndex < 0 ? "0" : version.Substring(dotIndex + 1);
+        return int.TryParse(majorText, out major) && int.TryParse(minorText, out minor);
     }
 
     private static LanguageVersion ResolveLanguageVersion(string? langVersion)
@@ -367,6 +488,46 @@ public static class NativeCompilerUtils
         return files;
     }
 
+    // ---------------------------------------------------------------------------
+    // Feature: package buildTransitive/build <Using> global usings.
+    // NuGet packages can ship .props (e.g. Parlot's buildTransitive/Parlot.props) that inject
+    // global usings into consuming projects (<Using Include="X" Static="true" />). The real SDK
+    // consumes these items when generating the implicit GlobalUsings file. General (no
+    // provider-specific types). DELETABLE FEATURE.
+    // ---------------------------------------------------------------------------
+    public static string BuildPackageUsingStatements(Project project)
+    {
+        var result = new StringBuilder();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tfm = project.TargetFramework ?? "net10.0";
+
+        void AddUsing(NuGetPackage.PackageUsingItem item)
+        {
+            var key = (item.Static ? "static " : "") + item.Namespace;
+            if (!seen.Add(key)) return;
+            result.Append("global using ");
+            if (item.Static) result.Append("static ");
+            result.Append("global::").Append(item.Namespace).AppendLine(";");
+        }
+
+        foreach (var packageItem in project.PackageReferences)
+        {
+            var packageName = packageItem.Include ?? "";
+            var packageVersion = packageItem.Version ??
+                NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
+            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
+
+            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
+            if (string.IsNullOrEmpty(packagePath)) continue;
+
+            foreach (var item in NuGetPackage.ReadPackageUsingItems(packagePath)) AddUsing(item);
+            foreach (var transitivePath in NuGetPackage.GetTransitivePackagePaths(packagePath, tfm))
+                foreach (var item in NuGetPackage.ReadPackageUsingItems(transitivePath)) AddUsing(item);
+        }
+
+        return result.ToString();
+    }
+
     public static Project GetProjectDetails(List<ProjectFile> projectFiles, string projectRootPath)
     {
         var CsProjFile = projectFiles.FirstOrDefault(item => Path.GetExtension(item.FilePath) == ".csproj")
@@ -377,19 +538,46 @@ public static class NativeCompilerUtils
 
         var project = new Project(CsProjFile, CSFiles, projectRootPath);
 
+        // Web SDK projects import Microsoft.NET.Sdk.Web, which adds its own implicit usings
+        // (Microsoft.AspNetCore.*) on top of the base net SDK set. Without them WebApplication
+        // etc. fail (CS0103). Kept general (no provider-specific types). DELETABLE FEATURE.
+        var globalUsingFile =
+        """
+        global using global::System;
+        global using global::System.Collections.Generic;
+        global using global::System.IO;
+        global using global::System.Linq;
+        global using global::System.Net.Http;
+        global using global::System.Threading;
+        global using global::System.Threading.Tasks;
+        """;
+
+        if (project.IsWebSdk)
+        {
+            globalUsingFile +=
+            """
+            global using global::Microsoft.AspNetCore.Builder;
+            global using global::Microsoft.AspNetCore.Hosting;
+            global using global::Microsoft.AspNetCore.Http;
+            global using global::Microsoft.AspNetCore.Routing;
+            global using global::Microsoft.Extensions.Configuration;
+            global using global::Microsoft.Extensions.DependencyInjection;
+            global using global::Microsoft.Extensions.Hosting;
+            global using global::Microsoft.Extensions.Logging;
+            """;
+        }
+
+        // NuGet packages can ship buildTransitive/build .props with <Using> items (e.g. Parlot)
+        // that inject extra global usings into consuming projects. DELETABLE FEATURE.
+        var packageUsings = BuildPackageUsingStatements(project);
+
         if (project.ImplicitUsings)
         {
-            var globalUsingFile =
-            """
-            global using global::System;
-            global using global::System.Collections.Generic;
-            global using global::System.IO;
-            global using global::System.Linq;
-            global using global::System.Net.Http;
-            global using global::System.Threading;
-            global using global::System.Threading.Tasks;
-            """;
-            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", globalUsingFile));
+            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", globalUsingFile + packageUsings));
+        }
+        else if (!string.IsNullOrWhiteSpace(packageUsings))
+        {
+            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", packageUsings));
         }
 
         //Todo read from csproj and add this file currently will be ignored

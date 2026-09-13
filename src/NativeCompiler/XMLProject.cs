@@ -85,6 +85,12 @@ public class PropertyGroup
 
     [XmlElement(ElementName = "DefineConstants")]
     public string? DefineConstants { get; set; }
+
+    [XmlElement(ElementName = "InterceptorsNamespaces")]
+    public string? InterceptorsNamespaces { get; set; }
+
+    [XmlElement(ElementName = "InterceptorsPreviewNamespaces")]
+    public string? InterceptorsPreviewNamespaces { get; set; }
 }
 
 [XmlRoot(ElementName = "Content")]
@@ -111,6 +117,12 @@ public class ItemGroup
     [XmlElement(ElementName = "FrameworkReference")]
     public List<FrameworkReference> FrameworkReferences { get; set; } = new();
 
+    [XmlElement(ElementName = "AssemblyAttribute")]
+    public List<AssemblyAttributeItem> AssemblyAttributes { get; set; } = new();
+
+    [XmlElement(ElementName = "InternalsVisibleTo")]
+    public List<InternalsVisibleToItem> InternalsVisibleTo { get; set; } = new();
+
     [XmlElement(ElementName = "BuildOutputInPackage")]
     public BuildOutputInPackage? BuildOutputInPackage { get; set; }
 }
@@ -133,10 +145,30 @@ public class ProjectReference
 
     [XmlAttribute(AttributeName = "PrivateAssets")]
     public string? PrivateAssets { get; set; }
+
+    [XmlAttribute(AttributeName = "OutputItemType")]
+    public string? OutputItemType { get; set; }
 }
 
 [XmlRoot(ElementName = "FrameworkReference")]
 public class FrameworkReference
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+}
+
+[XmlRoot(ElementName = "AssemblyAttribute")]
+public class AssemblyAttributeItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlElement(ElementName = "_Parameter1")]
+    public string? Parameter1 { get; set; }
+}
+
+[XmlRoot(ElementName = "InternalsVisibleTo")]
+public class InternalsVisibleToItem
 {
     [XmlAttribute(AttributeName = "Include")]
     public string? Include { get; set; }
@@ -231,6 +263,8 @@ public class Project
         LangVersion = ElementValue(element, "LangVersion"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),
+        InterceptorsNamespaces = ElementValue(element, "InterceptorsNamespaces"),
+        InterceptorsPreviewNamespaces = ElementValue(element, "InterceptorsPreviewNamespaces"),
     };
 
     private static ItemGroup ParseItemGroup(XElement element) => new()
@@ -253,6 +287,15 @@ public class Project
         FrameworkReferences = Children(element, "FrameworkReference").Select(reference => new FrameworkReference
         {
             Include = AttributeValue(reference, "Include"),
+        }).ToList(),
+        AssemblyAttributes = Children(element, "AssemblyAttribute").Select(item => new AssemblyAttributeItem
+        {
+            Include = AttributeValue(item, "Include"),
+            Parameter1 = ElementValue(item, "_Parameter1"),
+        }).ToList(),
+        InternalsVisibleTo = Children(element, "InternalsVisibleTo").Select(item => new InternalsVisibleToItem
+        {
+            Include = AttributeValue(item, "Include"),
         }).ToList(),
         BuildOutputInPackage = Children(element, "BuildOutputInPackage")
             .Select(item => new BuildOutputInPackage { Include = AttributeValue(item, "Include") })

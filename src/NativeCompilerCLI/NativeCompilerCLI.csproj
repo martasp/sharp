@@ -5,6 +5,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Host the CLI from the Microsoft-signed dotnet host instead of an unsigned apphost:
+         this machine's code-integrity policy enforces enterprise signing on loads into
+         unsigned processes, same exemption dotnet build relies on for csc/analyzers. -->
+    <UseAppHost>false</UseAppHost>
 	  <PublishAot>true</PublishAot>
     <!--//dotnet publish -r win-x64 -c Release-->
     <!--<SelfContained>true</SelfContained>

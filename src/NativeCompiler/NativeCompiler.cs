@@ -81,7 +81,7 @@ public static class NativeCompiler
         var defaultReferencesForCompiling = GetdefaultReferencesForCompiling(dotNetAssemblyRefPath);
         var defaultReferencesForRunning   = GetdefaultReferencesForRunning(dotNetAssemblyRuntimePath);
 
-        var parsedData = ParseProject(project);
+var parsedData = ParseProject(project);
         var syntaxTrees = parsedData.Select(item => item.syntaxTree);
         var embeddedTexts = parsedData.Select(item => item.embeddedText);
 
@@ -98,6 +98,24 @@ public static class NativeCompiler
         outputs.Add($"Merged default references count: {mergedDefaultReferences.Length}");
 
         var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences,compilationOptions);
+
+        // Feature: source-generator pipeline (main.md GENERATOR_PIPELINE). Runs real Roslyn
+        // generators (ref-pack + package + Analyzer project references), merges their generated
+        // trees into the compilation and relays generator diagnostics. DELETABLE FEATURE.
+        var (generatedCompilation, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project);
+        compilation = generatedCompilation;
+
+        if (!string.IsNullOrEmpty(generatorErrors))
+        {
+            return new BuildResult(
+                false,
+                generatorErrors,
+                outputs,
+                timer.Elapsed,
+                compilation,
+                project,
+                embeddedTexts);
+        }
 
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
 

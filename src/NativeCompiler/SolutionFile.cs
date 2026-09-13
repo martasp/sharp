@@ -64,6 +64,11 @@ public sealed class SolutionFile
 
         foreach (var element in document.Descendants("Project"))
         {
+            var buildAttr = element.Element("Build")?.Attribute("Project");
+            if (buildAttr is not null &&
+                (buildAttr.Value?.Equals("false", StringComparison.OrdinalIgnoreCase) ?? false))
+                continue;
+
             var relativePath = (string?)element.Attribute("Path") ?? "";
             if (!relativePath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)) continue;
 

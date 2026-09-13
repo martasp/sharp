@@ -4,28 +4,129 @@ namespace NativeCompiler;
 
 public static class NuGetPackage
 {
+    // ---------------------------------------------------------------------------
+    // Feature: package buildTransitive/build <Using> items.
+    // NuGet packages can ship .props files (e.g. Parlot's buildTransitive/Parlot.props) that
+    // inject global usings into consuming projects (<Using Include="Parlot.Fluent.Parsers"
+    // Static="true" />). The real SDK consumes these items when generating the implicit
+    // GlobalUsings file; this compiler does not import package props, so without this feature
+    // projects that rely on those namespaces (Literals/OneOf etc.) fail. DELETABLE FEATURE.
+    // ---------------------------------------------------------------------------
+    public readonly record struct PackageUsingItem(string Namespace, bool Static);
+
+    public static List<PackageUsingItem> ReadPackageUsingItems(string packagePath)
+    {
+        var items = new List<PackageUsingItem>();
+
+        foreach (var folder in new[] { Path.Combine(packagePath, "buildTransitive"), Path.Combine(packagePath, "build") })
+        {
+            if (!Directory.Exists(folder)) continue;
+
+            foreach (var propsFile in Directory.EnumerateFiles(folder, "*.props", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    var document = XDocument.Load(propsFile);
+                    foreach (var element in document.Descendants())
+                    {
+                        if (!element.Name.LocalName.Equals("Using", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var include = (string?)element.Attributes()
+                            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrWhiteSpace(include)) continue;
+
+                        var staticAttribute = (string?)element.Attributes()
+                            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals("Static", StringComparison.OrdinalIgnoreCase));
+                        var isStatic = !string.IsNullOrWhiteSpace(staticAttribute) &&
+                                       (staticAttribute.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                                        staticAttribute == "1");
+
+                        items.Add(new PackageUsingItem(include, isStatic));
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed props files.
+                }
+            }
+        }
+
+        return items;
+    }
+
     public static string FindPackagePath(string packageName, string packageVersion)
     {
         if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) return string.Empty;
 
-        // Specify the path to the global package cache folder
-        var globalPackagesFolderPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages");
-
-        var packageDirectory = new DirectoryInfo(globalPackagesFolderPath);
+        var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());
         if (!packageDirectory.Exists) return string.Empty;
 
+        var exact = FindExactVersionDirectory(packageName, packageVersion);
+        if (exact is not null) return exact;
+
+        // ---------------------------------------------------------------------------
+        // Feature: transitive version unification (NuGet nearest-wins approximation).
+        // A dependency's nuspec declares a minimum version (e.g. Parlot 1.5.2), but the
+        // resolved graph on this machine uses a newer version (e.g. 1.5.8) that is the
+        // actual package cached. Falling back to the highest available version mirrors
+        // the versions the real restore resolved, so compile references match. DELETABLE.
+        // ---------------------------------------------------------------------------
+        return FindHighestVersionDirectory(packageName, packageVersion) ?? string.Empty;
+    }
+
+    private static string? FindExactVersionDirectory(string packageName, string packageVersion)
+    {
+        var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());
         foreach (var packageDir in packageDirectory.GetDirectories($"{packageName}*"))
         {
             var matchingVersionDir = packageDir.GetDirectories()
                 .FirstOrDefault(dir => dir.Name.Equals(packageVersion, StringComparison.OrdinalIgnoreCase));
-
             if (matchingVersionDir != null) return matchingVersionDir.FullName;
         }
 
-        return string.Empty;
+        return null;
     }
+
+    private static string? FindHighestVersionDirectory(string packageName, string packageVersion)
+    {
+        var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());
+        var hasRequested = TryParseVersion(packageVersion, out var requested);
+
+        (System.Version version, string path)? best = null;
+        foreach (var packageDir in packageDirectory.GetDirectories($"{packageName}*"))
+        {
+            foreach (var versionDir in packageDir.GetDirectories())
+            {
+                if (!TryParseVersion(versionDir.Name, out var parsed)) continue;
+                if (hasRequested && requested.CompareTo(parsed) > 0) continue;
+                if (best is null || parsed.CompareTo(best.Value.version) > 0) best = (parsed, versionDir.FullName);
+            }
+        }
+
+        return best?.path;
+    }
+
+    private static bool TryParseVersion(string version, out System.Version parsed)
+    {
+        parsed = new System.Version(0, 0, 0, 0);
+        if (string.IsNullOrWhiteSpace(version)) return false;
+
+        var parts = version.Split('-')[0].Split('.');
+        if (parts.Length < 2) return false;
+
+        var majorMinor = $"{parts[0]}.{parts[1]}";
+        var build = parts.Length >= 3 ? parts[2] : "0";
+        if (System.Version.TryParse($"{majorMinor}.{build}", out var result) && result is not null)
+        {
+            parsed = result;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string GlobalPackagesFolderPath() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
 
     // Returns the compile-time DLLs of the package whose lib/<tfm> folder best matches the target TFM.
     // Falls back to DLLs at the package root when the package ships no lib folder.
@@ -60,6 +161,28 @@ public static class NuGetPackage
 
             results.AddRange(FindPackageDLLs(dependencyPath, targetTfm));
             results.AddRange(GetTransitivePackageDlls(dependencyPath, targetTfm, visitedPackages));
+        }
+
+        return results;
+    }
+
+    // Resolves the dependency package paths of a package (from its .nuspec) transitively.
+    public static List<string> GetTransitivePackagePaths(string packagePath, string targetTfm,
+        HashSet<string>? visitedPackages = null)
+    {
+        var results = new List<string>();
+        visitedPackages ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var dependency in FindDependencies(packagePath, targetTfm))
+        {
+            if (!visitedPackages.Add(dependency.Id)) continue;
+            if (dependency.Excluded) continue;
+
+            var dependencyPath = FindPackagePath(dependency.Id, dependency.Version);
+            if (string.IsNullOrEmpty(dependencyPath)) continue;
+
+            results.Add(dependencyPath);
+            results.AddRange(GetTransitivePackagePaths(dependencyPath, targetTfm, visitedPackages));
         }
 
         return results;

@@ -80,4 +80,72 @@ public class NuGetTests
         var root = Path.GetTempPath();
         NuGetPackage.ResolveCentralVersion("DemoPkg", root).ShouldBeEmpty();
     }
+
+    // ---------------------------------------------------------------------------
+    // Feature re-apply check: package buildTransitive <Using> global usings + Web SDK
+    // implicit usings (see NativeCompilerUtils.GetProjectDetails / BuildPackageUsingStatements).
+    // ---------------------------------------------------------------------------
+    [Fact]
+    public void ReadPackageUsingItems_Parlot_ReturnsStaticFluentParsersUsing()
+    {
+        var packagePath = NuGetPackage.FindPackagePath("Parlot", "1.5.8");
+        packagePath.ShouldNotBeEmpty();
+
+        var usings = NuGetPackage.ReadPackageUsingItems(packagePath);
+
+        usings.ShouldContain(item => item.Namespace == "Parlot.Fluent.Parsers" && item.Static);
+    }
+
+    [Fact]
+    public void GetProjectDetails_ImplicitUsingsWithParlotReference_EmitsPackageGlobalUsings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "GlobalUsingsFixture", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "Fixture.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>" +
+                "<ImplicitUsings>enable</ImplicitUsings></PropertyGroup>" +
+                "<ItemGroup><PackageReference Include=\"Parlot\" Version=\"1.5.8\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "// placeholder\n");
+
+            var project = NativeCompilerUtils.GetProjectDetails(
+                NativeCompilerUtils.ReadAllFilesInMemory(NativeCompilerUtils.ReadAllProjectFilesPath(root)), root);
+
+            project.ImplicitUsings.ShouldBeTrue();
+            var globalUsings = project.CSFiles.Single(file => file.FilePath.EndsWith("GlobalUsings.g.cs")).FileContent;
+            globalUsings.ShouldContain("global using static global::Parlot.Fluent.Parsers;");
+            globalUsings.ShouldContain("global using global::System.Linq;");
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void GetProjectDetails_WebSdk_EmitsAspNetCoreGlobalUsings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "GlobalUsingsWebFixtures", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "Fixture.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>" +
+                "<ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "// placeholder\n");
+
+            var project = NativeCompilerUtils.GetProjectDetails(
+                NativeCompilerUtils.ReadAllFilesInMemory(NativeCompilerUtils.ReadAllProjectFilesPath(root)), root);
+
+            project.IsWebSdk.ShouldBeTrue();
+            var globalUsings = project.CSFiles.Single(file => file.FilePath.EndsWith("GlobalUsings.g.cs")).FileContent;
+            globalUsings.ShouldContain("global using global::Microsoft.AspNetCore.Builder;");
+            globalUsings.ShouldContain("global using global::Microsoft.AspNetCore.Http;");
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }

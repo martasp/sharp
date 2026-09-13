@@ -46,6 +46,13 @@ public class Project : IProject
 
     public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
                                       ?? BuildProps.DefineConstants;
+
+    // Interceptor namespaces (SDK <InterceptorsNamespaces>/<InterceptorsPreviewNamespaces>) that
+    // opt generated [InterceptsLocation] code in for csc parity (OrchardCore's shape generator).
+    public string? InterceptorsNamespaces =>
+        XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsNamespaces
+        ?? XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsPreviewNamespaces
+        ?? BuildProps.InterceptorsNamespaces;
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => ProjectName + "." + ResolvedProjectExtensionType();
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
@@ -56,17 +63,50 @@ public class Project : IProject
     public List<ProjectReference> ProjectReferences =>
         XMLProject.ItemGroup.SelectMany(item => item.ProjectReferences).ToList();
 
+    // Project references wired as analyzers (<ProjectReference OutputItemType="Analyzer" ... />)
+    // feed the source-generator pipeline (GENERATOR_PIPELINE). Kept general. DELETABLE FEATURE.
+    public List<ProjectReference> AnalyzerProjectReferences =>
+        ProjectReferences
+            .Where(reference => string.Equals(reference.OutputItemType, "Analyzer",
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    // Same surface but resolved from the evaluated Directory.Build.props chain imports
+    // (e.g. OrchardCore.Commons.props injects OrchardCore.SourceGenerators into every project).
+    // Absolute csproj paths, nothing matched by the ProjectReference items above.
+    public IReadOnlyList<string> BuildPropsAnalyzerProjectReferences => BuildProps.AnalyzerProjectReferences;
+
     public List<PackageReference> PackageReferences =>
         XMLProject.ItemGroup.SelectMany(item => item.PackageReferences).ToList();
 
     public List<FrameworkReference> FrameworkReferences =>
         XMLProject.ItemGroup.SelectMany(item => item.FrameworkReferences).ToList();
 
+    public List<AssemblyAttributeItem> AssemblyAttributes =>
+        XMLProject.ItemGroup.SelectMany(item => item.AssemblyAttributes).ToList();
+
+    public IEnumerable<string> InternalsVisibleToNames =>
+        XMLProject.ItemGroup
+            .SelectMany(item => item.InternalsVisibleTo)
+            .Select(item => item.Include ?? "")
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Concat(XMLProject.ItemGroup
+                .SelectMany(item => item.AssemblyAttributes)
+                .Where(attr => string.Equals(attr.Include,
+                    "System.Runtime.CompilerServices.InternalsVisibleTo",
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(attr => attr.Parameter1 ?? "")
+                .Where(name => !string.IsNullOrEmpty(name)));
+
+    public bool IsWebSdk => (XMLProject.Sdk ?? "").Split(';')
+        .Select(sdk => sdk.Trim())
+        .Contains("Microsoft.NET.Sdk.Web", StringComparer.OrdinalIgnoreCase);
+
     public OutputKind ResolvedProjectOutputKind()
     {
         var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
 
-        return ExeContains switch
+        return (ExeContains || IsWebSdk) switch
         {
             true => OutputKind.ConsoleApplication,
             false => OutputKind.DynamicallyLinkedLibrary
@@ -100,7 +140,7 @@ public class Project : IProject
     {
         var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
 
-        return ExeContains switch
+        return (ExeContains || IsWebSdk) switch
         {
             true => "exe",
             false => "dll"
