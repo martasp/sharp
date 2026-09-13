@@ -19,6 +19,7 @@ public sealed record BuildProps(
     string? Nullable,
     string? LangVersion,
     bool AllowUnsafeBlocks,
+    bool UseAppHost,
     string? DefineConstants,
     IReadOnlyList<string> AnalyzerProjectReferences,
     string? InterceptorsNamespaces);
@@ -59,6 +60,8 @@ public static class BuildPropsEvaluator
                 .Contains("enable", StringComparison.OrdinalIgnoreCase);
             var allowUnsafe = Expand(props.GetValueOrDefault("AllowUnsafeBlocks"), props)
                 .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+            var useAppHost = !Expand(props.GetValueOrDefault("UseAppHost"), props)
+                .Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
 
             return new BuildProps(
                 EmptyToNull(targetFramework),
@@ -66,6 +69,7 @@ public static class BuildPropsEvaluator
                 EmptyToNull(Expand(props.GetValueOrDefault("Nullable"), props)),
                 EmptyToNull(Expand(props.GetValueOrDefault("LangVersion"), props)),
                 allowUnsafe,
+                useAppHost,
                 EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)),
                 analyzerRefs,
                 EmptyToNull(Expand(props.GetValueOrDefault("InterceptorsNamespaces") ??
@@ -78,7 +82,7 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static readonly BuildProps Default = new(null, false, null, null, false, null, Array.Empty<string>(), null);
+    private static readonly BuildProps Default = new(null, false, null, null, false, true, null, Array.Empty<string>(), null);
 
     private static string? FindNearestPropsFile(string projectRootPath)
     {

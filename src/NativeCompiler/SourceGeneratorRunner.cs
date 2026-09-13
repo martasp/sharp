@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -123,7 +124,10 @@ public static class SourceGeneratorRunner
         var name = Path.GetFileNameWithoutExtension(dllPath);
         return name.Equals("Microsoft.CodeAnalysis", StringComparison.OrdinalIgnoreCase)
             || name.Equals("Microsoft.CodeAnalysis.CSharp", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("Microsoft.CodeAnalysis.Analyzers", StringComparison.OrdinalIgnoreCase);
+            || name.Equals("Microsoft.CodeAnalysis.Analyzers", StringComparison.OrdinalIgnoreCase)
+            // Analyzer (not generator) package: depends on M.CA.Analyzers, which is excluded above,
+            // so it can never resolve; loading it only produces misleading warnings.
+            || name.Equals("Microsoft.CodeAnalysis.CSharp.Analyzers", StringComparison.OrdinalIgnoreCase);
     }
 
     // Runs the project's generators and returns the compilation with generated trees merged
@@ -140,17 +144,40 @@ public static class SourceGeneratorRunner
 
         try
         {
+            var loadContext = new GeneratorAssemblyLoadContext();
             var generators = new List<ISourceGenerator>();
             var warnings = new List<string>(collectorWarnings);
+
+            // Resolving interop-generator references (LibraryImportGenerator ->
+            // Microsoft.Interop.SourceGeneration) needs the whole set mapped before any assembly
+            // is loaded, since the dependency dlls sort after the generators themselves.
+            foreach (var dll in generatorDlls)
+                loadContext.RegisterCopy(dll);
 
             foreach (var dll in generatorDlls)
             {
                 List<Type>? types;
-try
-                    {
-                        var assembly = Assembly.LoadFrom(ShadowCopy(dll));
-                        types = assembly.GetTypes().ToList();
-                    }
+                try
+                {
+                    // Dependencies are visible inside the dedicated context through its Resolving
+                    // handler (e.g. LibraryImportGenerator -> Microsoft.Interop.SourceGeneration,
+                    // both shadow-copied from the ref-pack analyzers folder). Loading into the
+                    // default ALC fails for such co-located deps because the shadow copies are
+                    // renamed (Assembly.LoadFrom on an interop generator -> FileNotFoundException,
+                    // leaving [LibraryImport] methods without an implementation => CS8795).
+                    var assembly = loadContext.LoadGenerator(dll);
+                    types = assembly.GetTypes().ToList();
+                }
+                catch (ReflectionTypeLoadException typeLoad)
+                {
+                    var missing = typeLoad.LoaderExceptions
+                        .Where(ex => ex is not null)
+                        .Select(ex => ex!.Message)
+                        .Distinct();
+                    warnings.Add($"Warning: failed to load generator '{Path.GetFileName(dll)}': " +
+                        string.Join(" | ", missing));
+                    continue;
+                }
                 catch (Exception ex)
                 {
                     warnings.Add($"Warning: failed to load generator '{Path.GetFileName(dll)}': {ex.Message}");
@@ -245,6 +272,61 @@ try
             File.Copy(source, target);
 
         return target;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Per-run load context for generator assemblies. Every analyzer dll from this project's
+    // set is shadow-copied (renamed), and the handler below maps a requested simple name back
+    // to its copy, so generators with co-located dependencies in the same analyzers folder
+    // (LibraryImport/JSImport/ComInterface -> Microsoft.Interop.SourceGeneration) load no
+    // matter the load order or hosting process. Microsoft.CodeAnalysis* is deliberately not
+    // registered here: leaving the handler null for it falls back to the host's Roslyn, which
+    // is what the driver + the generator interfaces are bound against.
+    // ---------------------------------------------------------------------------
+    private sealed class GeneratorAssemblyLoadContext : AssemblyLoadContext
+    {
+        // lowercase simple name -> shadow copy, newest build wins when a package set supplies
+        // multiple versions of the same assembly.
+        private readonly Dictionary<string, string> _copies =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public GeneratorAssemblyLoadContext()
+            : base("NativeCompilerGenerators", isCollectible: true)
+        {
+            Resolving += (_, name) => LoadDependency(name);
+        }
+
+        public Assembly LoadGenerator(string sourcePath) => LoadFromAssemblyPath(Register(sourcePath));
+
+        // Shadow-copies the source dll into the shared temp dir and maps its simple name to the
+        // copy so the Resolving handler can satisfy cross-references between co-located analyzer
+        // dlls. Pre-register the whole set before loading any assembly: dependency dlls like
+        // Microsoft.Interop.SourceGeneration sort AFTER the generators that reference them and must
+        // already be mapped before the first generator's GetTypes() triggers dependency resolution.
+        public void RegisterCopy(string sourcePath) => Register(sourcePath);
+
+        private string Register(string sourcePath)
+        {
+            var copy = ShadowCopy(sourcePath);
+            var simpleName = Path.GetFileNameWithoutExtension(sourcePath);
+            if (!_copies.TryGetValue(simpleName, out var existing) ||
+                LastWriteTick(copy) > LastWriteTick(existing))
+                _copies[simpleName] = copy;
+            return copy;
+        }
+
+        private Assembly? LoadDependency(AssemblyName name)
+        {
+            if (!_copies.TryGetValue(name.Name ?? "", out var copy)) return null;
+            return LoadFromAssemblyPath(copy);
+        }
+
+        private static long LastWriteTick(string shadowPath)
+        {
+            var name = Path.GetFileNameWithoutExtension(shadowPath);
+            var parts = name.Split('.');
+            return parts.Length >= 3 && long.TryParse(parts[^2], out var ticks) ? ticks : 0;
+        }
     }
 
     private static LanguageVersion ResolveLanguageVersion(string? langVersion)

@@ -45,13 +45,13 @@ public class ConsoleAppTestsSelf
         Directory.EnumerateFiles(csprojFolderPath).Any(item => item.Contains(".dll")).ShouldBeTrue("dll not Exists");
     }
 
-    //[Fact]
-    //public void ITShouldCompileSelfCliProject()
-    //{
-    //    var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
-    //    var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
-    //    result.success.ShouldBeTrue(result.errors);
-    //}
+    [Fact]
+    public void ITShouldCompileSelfCliProject()
+    {
+        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.Success.ShouldBeTrue(result.Errors);
+    }
 }
 
 

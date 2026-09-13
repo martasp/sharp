@@ -20,6 +20,26 @@
     FilePath: ./Docker.DotNet.dll
   },
   {
+    Display: ./Docker.DotNet.Handler.Abstractions.dll,
+    FilePath: ./Docker.DotNet.Handler.Abstractions.dll
+  },
+  {
+    Display: ./Docker.DotNet.LegacyHttp.dll,
+    FilePath: ./Docker.DotNet.LegacyHttp.dll
+  },
+  {
+    Display: ./Docker.DotNet.NativeHttp.dll,
+    FilePath: ./Docker.DotNet.NativeHttp.dll
+  },
+  {
+    Display: ./Docker.DotNet.NPipe.dll,
+    FilePath: ./Docker.DotNet.NPipe.dll
+  },
+  {
+    Display: ./Docker.DotNet.Unix.dll,
+    FilePath: ./Docker.DotNet.Unix.dll
+  },
+  {
     Display: ./Docker.DotNet.X509.dll,
     FilePath: ./Docker.DotNet.X509.dll
   },
@@ -74,6 +94,10 @@
   {
     Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Net.Http.Client.dll,
+    FilePath: ./Microsoft.Net.Http.Client.dll
   },
   {
     Display: ./Microsoft.Testing.Extensions.MSBuild.dll,

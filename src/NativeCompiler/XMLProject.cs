@@ -74,8 +74,14 @@ public class PropertyGroup
     [XmlElement(ElementName = "IsPackable")]
     public string? IsPackable { get; set; }
 
+    [XmlElement(ElementName = "IsTestProject")]
+    public string? IsTestProject { get; set; }
+
     [XmlElement(ElementName = "AllowUnsafeBlocks")]
     public string? AllowUnsafeBlocks { get; set; }
+
+    [XmlElement(ElementName = "UseAppHost")]
+    public string? UseAppHost { get; set; }
 
     [XmlElement(ElementName = "LangVersion")]
     public string? LangVersion { get; set; }
@@ -259,7 +265,9 @@ public class Project
         VersionPrefix = ElementValue(element, "VersionPrefix"),
         VersionSuffix = ElementValue(element, "VersionSuffix"),
         IsPackable = ElementValue(element, "IsPackable"),
+        IsTestProject = ElementValue(element, "IsTestProject"),
         AllowUnsafeBlocks = ElementValue(element, "AllowUnsafeBlocks"),
+        UseAppHost = ElementValue(element, "UseAppHost"),
         LangVersion = ElementValue(element, "LangVersion"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),

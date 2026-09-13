@@ -6,6 +6,12 @@
     FlatPath: {SolutionDirectory}DotnetRuntime10/DotnetRuntime10.csproj
   },
   {
+    Name: DotnetRuntimeHostExe,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj,
+    FlatPath: {SolutionDirectory}DotnetRuntimeHostExe/DotnetRuntimeHostExe.csproj
+  },
+  {
     Name: NativeCompiler,
     ProjectTypeGuid: Guid_2,
     ProjectRelativePath: src\NativeCompiler\NativeCompiler.csproj,
@@ -16,6 +22,12 @@
     ProjectTypeGuid: Guid_2,
     ProjectRelativePath: src\NativeCompilerCLI\NativeCompilerCLI.csproj,
     FlatPath: {SolutionDirectory}src/NativeCompilerCLI/NativeCompilerCLI.csproj
+  },
+  {
+    Name: NativeCompilerTests,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: tests\NativeCompilerTests\NativeCompilerTests.csproj,
+    FlatPath: {ProjectDirectory}NativeCompilerTests.csproj
   },
   {
     Name: SimplePlayground,
