@@ -56,6 +56,14 @@
     FilePath: ./ICSharpCode.SharpZipLib.dll
   },
   {
+    Display: ./ILLink.CodeFixProvider.dll,
+    FilePath: ./ILLink.CodeFixProvider.dll
+  },
+  {
+    Display: ./ILLink.RoslynAnalyzer.dll,
+    FilePath: ./ILLink.RoslynAnalyzer.dll
+  },
+  {
     Display: ./Microsoft.ApplicationInsights.dll,
     FilePath: ./Microsoft.ApplicationInsights.dll
   },
@@ -68,20 +76,8 @@
     FilePath: ./Microsoft.CodeAnalysis.CSharp.dll
   },
   {
-    Display: ./Microsoft.CodeAnalysis.CSharp.Workspaces.dll,
-    FilePath: ./Microsoft.CodeAnalysis.CSharp.Workspaces.dll
-  },
-  {
     Display: ./Microsoft.CodeAnalysis.dll,
     FilePath: ./Microsoft.CodeAnalysis.dll
-  },
-  {
-    Display: ./Microsoft.CodeAnalysis.VisualBasic.dll,
-    FilePath: ./Microsoft.CodeAnalysis.VisualBasic.dll
-  },
-  {
-    Display: ./Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll,
-    FilePath: ./Microsoft.CodeAnalysis.VisualBasic.Workspaces.dll
   },
   {
     Display: ./Microsoft.CodeAnalysis.Workspaces.dll,
@@ -94,6 +90,22 @@
   {
     Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Interop.ComInterfaceGenerator.dll,
+    FilePath: ./Microsoft.Interop.ComInterfaceGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.JavaScript.JSImportGenerator.dll,
+    FilePath: ./Microsoft.Interop.JavaScript.JSImportGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.LibraryImportGenerator.dll,
+    FilePath: ./Microsoft.Interop.LibraryImportGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.SourceGeneration.dll,
+    FilePath: ./Microsoft.Interop.SourceGeneration.dll
   },
   {
     Display: ./Microsoft.Net.Http.Client.dll,
@@ -186,6 +198,14 @@
   {
     Display: ./System.Composition.TypedParts.dll,
     FilePath: ./System.Composition.TypedParts.dll
+  },
+  {
+    Display: ./System.Text.Json.SourceGeneration.dll,
+    FilePath: ./System.Text.Json.SourceGeneration.dll
+  },
+  {
+    Display: ./System.Text.RegularExpressions.Generator.dll,
+    FilePath: ./System.Text.RegularExpressions.Generator.dll
   },
   {
     Display: ./Testcontainers.dll,

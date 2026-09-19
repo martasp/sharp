@@ -141,6 +141,7 @@ var parsedData = ParseProject(project);
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
 
         var paths = mergedDefaultReferencesForRunning.Select(item => item?.Display ?? "").ToList();
+        paths.AddRange(GetAnalyzerRuntimeFiles());
         WriteFiles(project.SharpBinFolderPath, paths);
 
         if (produceDll.success)

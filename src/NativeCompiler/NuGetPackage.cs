@@ -74,6 +74,18 @@ public static class NuGetPackage
         return FindHighestVersionDirectory(packageName, packageVersion) ?? string.Empty;
     }
 
+    // Resolves the highest restored version of a package, without needing to know the version in
+    // advance. Used when a file from the package must be copied/matched but only its simple package
+    // name is known (e.g. the ILLink analyzers the compiler bundles into produced app folders); the
+    // highest cached version is the one restore resolved for the current SDK, and its analyzer
+    // assembly version always satisfies earlier references (.NET binds the found file if its version
+    // is >= the requested one).
+    public static string FindHighestPackagePath(string packageName)
+    {
+        if (string.IsNullOrEmpty(packageName)) return string.Empty;
+        return FindHighestVersionDirectory(packageName, "0.0.0") ?? string.Empty;
+    }
+
     private static string? FindExactVersionDirectory(string packageName, string packageVersion)
     {
         var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());

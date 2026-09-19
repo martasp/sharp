@@ -59,6 +59,13 @@
     </Reference>
 
   </ItemGroup>
+
+  <!-- Root System.SR::GetResourceString in analyzer assemblies so NativeAOT keeps their
+       FxResources.<asm>.SR.resources manifest resources embedded (otherwise the inlineable-strings
+       heuristic strips them and Roslyn's ResourceManager lookups throw MissingManifestResourceException). -->
+  <ItemGroup>
+    <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\AotAnalyzerResources.xml" />
+  </ItemGroup>
   
 
 </Project>

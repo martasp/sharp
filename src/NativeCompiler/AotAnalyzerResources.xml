@@ -1,0 +1,32 @@
+<linker>
+  <assembly fullname="Microsoft.Interop.LibraryImportGenerator">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+  <assembly fullname="Microsoft.Interop.ComInterfaceGenerator">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+  <assembly fullname="Microsoft.Interop.JavaScript.JSImportGenerator">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+  <assembly fullname="Microsoft.Interop.SourceGeneration">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+  <assembly fullname="System.Text.Json.SourceGeneration">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+  <assembly fullname="System.Text.RegularExpressions.Generator">
+    <type fullname="System.SR">
+      <method name="GetResourceString" />
+    </type>
+  </assembly>
+</linker>

@@ -364,15 +364,21 @@ public static class NativeCompilerUtils
         var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        CollectProjectReferences(project.ProjectRootPath, project.TargetFramework, visitedProjects, referenceFiles);
+        CollectProjectReferences(project.ProjectRootPath, project.TargetFramework, visitedProjects, referenceFiles,
+            collectHintPathReferences: true);
 
         return referenceFiles
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
             .ToArray();
     }
 
+    // <Reference HintPath="..."> items are resolved like MSBuild's ResolveAssemblyReference for the
+    // project being compiled itself; they are NOT propagated through <ProjectReference> into consuming
+    // projects (RAR only forwards the referenced project's output DLL). Scoping HintPath collection to
+    // the entry project also avoids type-identity collisions in consumers (e.g. the analyzer DLLs
+    // shipping an embedded copy of System.Text.Json clashing with the framework's own System.Text.Json).
     private static void CollectProjectReferences(string projectRootPath, string? targetTfm,
-        HashSet<string> visitedProjects, HashSet<string> referenceFiles)
+        HashSet<string> visitedProjects, HashSet<string> referenceFiles, bool collectHintPathReferences)
     {
         var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
             .FirstOrDefault();
@@ -382,6 +388,9 @@ public static class NativeCompilerUtils
 
         var xml = XML.Project.Parse(csprojFile);
         var projectReferences = xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences);
+
+        if (collectHintPathReferences)
+            CollectHintPathReferences(xml, projectRootPath, referenceFiles);
 
         foreach (var reference in projectReferences)
         {
@@ -397,11 +406,88 @@ public static class NativeCompilerUtils
                 foreach (var transitiveNuget in GetTransitiveNugetPackages(referencedCsproj, targetTfm))
                     referenceFiles.Add(transitiveNuget);
 
-                CollectProjectReferences(referencedProjectDir, targetTfm, visitedProjects, referenceFiles);
+                CollectProjectReferences(referencedProjectDir, targetTfm, visitedProjects, referenceFiles,
+                    collectHintPathReferences: false);
             }
 
             // Builds the referenced project on demand, then resolves its produced DLL.
             referenceFiles.Add(ProjectReferenceFinder.FindReferencedDLL(include, projectRootPath));
+        }
+    }
+
+    // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
+    // NativeCompiler.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
+    private static readonly string[] RefPackAnalyzerFileNames =
+    {
+        "System.Text.RegularExpressions.Generator.dll",
+        "System.Text.Json.SourceGeneration.dll",
+        "Microsoft.Interop.SourceGeneration.dll",
+        "Microsoft.Interop.LibraryImportGenerator.dll",
+        "Microsoft.Interop.ComInterfaceGenerator.dll",
+        "Microsoft.Interop.JavaScript.JSImportGenerator.dll",
+    };
+
+    private static readonly string[] IllinkAnalyzerFileNames =
+    {
+        "ILLink.RoslynAnalyzer.dll",
+        "ILLink.CodeFixProvider.dll",
+    };
+
+    private static string IllinkTasksPackagePath() =>
+        NuGetPackage.FindHighestPackagePath("Microsoft.NET.ILLink.Tasks") ?? string.Empty;
+
+    private static string IllinkAnalyzersDirectory()
+    {
+        var packagePath = IllinkTasksPackagePath();
+        return string.IsNullOrEmpty(packagePath)
+            ? string.Empty
+            : Path.Combine(packagePath, "analyzers", "dotnet", "cs");
+    }
+
+    // Produced app folders must carry the analyzer assemblies so a runnable JIT build of the compiler
+    // can resolve the statically registered AnalyzerRegistry types at runtime.
+    public static List<string> GetAnalyzerRuntimeFiles()
+    {
+        var files = new List<string>();
+        var refPackDir = AsemblyExtensions.ResolveRefPackAnalyzersLocation;
+        var illinkDir = IllinkAnalyzersDirectory();
+
+        foreach (var name in RefPackAnalyzerFileNames)
+            files.Add(Path.Combine(refPackDir, name));
+        foreach (var name in IllinkAnalyzerFileNames)
+            files.Add(Path.Combine(illinkDir, name));
+
+        return files.Where(File.Exists).ToList();
+    }
+
+    // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
+    // e.g. `$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\...`); the native compiler previously only
+    // handled ProjectReference/PackageReference items, so projects referencing DLLs by HintPath (like
+    // NativeCompiler.csproj itself, via the ILLink/Roslyn generator analyzers) failed to compile under
+    // self-hosting. Only the two analyzer property tokens this codebase actually uses are expanded;
+    // anything else is skipped rather than emulating MSBuild property evaluation.
+    private static void CollectHintPathReferences(XML.Project xml, string projectRootPath,
+        HashSet<string> referenceFiles)
+    {
+        foreach (var itemGroup in xml.ItemGroup)
+        {
+            foreach (var reference in itemGroup.References)
+            {
+                var hintPath = reference.HintPath;
+                if (string.IsNullOrEmpty(hintPath)) continue;
+
+                var expanded = hintPath
+                    .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
+                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath());
+                if (string.IsNullOrEmpty(expanded)) continue;
+
+                var filePath = Path.IsPathRooted(expanded)
+                    ? Path.GetFullPath(expanded)
+                    : Path.GetFullPath(Path.Combine(projectRootPath, expanded));
+
+                if (File.Exists(filePath))
+                    referenceFiles.Add(filePath);
+            }
         }
     }
 

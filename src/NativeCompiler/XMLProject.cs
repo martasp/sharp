@@ -117,6 +117,9 @@ public class ItemGroup
     [XmlElement(ElementName = "PackageReference")]
     public List<PackageReference> PackageReferences { get; set; } = new();
 
+    [XmlElement(ElementName = "Reference")]
+    public List<Reference> References { get; set; } = new();
+
     [XmlElement(ElementName = "ProjectReference")]
     public List<ProjectReference> ProjectReferences { get; set; } = new();
 
@@ -161,6 +164,19 @@ public class FrameworkReference
 {
     [XmlAttribute(AttributeName = "Include")]
     public string? Include { get; set; }
+}
+
+[XmlRoot(ElementName = "Reference")]
+public class Reference
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "Private")]
+    public string? Private { get; set; }
+
+    [XmlElement(ElementName = "HintPath")]
+    public string? HintPath { get; set; }
 }
 
 [XmlRoot(ElementName = "AssemblyAttribute")]
@@ -286,6 +302,12 @@ public class Project
         {
             Include = AttributeValue(reference, "Include"),
             Version = AttributeValue(reference, "Version"),
+        }).ToList(),
+        References = Children(element, "Reference").Select(reference => new Reference
+        {
+            Include = AttributeValue(reference, "Include"),
+            Private = AttributeValue(reference, "Private"),
+            HintPath = ElementValue(reference, "HintPath"),
         }).ToList(),
         ProjectReferences = Children(element, "ProjectReference").Select(reference => new ProjectReference
         {
