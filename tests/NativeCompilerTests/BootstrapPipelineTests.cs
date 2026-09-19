@@ -1,0 +1,172 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace NativeCompilerTests;
+
+// Bootstrap (self-hosting) pipeline validation:
+//
+//   AOT seed (the published, signed native compiler)
+//     -- compiles NativeCompiler.sln --> produces the compiler itself as JIT output (myc)
+//   that JIT compiler (its apphost exe, run from a temp copy)
+//     -- compiles NativeCompiler.sln again --> 0 errors (fixed point, generation 2)
+//
+// Each generation recompiles the whole solution from scratch; the seed of every generation is
+// the NativeCompilerCLI myc output written by the previous generation, so the test proves the
+// compiler rebuilds itself without relying on MSBuild at any stage after the (AOT) seed.
+//
+// How to run (one command, shows what you see here on the console):
+//   bootstrap.bat
+//
+//   That builds the test host, signs the test outputs (required on this machine's
+//   code-integrity policy), runs the test with detailed logging so every stage is visible,
+//   then prints the full transcript file.
+[Trait("Category", "Bootstrap")]
+public class BootstrapPipelineTests
+{
+    private static readonly string RepoRoot = Path.GetFullPath(
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+
+    private static readonly string PublishedSeedExe = Path.Combine(
+        RepoRoot, "src", "NativeCompilerCLI", "bin", "Release", "net10.0", "win-x64", "publish",
+        "NativeCompilerCLI.exe");
+
+    private const string SolutionFile = "NativeCompiler.sln";
+
+    private static readonly string BootstrapReportPath = Path.Combine(
+        Path.GetTempPath(), "nc-bootstrap-last-run.txt");
+
+    private readonly ITestOutputHelper _output;
+
+    public BootstrapPipelineTests(ITestOutputHelper output) => _output = output;
+
+    [Fact]
+    public async Task AotSeed_ProducesJitCompiler_ThatRebuildsSolutionClean()
+    {
+        if (!File.Exists(PublishedSeedExe))
+            throw new InvalidOperationException(
+                "Missing AOT seed - run `publish.bat` (builds + signs NativeCompilerCLI.exe) before this test.");
+
+        var sandbox = Path.Combine(Path.GetTempPath(), "nc-bootstrap-" + Guid.NewGuid().ToString("N"));
+        CopyTree(RepoRoot, sandbox);
+        var sln = Path.Combine(sandbox, SolutionFile);
+        var jitOutput = Path.Combine(sandbox, "src", "NativeCompilerCLI", "myc", "Debug", "net10.0");
+
+        File.WriteAllText(BootstrapReportPath, $"bootstrap report {DateTime.Now:O}{Environment.NewLine}{Environment.NewLine}");
+        Log($"report file: {BootstrapReportPath}");
+        Log($"sandbox:     {sandbox}");
+        Log($"seed (AOT):  {PublishedSeedExe}");
+        Log($"solution:    {sln}");
+        Log($"jit output:  {jitOutput}");
+
+        // Generation 0: the AOT seed compiles the solution, producing the first JIT compiler.
+        // The seed is a self-contained native exe, so it runs directly (not via `dotnet`).
+        var gen0 = await Compile($"\"{sln}\"", PublishedSeedExe, "AOT seed");
+        AssertClean("AOT seed", gen0);
+        var jitCompilerDll = Path.Combine(jitOutput, "NativeCompilerCLI.dll");
+        Assert.True(File.Exists(jitCompilerDll),
+            $"AOT seed did not produce the JIT compiler at '{jitCompilerDll}'.\n{gen0.Output}");
+
+        // Generation 1: the AOT-produced JIT compiler rebuilds the solution (from a temp copy).
+        var gen1Compiler = StageCompilerCopy(jitOutput);
+        var gen1 = await Compile(
+            $"\"{sln}\"",
+            Path.Combine(gen1Compiler, "NativeCompilerCLI.exe"),
+            "generation 1");
+        AssertClean("generation 1", gen1);
+
+        // Generation 2: the gen-1 run rewrote the sandbox compiler output; stage that as the
+        // new seed and rebuild once more - reaching the fixed point.
+        var gen2Compiler = StageCompilerCopy(jitOutput);
+        var gen2 = await Compile(
+            $"\"{sln}\"",
+            Path.Combine(gen2Compiler, "NativeCompilerCLI.exe"),
+            "generation 2");
+        AssertClean("generation 2", gen2);
+
+        // The sandbox and per-generation compiler copies are intentionally kept (paths are
+        // printed above) so each stage can be inspected or re-run manually after the test.
+    }
+
+    private readonly record struct CompilationResult(int ExitCode, string Output);
+
+    private static async Task<CompilationResult> RunAsync(string fileName, string arguments)
+    {
+        var startInfo = new ProcessStartInfo(fileName, arguments)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(startInfo)!;
+        using var stdout = process.StandardOutput;
+        using var stderr = process.StandardError;
+        var outputTask = stdout.ReadToEndAsync();
+        var errorTask = stderr.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await outputTask + await errorTask;
+        return new CompilationResult(process.ExitCode, output);
+    }
+
+    // Runs a compile stage, logs the exact command and the compiler's "project -> output" lines
+    // plus the final summary, then returns the result for assertion.
+    private async Task<CompilationResult> Compile(string arguments, string? fileName, string stage)
+    {
+        fileName ??= "dotnet";
+
+        var result = await RunAsync(fileName, arguments);
+
+        Log($"{Environment.NewLine}[{stage}] {fileName} {arguments}");
+        foreach (var line in result.Output.Split('\n')
+                     .Where(line => line.Contains(" -> ") || line.Contains("Error(s)") || line.Contains("Warning(s)"))
+                     .Select(line => line.TrimEnd()))
+            Log("  " + line);
+        Log($"  exit={result.ExitCode}");
+
+        return result;
+    }
+
+    // A clean solution build reports 0 Error(s); anything else (a compiler crash, a blocked
+    // binary, a compile error) must surface as a test failure with the full output attached.
+    private static void AssertClean(string stage, CompilationResult result) =>
+        Assert.True(
+            result.ExitCode == 0 && result.Output.Contains("0 Error(s)") && !result.Output.Contains("error CS"),
+            $"[{stage}] expected a clean solution build. exit={result.ExitCode}\n{result.Output}");
+
+    // Written to the on-screen test output (visible with a detailed console logger) AND to the
+    // persistent report file, so a full transcript survives xunit's stdout capture.
+    private void Log(string message)
+    {
+        _output.WriteLine(message);
+        File.AppendAllText(BootstrapReportPath, message + Environment.NewLine);
+    }
+
+    private static string StageCompilerCopy(string compilerDir)
+    {
+        var dest = Path.Combine(Path.GetTempPath(), "nc-gen-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.EnumerateFiles(compilerDir))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)));
+        return dest;
+    }
+
+    private static void CopyTree(string sourceRoot, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+        foreach (var file in Directory.EnumerateFiles(sourceRoot))
+            File.Copy(file, Path.Combine(destinationRoot, Path.GetFileName(file)));
+
+        foreach (var dir in Directory.EnumerateDirectories(sourceRoot))
+        {
+            var name = Path.GetFileName(dir)!;
+            if (name is ".git" or ".vs" or "bin" or "obj" or "myc" or "publish" or "TestResults")
+                continue;
+            CopyTree(dir, Path.Combine(destinationRoot, name));
+        }
+    }
+}
