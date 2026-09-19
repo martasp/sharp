@@ -18,10 +18,13 @@ using Microsoft.CodeAnalysis.Diagnostics;
 // generated trees are merged into the compilation and generator diagnostics are
 // relayed as build errors. No hand-rolled code synthesis lives here. DELETABLE.
 //
-// AOT path: NativeAOT cannot load/reflect assemblies at runtime, so under AOT the
-// dynamic discovery below is replaced by the statically linked AnalyzerRegistry
-// (the SDK ref-pack generator set, rooted into the image). JIT keeps the package
-// analyzer discovery from NuGet packages and analyzer project references.
+// DISABLED for the AOT experiment: the reflective/dynamic discovery below
+// (CollectGeneratorDlls + GeneratorAssemblyLoadContext + Activator) is JIT-only —
+// NativeAOT cannot load/reflect assemblies at runtime. BuildCore now routes the
+// whole pipeline through AnalyzerRunner, which feeds the statically linked
+// AnalyzerRegistry (SourceGeneratorRegistry + AnalyzerRegistry) to RunGeneratorDriver.
+// The JIT discovery helpers below are left in place as the reference implementation;
+// delete or comment out once the AOT static path is proven.
 // ---------------------------------------------------------------------------
 namespace NativeCompiler;
 
@@ -139,97 +142,64 @@ public static class SourceGeneratorRunner
 
     // Runs the project's generators and returns the compilation with generated trees merged
     // plus any generator-reported error diagnostics.
+    //
+    // JIT-only dynamic discovery is DISABLED for the AOT experiment; this method now runs the
+    // statically linked AnalyzerRegistry generator set in both JIT and AOT so the pipeline no
+    // longer loads/reflects analyzer assemblies at runtime. To restore package/analyzer-project
+    // generators under JIT, revert this body to the commented discovery below (CollectGeneratorDlls
+    // + per-assembly reflection through GeneratorAssemblyLoadContext + RunGeneratorDriver).
+    //
+    //     var (generatorDlls, collectorWarnings) = CollectGeneratorDlls(project);
+    //     if (generatorDlls.Count == 0) { PrintWarnings(collectorWarnings); return (compilation, ""); }
+    //     try
+    //     {
+    //         var loadContext = new GeneratorAssemblyLoadContext();
+    //         var generators = new List<ISourceGenerator>();
+    //         var warnings = new List<string>(collectorWarnings);
+    //         foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
+    //         foreach (var dll in generatorDlls)
+    //         {
+    //             List<Type>? types;
+    //             try
+    //             {
+    //                 var assembly = loadContext.LoadGenerator(dll);
+    //                 types = assembly.GetTypes().ToList();
+    //             }
+    //             catch (ReflectionTypeLoadException typeLoad) { warnings.Add(...); continue; }
+    //             catch (Exception ex) { warnings.Add(...); continue; }
+    //             foreach (var type in types)
+    //             {
+    //                 try
+    //                 {
+    //                     if (type.IsAbstract || type.IsInterface) continue;
+    //                     if (type.GetCustomAttribute<GeneratorAttribute>() is null) continue;
+    //                     if (type.GetConstructor(Type.EmptyTypes) is null) continue;
+    //                     var instance = Activator.CreateInstance(type);
+    //                     if (instance is ISourceGenerator sourceGenerator) generators.Add(sourceGenerator);
+    //                     else if (instance is IIncrementalGenerator incrementalGenerator) generators.Add(incrementalGenerator.AsSourceGenerator());
+    //                 }
+    //                 catch (Exception ex) { warnings.Add(...); }
+    //             }
+    //         }
+    //         PrintWarnings(warnings);
+    //         return RunGeneratorDriver(compilation, project, generators.ToImmutableArray());
+    //     }
+    //     catch (Exception ex) { return (compilation, ex.ToString()); }
     public static (CSharpCompilation compilation, string errors) RunGenerators(
         CSharpCompilation compilation, Project project)
     {
-        // NativeAOT: dynamic code and runtime assembly loading are unavailable; every generator
-        // is already compiled into the image (statically linked + rooted), so just run those.
-        if (!RuntimeFeature.IsDynamicCodeSupported)
-            return RunDriver(compilation, project, AnalyzerRegistry.GetSourceGenerators().ToList());
-
-        var (generatorDlls, collectorWarnings) = CollectGeneratorDlls(project);
-        if (generatorDlls.Count == 0)
-        {
-            PrintWarnings(collectorWarnings);
-            return (compilation, "");
-        }
-
-        try
-        {
-            var loadContext = new GeneratorAssemblyLoadContext();
-            var generators = new List<ISourceGenerator>();
-            var warnings = new List<string>(collectorWarnings);
-
-            // Resolving interop-generator references (LibraryImportGenerator ->
-            // Microsoft.Interop.SourceGeneration) needs the whole set mapped before any assembly
-            // is loaded, since the dependency dlls sort after the generators themselves.
-            foreach (var dll in generatorDlls)
-                loadContext.RegisterCopy(dll);
-
-            foreach (var dll in generatorDlls)
-            {
-                List<Type>? types;
-                try
-                {
-                    // Dependencies are visible inside the dedicated context through its Resolving
-                    // handler (e.g. LibraryImportGenerator -> Microsoft.Interop.SourceGeneration,
-                    // both shadow-copied from the ref-pack analyzers folder). Loading into the
-                    // default ALC fails for such co-located deps because the shadow copies are
-                    // renamed (Assembly.LoadFrom on an interop generator -> FileNotFoundException,
-                    // leaving [LibraryImport] methods without an implementation => CS8795).
-                    var assembly = loadContext.LoadGenerator(dll);
-                    types = assembly.GetTypes().ToList();
-                }
-                catch (ReflectionTypeLoadException typeLoad)
-                {
-                    var missing = typeLoad.LoaderExceptions
-                        .Where(ex => ex is not null)
-                        .Select(ex => ex!.Message)
-                        .Distinct();
-                    warnings.Add($"Warning: failed to load generator '{Path.GetFileName(dll)}': " +
-                        string.Join(" | ", missing));
-                    continue;
-                }
-                catch (Exception ex)
-                {
-                    warnings.Add($"Warning: failed to load generator '{Path.GetFileName(dll)}': {ex.Message}");
-                    continue;
-                }
-
-                foreach (var type in types)
-                {
-                    try
-                    {
-                        if (type.IsAbstract || type.IsInterface) continue;
-                        if (type.GetCustomAttribute<GeneratorAttribute>() is null) continue;
-                        if (type.GetConstructor(Type.EmptyTypes) is null) continue;
-
-                        var instance = Activator.CreateInstance(type);
-                        if (instance is ISourceGenerator sourceGenerator)
-                            generators.Add(sourceGenerator);
-                        else if (instance is IIncrementalGenerator incrementalGenerator)
-                            generators.Add(incrementalGenerator.AsSourceGenerator());
-                    }
-                    catch (Exception ex)
-                    {
-                        warnings.Add($"Warning: failed to instantiate generator '{type.FullName}': {ex.Message}");
-                    }
-                }
-            }
-
-            PrintWarnings(warnings);
-            return RunDriver(compilation, project, generators);
-        }
-        catch (Exception ex)
-        {
-            return (compilation, ex.ToString());
-        }
+        return RunGeneratorDriver(compilation, project, AnalyzerRegistry.GetSourceGenerators());
     }
 
-    private static (CSharpCompilation compilation, string errors) RunDriver(
-        CSharpCompilation compilation, Project project, List<ISourceGenerator> generators)
+    // Shared driver: builds CSharpGeneratorDriver with the project's parse options (implicit TFM
+    // preprocessor constants, interceptor namespaces) and a build-property AnalyzerConfigOptions,
+    // runs the given generator set, re-parses generated trees with the project's parse options,
+    // and returns the merged compilation plus error-severity generator diagnostics. Used by the
+    // AOT pipeline (AnalyzerRunner feeds it AnalyzerRegistry.GetSourceGenerators()).
+    internal static (CSharpCompilation compilation, string errors) RunGeneratorDriver(
+        CSharpCompilation compilation, Project project, ImmutableArray<ISourceGenerator> generators)
     {
-        if (generators.Count == 0)
+        if (generators.IsEmpty)
             return (compilation, "");
 
         var parseOptions = CSharpParseOptions.Default
@@ -239,7 +209,7 @@ public static class SourceGeneratorRunner
 
         var optionsProvider = new ProjectConfigOptionsProvider(project);
         var driver = CSharpGeneratorDriver.Create(
-            generators.ToImmutableArray(),
+            generators,
             additionalTexts: ImmutableArray<AdditionalText>.Empty,
             parseOptions: parseOptions,
             optionsProvider: optionsProvider);
@@ -264,6 +234,10 @@ public static class SourceGeneratorRunner
 
         return (compilation, string.Join("\n", errors));
     }
+
+    // Build-property AnalyzerConfigOptions for both the generator driver and CompilationWithAnalyzers.
+    internal static AnalyzerConfigOptionsProvider CreateOptionsProvider(Project project)
+        => new ProjectConfigOptionsProvider(project);
 
     private static void PrintWarnings(List<string> warnings)
     {

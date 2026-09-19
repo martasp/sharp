@@ -103,10 +103,18 @@ var parsedData = ParseProject(project);
 
         var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences,compilationOptions);
 
-        // Feature: source-generator pipeline (main.md GENERATOR_PIPELINE). Runs real Roslyn
-        // generators (ref-pack + package + Analyzer project references), merges their generated
-        // trees into the compilation and relays generator diagnostics. DELETABLE FEATURE.
-        var (generatedCompilation, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project);
+        // Feature: source-generator + analyzer pipeline. AOT experiment: the JIT-only dynamic
+        // SourceGeneratorRunner discovery is disabled (comment below) and everything routes through
+        // the statically linked AnalyzerRegistry via AnalyzerRunner (generators merge their trees,
+        // then AnalyzerRegistry.GetAnalyzers() runs over the merged compilation). DELETABLE FEATURES.
+        //
+        // OLD JIT path:
+        //   var (generatedCompilation, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project);
+        //   compilation = generatedCompilation;
+        //
+        // Restore SourceGeneratorRunner.RunGenerators to re-enable reflective package/analyzer-project
+        // generator discovery under JIT (see SourceGeneratorRunner for the disabled body).
+        var (generatedCompilation, analyzerErrors) = AnalyzerRunner.Run(compilation, project);
         compilation = generatedCompilation;
 
         // Test projects (xunit.v3/vstest/MTP) get their entry point injected by the framework's
@@ -118,11 +126,11 @@ var parsedData = ParseProject(project);
             compilation = compilation.AddSyntaxTrees(BuildTestEntryPointTree(project.ProjectName));
         }
 
-        if (!string.IsNullOrEmpty(generatorErrors))
+        if (!string.IsNullOrEmpty(analyzerErrors))
         {
             return new BuildResult(
                 false,
-                generatorErrors,
+                analyzerErrors,
                 outputs,
                 timer.Elapsed,
                 compilation,
