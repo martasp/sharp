@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
+using CustomCompiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -15,6 +17,11 @@ using Microsoft.CodeAnalysis.Diagnostics;
 // CSharpGeneratorDriver.RunGeneratorsAndUpdateTree exactly like csc does; the
 // generated trees are merged into the compilation and generator diagnostics are
 // relayed as build errors. No hand-rolled code synthesis lives here. DELETABLE.
+//
+// AOT path: NativeAOT cannot load/reflect assemblies at runtime, so under AOT the
+// dynamic discovery below is replaced by the statically linked AnalyzerRegistry
+// (the SDK ref-pack generator set, rooted into the image). JIT keeps the package
+// analyzer discovery from NuGet packages and analyzer project references.
 // ---------------------------------------------------------------------------
 namespace NativeCompiler;
 
@@ -135,6 +142,11 @@ public static class SourceGeneratorRunner
     public static (CSharpCompilation compilation, string errors) RunGenerators(
         CSharpCompilation compilation, Project project)
     {
+        // NativeAOT: dynamic code and runtime assembly loading are unavailable; every generator
+        // is already compiled into the image (statically linked + rooted), so just run those.
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+            return RunDriver(compilation, project, AnalyzerRegistry.GetSourceGenerators().ToList());
+
         var (generatorDlls, collectorWarnings) = CollectGeneratorDlls(project);
         if (generatorDlls.Count == 0)
         {
@@ -205,49 +217,52 @@ public static class SourceGeneratorRunner
                 }
             }
 
-            if (generators.Count == 0)
-            {
-                PrintWarnings(warnings);
-                return (compilation, "");
-            }
-
-            var parseOptions = CSharpParseOptions.Default
-                .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
-                .WithPreprocessorSymbols(NativeCompilerUtils.GetSdkPreprocessorSymbols(project));
-            parseOptions = NativeCompilerUtils.ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
-
-            var optionsProvider = new ProjectConfigOptionsProvider(project);
-            var driver = CSharpGeneratorDriver.Create(
-                generators.ToImmutableArray(),
-                additionalTexts: ImmutableArray<AdditionalText>.Empty,
-                parseOptions: parseOptions,
-                optionsProvider: optionsProvider);
-
-            var runResult = driver.RunGenerators(compilation).GetRunResult();
-
-            // Only error-severity generator diagnostics gate the build; load/init warnings are
-            // informational only (they would otherwise fail projects that have no real error).
             PrintWarnings(warnings);
-            var errors = runResult.Diagnostics
-                .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-                .Select(diagnostic => diagnostic.ToString())
-                .ToList();
-
-            if (runResult.GeneratedTrees.Length > 0)
-            {
-                // Re-parse generated trees with the project's parse options (TMF constants and
-                // interceptor namespaces apply to generated [InterceptsLocation] code too).
-                var generatedTrees = runResult.GeneratedTrees.Select(tree =>
-                    CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions, tree.FilePath));
-                compilation = compilation.AddSyntaxTrees(generatedTrees);
-            }
-
-            return (compilation, string.Join("\n", errors));
+            return RunDriver(compilation, project, generators);
         }
         catch (Exception ex)
         {
             return (compilation, ex.ToString());
         }
+    }
+
+    private static (CSharpCompilation compilation, string errors) RunDriver(
+        CSharpCompilation compilation, Project project, List<ISourceGenerator> generators)
+    {
+        if (generators.Count == 0)
+            return (compilation, "");
+
+        var parseOptions = CSharpParseOptions.Default
+            .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
+            .WithPreprocessorSymbols(NativeCompilerUtils.GetSdkPreprocessorSymbols(project));
+        parseOptions = NativeCompilerUtils.ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
+
+        var optionsProvider = new ProjectConfigOptionsProvider(project);
+        var driver = CSharpGeneratorDriver.Create(
+            generators.ToImmutableArray(),
+            additionalTexts: ImmutableArray<AdditionalText>.Empty,
+            parseOptions: parseOptions,
+            optionsProvider: optionsProvider);
+
+        var runResult = driver.RunGenerators(compilation).GetRunResult();
+
+        // Only error-severity generator diagnostics gate the build; load/init warnings are
+        // informational only (they would otherwise fail projects that have no real error).
+        var errors = runResult.Diagnostics
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.ToString())
+            .ToList();
+
+        if (runResult.GeneratedTrees.Length > 0)
+        {
+            // Re-parse generated trees with the project's parse options (TMF constants and
+            // interceptor namespaces apply to generated [InterceptsLocation] code too).
+            var generatedTrees = runResult.GeneratedTrees.Select(tree =>
+                CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions, tree.FilePath));
+            compilation = compilation.AddSyntaxTrees(generatedTrees);
+        }
+
+        return (compilation, string.Join("\n", errors));
     }
 
     private static void PrintWarnings(List<string> warnings)
