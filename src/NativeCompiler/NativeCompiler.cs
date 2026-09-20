@@ -165,38 +165,58 @@ public static class NativeCompiler
         var solution = SolutionFile.Parse(solutionPath);
 
         var errors = new List<string>();
-        var buildOrder = ResolveBuildOrder(solution.Projects.Select(project => project.ProjectPath), errors);
+        var (buildOrder, buildWaves) = ResolveBuildOrder(
+            solution.Projects.Select(project => project.ProjectPath), errors);
 
         var results = new List<SolutionProjectResult>();
-        var cache = new Dictionary<string, BuildResult>(StringComparer.OrdinalIgnoreCase);
+        var cache = new System.Collections.Concurrent.ConcurrentDictionary<string, BuildResult>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var csproj in buildOrder)
+        BuildResult BuildOne(string csproj)
         {
-            if (cache.ContainsKey(csproj)) continue;
-
-            BuildResult result;
             try
             {
                 var folder = Path.GetDirectoryName(csproj)
                              ?? throw new InvalidOperationException($"Cannot resolve folder for '{csproj}'");
-                result = Build(folder);
+                return Build(folder);
             }
             catch (Exception ex)
             {
-                result = new BuildResult(false, ex.ToString(),
+                return new BuildResult(false, ex.ToString(),
                     new[] { $"{Path.GetFileName(csproj)} failed: {ex.Message}" },
                     TimeSpan.Zero, null, null, null);
             }
-
-            cache[csproj] = result;
-            results.Add(new SolutionProjectResult(Path.GetFileNameWithoutExtension(csproj), csproj, result));
         }
+
+        // Build each independent wave's projects concurrently. Members of one wave share no reference
+        // edges (all their references live in earlier waves), so they can build in parallel safely.
+        // Shared state (BuildsInProgress, AnalyzerDllCache) is ConcurrentDictionary; BuildPropsEvaluator
+        // holds no shared mutable statics. Results land in a thread-safe cache keyed by csproj.
+        foreach (var wave in buildWaves)
+        {
+            // Parallel.ForEach is the right tool for blocking, CPU-bound work: it partitions the
+            // wave among the thread pool without the Task.Run + WhenAll(...).GetResult() anti-pattern
+            // (which squats a blocked worker per item and risks pool starvation under heavy waves).
+            Parallel.ForEach(
+                wave.Where(csproj => !cache.ContainsKey(csproj)),
+                csproj => cache[csproj] = BuildOne(csproj));
+        }
+
+        // If a cyclic reference prevented a project from reaching any wave, still build it serially
+        // so every project is reported (mirrors the serial build-all/report-all contract).
+        foreach (var csproj in buildOrder.Where(csproj => !cache.ContainsKey(csproj)))
+        {
+            cache[csproj] = BuildOne(csproj);
+        }
+
+        results.AddRange(buildOrder.Select(csproj => new SolutionProjectResult(
+            Path.GetFileNameWithoutExtension(csproj), csproj, cache[csproj])));
 
         var success = errors.Count == 0 && results.All(projectResult => projectResult.Result.Success);
         return new BuildSolutionResult(success, results, errors, timer.Elapsed);
     }
 
-    private static List<string> ResolveBuildOrder(IEnumerable<string> initialProjects, List<string> errors)
+    private static (List<string> order, List<List<string>> waves) ResolveBuildOrder(
+        IEnumerable<string> initialProjects, List<string> errors)
     {
         var projects = new SortedSet<string>(initialProjects, StringComparer.OrdinalIgnoreCase);
         var references = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -249,8 +269,8 @@ public static class NativeCompiler
 
     // Dependencies build first; anything that cannot be ordered (a cycle) is still built, in stable
     // order, so every project gets reported (build-all/report-all).
-    private static List<string> TopologicalSort(SortedSet<string> projects,
-        Dictionary<string, HashSet<string>> references, List<string> errors)
+    private static (List<string> order, List<List<string>> waves) TopologicalSort(
+        SortedSet<string> projects, Dictionary<string, HashSet<string>> references, List<string> errors)
     {
         var indegree = projects.ToDictionary(project => project, _ => 0, StringComparer.OrdinalIgnoreCase);
         var dependents = projects.ToDictionary(project => project, _ => new List<string>(), StringComparer.OrdinalIgnoreCase);
@@ -270,15 +290,26 @@ public static class NativeCompiler
             ready.Add(project);
 
         var order = new List<string>();
+        var waves = new List<List<string>>();
+
+        // Kahn's algorithm grouped into "waves": snapshot the whole current ready set as one wave,
+        // emit all its members, then promote newly-zero-indegree projects into the next wave. No
+        // member of a wave references another member (all its references live in earlier waves), so
+        // every member of a wave can be built concurrently. A cycle is still emitted (below) so every
+        // project gets reported.
         while (ready.Count > 0)
         {
-            var project = ready.Min ?? "";
-            ready.Remove(project);
-            order.Add(project);
+            var wave = new List<string>(ready);
+            waves.Add(wave);
+            ready.Clear();
 
-            foreach (var dependent in dependents[project])
+            foreach (var project in wave)
             {
-                if (--indegree[dependent] == 0) ready.Add(dependent);
+                order.Add(project);
+                foreach (var dependent in dependents[project])
+                {
+                    if (--indegree[dependent] == 0) ready.Add(dependent);
+                }
             }
         }
 
@@ -290,9 +321,10 @@ public static class NativeCompiler
 
             // Still attempt every cyclic project so each one is reported.
             foreach (var project in cyclic) order.Add(project);
+            if (cyclic.Length > 0) waves.Add(cyclic.ToList());
         }
 
-        return order;
+        return (order, waves);
     }
 
     public static (bool success, string errors) Run(string projectPath)
