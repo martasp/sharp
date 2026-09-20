@@ -315,6 +315,11 @@ public static class NativeCompilerUtils
 
         CollectFrameworkReferenceNames(project.ProjectRootPath, visitedProjects, names);
 
+        // Mirror the Web SDK, which injects <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        // implicitly. Microsoft.NETCore.App does not carry those types, so without this a
+        // Microsoft.NET.Sdk.Web project cannot resolve WebApplication & co.
+        if (project.IsWebSdk) names.Add("Microsoft.AspNetCore.App");
+
         var references = new List<MetadataReference>();
         foreach (var include in names)
         {
@@ -793,7 +798,49 @@ public static class NativeCompilerUtils
         }
         """;
 
-        File.WriteAllText(Path.Combine(project.SharpBinFolderPath, $"{project.ProjectName}.runtimeconfig.json"), runtimeConfig);
+        WriteRuntimeConfigFile(project, runtimeConfig);
+    }
+
+    // ASP.NET Core apps declare the shared framework in the runtimeconfig ("frameworks" array);
+    // without it the runtime cannot load Microsoft.AspNetCore.* and the app dies on the first
+    // WebApplication touch. Mirrors what the Web SDK generates (Microsoft.NETCore.App, then
+    // Microsoft.AspNetCore.App).
+    public static void WriteRuntimeConfigWeb(Project project)
+    {
+        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
+        var versionParts = runtimeVersion.Split('.');
+        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+
+        var runtimeConfig =
+        $$"""
+        {
+          "runtimeOptions": {
+            "tfm": "{{tfm}}",
+            "frameworks": [
+              {
+                "name": "Microsoft.NETCore.App",
+                "version": "{{runtimeVersion}}"
+              },
+              {
+                "name": "Microsoft.AspNetCore.App",
+                "version": "{{runtimeVersion}}"
+              }
+            ],
+            "configProperties": {
+              "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
+            }
+          }
+        }
+        """;
+
+        WriteRuntimeConfigFile(project, runtimeConfig);
+    }
+
+    private static void WriteRuntimeConfigFile(Project project, string runtimeConfig)
+    {
+        File.WriteAllText(
+            Path.Combine(project.SharpBinFolderPath, $"{project.ProjectName}.runtimeconfig.json"),
+            runtimeConfig);
     }
 
     public static void WriteAppHost(Project project)

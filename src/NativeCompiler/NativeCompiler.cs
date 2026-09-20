@@ -333,7 +333,10 @@ var parsedData = ParseProject(project);
                 return result;
             }
 
-            WriteRuntimeConfig(project);
+            if (project.UsesAspNetCoreApp)
+                WriteRuntimeConfigWeb(project);
+            else
+                WriteRuntimeConfig(project);
             if (project.UseAppHost && project.ResolvedProjectOutputKind() == OutputKind.ConsoleApplication)
             {
                 WriteAppHost(project);

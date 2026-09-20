@@ -42,7 +42,7 @@ public static class AnalyzerRunner
                 logAnalyzerExecutionTime: true,
                 reportSuppressedDiagnostics: false));
 
-        var diagnostics = withAnalyzers.GetAnalyzerDiagnosticsAsync().GetAwaiter().GetResult();
+        var diagnostics = withAnalyzers.GetAnalyzerDiagnosticsAsync().GetAwaiter().GetResult(); //1.3s
 
         var analyzerErrors = new List<string>();
         var analyzerWarnings = new List<string>();

@@ -17,6 +17,8 @@ public class ConsoleAppTestsSelf
 
     public static string ConsoleAppWorking = Path.Combine(TestProjectsFolder, nameof(ConsoleAppWorking));
 
+    public static string WebApiWorking = Path.Combine(TestProjectsFolder, nameof(WebApiWorking));
+
     [Fact]
     public async Task WhenSampleConsoleAppGivenItShouldRunAppAndCaptureConsoleLogs()
     {
@@ -51,6 +53,25 @@ public class ConsoleAppTestsSelf
         var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.Success.ShouldBeTrue(result.Errors);
+    }
+
+    [Fact]
+    public void WhenSampleWebApiGivenItShouldCompileWithoutErrors()
+    {
+        var csprojFolderPath = WebApiWorking;
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.Success.ShouldBeTrue(result.Errors);
+    }
+
+    [Fact]
+    public void WhenSampleWebApiGivenItShouldCompileWithoutErrorsAndProduceDll()
+    {
+        var csprojFolderPath = WebApiWorking;
+        var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
+        result.Success.ShouldBeTrue(result.Errors);
+        var outputDir = Path.Combine(csprojFolderPath, "myc", "Debug", "net10.0");
+        File.Exists(Path.Combine(outputDir, "WebApiWorking.dll")).ShouldBeTrue("dll not Exists");
+        File.Exists(Path.Combine(outputDir, "WebApiWorking.exe")).ShouldBeTrue("exe not Exists");
     }
 }
 
