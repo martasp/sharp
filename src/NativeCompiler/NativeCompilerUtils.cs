@@ -627,28 +627,45 @@ public static class NativeCompilerUtils
         throw new Exception(string.Join("\n", errors));
     }
 
+    private static readonly HashSet<string> GeneratedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "obj", "myc", "sharpbin", "TestResults", ".vs", ".idea"
+    };
+
     public static string[] ReadAllProjectFilesPath(string projectPath)
     {
-        var binFolder = Directory.GetDirectories(projectPath, "bin");
-        var objFolder = Directory.GetDirectories(projectPath, "obj");
+        return EnumerateProjectSourceFiles(projectPath).ToArray();
+    }
 
-        var rootFiles = Directory.EnumerateFiles(projectPath, "*.*", SearchOption.TopDirectoryOnly);
-        var rootFolders = Directory.EnumerateDirectories(projectPath, "*.*", SearchOption.TopDirectoryOnly);
+    private static IEnumerable<string> EnumerateProjectSourceFiles(string directory)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*.*", SearchOption.TopDirectoryOnly))
+        {
+            var extension = Path.GetExtension(file);
+            if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return file;
+            }
+        }
 
-        var foldersExceptObjAndBin = rootFolders
-            .Except(objFolder)
-            .Except(binFolder);
-
-        var traversedFiles = foldersExceptObjAndBin.Select(folder =>
-            Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories));
-        var files = traversedFiles.SelectMany(folder => folder).Concat(rootFiles);
-        return files.ToArray(); //todo make everything enumerable maybe faster
+        foreach (var subDirectory in Directory.EnumerateDirectories(directory, "*.*", SearchOption.TopDirectoryOnly))
+        {
+            if (GeneratedDirectoryNames.Contains(Path.GetFileName(subDirectory)))
+                continue;
+            foreach (var file in EnumerateProjectSourceFiles(subDirectory))
+                yield return file;
+        }
     }
 
     public static List<ProjectFile> ReadAllFilesInMemory(string[] projectFiles)
     {
-        var files = projectFiles.Select(item => new ProjectFile(item, File.ReadAllText(item))).ToList();
-        return files;
+        var files = new ProjectFile[projectFiles.Length];
+        Parallel.ForEach(projectFiles, (path, _, index) =>
+        {
+            files[index] = new ProjectFile(path, File.ReadAllText(path));
+        });
+        return files.ToList();
     }
 
     // ---------------------------------------------------------------------------

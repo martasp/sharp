@@ -22,11 +22,11 @@ public static class AnalyzerRunner
         // 1. Source generators (statically linked, rooted into the native image).
         var (generated, generatorErrors) =
             SourceGeneratorRunner.RunGeneratorDriver(compilation, project,
-                AnalyzerRegistry.GetSourceGenerators());
+                AnalyzerRegistry.GetSourceGenerators()); //0.7s
         compilation = generated;
 
         // 2. Analyzers (statically linked DiagnosticAnalyzer instances).
-        var analyzers = AnalyzerRegistry.GetAnalyzers();
+        var analyzers = AnalyzerRegistry.GetAnalyzers(); 
         if (analyzers.Length == 0)
             return (compilation, generatorErrors);
 
