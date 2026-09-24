@@ -13,10 +13,25 @@
     <PublishReadyToRun>true</PublishReadyToRun>-->
 
     <WarningsAsErrors>Nullable</WarningsAsErrors>
+
+    <!-- PublishAot bakes IsDynamicCodeSupported=false into the runtimeconfig even for ordinary
+         `dotnet build` + `dotnet NativeCompilerCLI.dll` (JIT) runs, killing the dynamic
+         source-generator discovery that NativeAOT legitimately can't do but JIT can. Pin the
+         SDK's DynamicCodeSupport host-option to true for managed builds; the real `dotnet publish`
+         AOT flow re-applies the runtime's true capability on its own. -->
+    <DynamicCodeSupport Condition="'$(IsPublishing)' != 'true'">true</DynamicCodeSupport>
   </PropertyGroup>
 
   <ItemGroup>
 	  <ProjectReference Include="..\NativeCompiler\NativeCompiler.csproj" />
+  </ItemGroup>
+
+  <!-- PublishAot bakes IsDynamicCodeSupported=false into the runtimeconfig even for ordinary
+       `dotnet build` + `dotnet NativeCompilerCLI.dll` (JIT) runs, killing the dynamic
+       source-generator discovery that NativeAOT legitimately can't do but JIT can. Override the
+       RuntimeHostConfigurationOption back to true for the managed build only. -->
+  <ItemGroup Condition="'$(PublishAot)' != 'true' or '$(IsPublishing)' != 'true'">
+    <RuntimeHostConfigurationOption Update="System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported" Value="true" />
   </ItemGroup>
 
   <ItemGroup>

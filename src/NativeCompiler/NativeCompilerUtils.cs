@@ -88,15 +88,19 @@ public static class NativeCompilerUtils
         var namespaces = interceptorsNamespaces
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.Ordinal)
-            .ToImmutableArray();
-        if (namespaces.IsEmpty) return parseOptions;
+            .ToArray();
+        if (namespaces.Length == 0) return parseOptions;
 
         var field = typeof(CSharpParseOptions)
             .GetField("_interceptorsNamespaces", BindingFlags.NonPublic | BindingFlags.Instance);
 
-        // The backing field is ImmutableArray<ImmutableArray<string>> (one namespace list per
-        // /intercept-with segment); one segment matches the SDK's plain semicolon-separated value.
-        field?.SetValue(parseOptions, ImmutableArray.Create(namespaces));
+        // The backing field is ImmutableArray<ImmutableArray<string>>: one entry per namespace,
+        // each entry split into dot-separated segments, mirroring Roslyn's own makeNamespaces so
+        // isDeclaredInNamespace (which compares segment-by-segment) sees a match.
+        var segments = namespaces
+            .Select(ns => ns.Split('.', StringSplitOptions.TrimEntries).ToImmutableArray())
+            .ToImmutableArray();
+        field?.SetValue(parseOptions, segments);
 
         return parseOptions;
     }
@@ -108,6 +112,8 @@ public static class NativeCompilerUtils
             .GetField("_interceptorsNamespaces", BindingFlags.NonPublic | BindingFlags.Instance);
         if (field?.GetValue(parseOptions) is not ImmutableArray<ImmutableArray<string>> stored)
             return "<none>";
+        if (stored.IsDefault)
+            return "<default>";
 
         return string.Join(",", stored.SelectMany(inner => inner));
     }
@@ -399,7 +405,8 @@ public static class NativeCompilerUtils
 
         foreach (var reference in projectReferences)
         {
-            var include = reference.Include ?? "";
+            var include = (reference.Include ?? "").Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
             if (string.IsNullOrEmpty(include)) continue;
 
             var referencedProjectDir = Path.GetFullPath(
@@ -483,7 +490,9 @@ public static class NativeCompilerUtils
 
                 var expanded = hintPath
                     .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
-                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath());
+                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath())
+                    .Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
                 if (string.IsNullOrEmpty(expanded)) continue;
 
                 var filePath = Path.IsPathRooted(expanded)
@@ -634,7 +643,114 @@ public static class NativeCompilerUtils
 
     public static string[] ReadAllProjectFilesPath(string projectPath)
     {
-        return EnumerateProjectSourceFiles(projectPath).ToArray();
+        // Respect the project's own compile items. Real MSBuild starts from a default
+        // **/*.cs glob (unless <EnableDefaultItems>false</EnableDefaultItems>) and refines it
+        // with explicit <Compile Include>/<Compile Remove> items. Without this, template projects
+        // (e.g. OrchardCore.ProjectTemplates, which disables default items and packs its *.cs
+        // under content/ as None) accidentally compile files that must not be compiled.
+        var allFiles = EnumerateProjectSourceFiles(projectPath).ToList();
+        var csprojFile = Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+        if (csprojFile is null) return allFiles.ToArray();
+
+        XML.Project xml;
+        try { xml = XML.Project.Parse(csprojFile); }
+        catch { return allFiles.ToArray(); }
+
+        var defaultItemsEnabled = !(xml.PropertyGroup?.FirstOrDefault()?.EnableDefaultItems
+            ?.Trim().Equals("false", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        var compileIncludes = xml.ItemGroup.SelectMany(itemGroup => itemGroup.CompileItems)
+            .Select(item => item.Include).Where(include => !string.IsNullOrWhiteSpace(include)).Select(include => include!).ToList();
+        var compileRemoves = xml.ItemGroup.SelectMany(itemGroup => itemGroup.CompileItems)
+            .Select(item => item.Remove).Where(remove => !string.IsNullOrWhiteSpace(remove)).Select(remove => remove!).ToList();
+        var noneIncludes = xml.ItemGroup.SelectMany(itemGroup => itemGroup.NoneItems)
+            .Select(item => item.Include).Where(include => !string.IsNullOrWhiteSpace(include)).Select(include => include!).ToList();
+
+        IEnumerable<string> selected = defaultItemsEnabled ? allFiles : Enumerable.Empty<string>();
+        if (!defaultItemsEnabled && compileIncludes.Count > 0)
+            selected = MatchesAnyGlob(compileIncludes, allFiles, projectPath);
+        else if (compileIncludes.Count > 0)
+            selected = selected.Concat(MatchesAnyGlob(compileIncludes, allFiles, projectPath)).Distinct(StringComparer.OrdinalIgnoreCase);
+
+        // Compile items may link files outside the project tree (e.g. OrchardCore.Setup includes
+        // "..\OrchardCore.Localization\ModularPoFileLocationProvider.cs" with a Link). Such files
+        // are not part of the local **/*.cs glob, so resolve each non-glob include to its absolute
+        // path and add it when it exists on disk (mirrors MSBuild compiling the linked item).
+        selected = selected.Concat(ResolveExternalCompileIncludes(compileIncludes, projectPath))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        // None items and Compile Remove both take files out of the compile set.
+        var removed = new HashSet<string>(
+            MatchesAnyGlob(compileRemoves.Concat(noneIncludes).ToList(), allFiles, projectPath),
+            StringComparer.OrdinalIgnoreCase);
+
+        return selected.Where(file => !removed.Contains(file)).Concat(new[] { csprojFile })
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    // Simple glob over absolute file paths against patterns resolved from the project directory.
+    // Supports **, * and ?. Patterns use MSBuild-style '/' separators; matching is case-insensitive.
+    private static IEnumerable<string> MatchesAnyGlob(List<string> patterns, List<string> files, string projectPath)
+    {
+        if (patterns.Count == 0) return Enumerable.Empty<string>();
+
+        var matchers = new List<string>();
+        foreach (var pattern in patterns)
+        {
+            var replaced = pattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            var full = Path.IsPathRooted(replaced)
+                ? Path.GetFullPath(replaced)
+                : Path.GetFullPath(Path.Combine(projectPath, replaced));
+            matchers.Add(full.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+        }
+
+        return files.Where(file =>
+        {
+            var full = Path.GetFullPath(file);
+            foreach (var matcher in matchers)
+            {
+                if (GlobMatch(full, matcher)) return true;
+            }
+            return false;
+        });
+    }
+
+    // Resolves Compile Include items that point at a concrete file outside the project directory
+    // (e.g. linked files introduced via "..\..\otherproject\File.cs"). Non-glob includes that exist
+    // on disk are returned as absolute paths so they compile even though they are outside the
+    // local **/*.cs enumeration. Glob includes (containing * or ?) stay unresolved here because
+    // they can only span the local tree.
+    private static IEnumerable<string> ResolveExternalCompileIncludes(List<string> compileIncludes, string projectPath)
+    {
+        foreach (var include in compileIncludes)
+        {
+            var replaced = include.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            if (replaced.Contains('*') || replaced.Contains('?')) continue;
+
+            var full = Path.IsPathRooted(replaced)
+                ? Path.GetFullPath(replaced)
+                : Path.GetFullPath(Path.Combine(projectPath, replaced));
+
+            if (File.Exists(full))
+                yield return full;
+        }
+    }
+
+    // MSBuild-style glob over full paths: '**' is any run of characters (including '/'), '*' a single
+    // path segment, '?' a single character. Matching is case-insensitive (paths come from the project
+    // tree; MSBuild globs are case-insensitive on Windows and patterns originated there).
+    private static bool GlobMatch(string path, string pattern)
+    {
+        var target = (path + Path.DirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/');
+        var pat = pattern.Replace(Path.DirectorySeparatorChar, '/');
+        var regex =
+            "^" + System.Text.RegularExpressions.Regex.Escape(pat)
+                .Replace("\\*\\*", ".*")
+                .Replace("\\*", "[^/]*")
+                .Replace("\\?", "[^/]") + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(target, regex,
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
     private static IEnumerable<string> EnumerateProjectSourceFiles(string directory)
@@ -786,6 +902,133 @@ public static class NativeCompilerUtils
         """;
 
         project.CSFiles.Add(new ProjectFile("VersionInfo.g.cs", versionInfoSource));
+
+        // <InternalsVisibleTo Include="..." /> (and AssemblyAttribute InternalsVisibleTo) items make
+        // internal members visible to named friend assemblies. Real MSBuild flattens both into
+        // generated [assembly: InternalsVisibleTo] attributes; without them projects like
+        // OrchardCore fail with CS1061/CS0122 on internal members of their references. Names the
+        // project already emits in its own source (Properties\AssemblyInfo.cs) are skipped so
+        // duplicate attributes do not trip CS0579.
+        var existingIvT = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in project.CSFiles)
+        {
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+                item.FileContent, @"InternalsVisibleTo\(\s*""(?<name>[^""]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                if (match.Groups["name"].Success)
+                    existingIvT.Add(match.Groups["name"].Value.Trim());
+            }
+        }
+
+        var ivtSource = new StringBuilder();
+        foreach (var name in project.InternalsVisibleToNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (existingIvT.Contains(name)) continue;
+            ivtSource.AppendLine($"[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"{name}\")]");
+        }
+
+        if (ivtSource.Length > 0)
+            project.CSFiles.Add(new ProjectFile("InternalsVisibleTo.g.cs", ivtSource.ToString()));
+
+        // Aspire AppHost SDK generates Projects.<ClassName> metadata classes at build time through
+        // MSBuild targets (Aspire.Hosting.AppHost.targets: CreateAspireProjectMetadataSources +
+        // CreateAspireHostProjectMetadataSources), not a Roslyn source generator. Those <Compile>
+        // items never reach us, so synthesize the two generated files the same way MSBuild does:
+        // one class per project resource (implements IProjectMetadata) plus the host's own class.
+        if (project.IsAspireHost)
+        {
+            var aspireMetadata = new StringBuilder();
+
+            // The regex the targets use to derive a C# class name from a project file name:
+            // replace every non-word char with '_', and prepend '_' for a digit at start or right
+            // after a '.', e.g. OrchardCore.Cms.Web -> OrchardCore_Cms_Web.
+            string AspireClassName(string projectFileName)
+            {
+                // The targets' regex: (((?<=\.)|^)(?=\d)|\W) -> '_', i.e. prefix a digit at start
+                // or right after a '.', and replace every non-word char (including '.') with '_'.
+                // OrchardCore.Cms.Web -> OrchardCore_Cms_Web.
+                var name = Path.GetFileNameWithoutExtension(projectFileName);
+                var result = new System.Text.StringBuilder();
+                for (var i = 0; i < name.Length; i++)
+                {
+                    var ch = name[i];
+                    var prev = i > 0 ? name[i - 1] : '\0';
+                    if (char.IsDigit(ch) && (i == 0 || prev == '.'))
+                        result.Append('_');
+                    if (char.IsLetterOrDigit(ch) || ch == '_') result.Append(ch);
+                    else result.Append('_');
+                }
+                return result.ToString();
+            }
+
+            string ProjectPathFor(string include)
+            {
+                var normalized = include.Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+                var full = Path.GetFullPath(Path.Combine(project.ProjectRootPath, normalized));
+                return Path.TrimEndingDirectorySeparator(full) switch
+                {
+                    var p when Directory.Exists(p) => p,
+                    var p => Path.GetDirectoryName(p) ?? p,
+                };
+            }
+
+            // The host itself (used by AddProject<T> via its static ProjectPath).
+            var hostClass = AspireClassName(CsProjFile.FilePath);
+            var hostPath = Path.TrimEndingDirectorySeparator(project.ProjectRootPath);
+            aspireMetadata.AppendLine("// <auto-generated/>");
+            aspireMetadata.AppendLine();
+            aspireMetadata.AppendLine("namespace Projects;");
+            aspireMetadata.AppendLine();
+            aspireMetadata.AppendLine("#pragma warning disable CS8981");
+            aspireMetadata.AppendLine("/// <summary>");
+            aspireMetadata.AppendLine("/// Metadata for the Aspire AppHost project.");
+            aspireMetadata.AppendLine("/// </summary>");
+            aspireMetadata.AppendLine("[global::System.CodeDom.Compiler.GeneratedCode(\"Aspire.Hosting\", null)]");
+            aspireMetadata.AppendLine("[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage(Justification = \"Generated code.\")]");
+            aspireMetadata.AppendLine($"[global::System.Diagnostics.DebuggerDisplay(\"Type = {{GetType().Name,nq}}, ProjectPath = {{ProjectPath}}\")]");
+            aspireMetadata.AppendLine($"internal class {hostClass}");
+            aspireMetadata.AppendLine("#pragma warning restore CS8981");
+            aspireMetadata.AppendLine("{");
+            aspireMetadata.AppendLine($"    private {hostClass}() {{ }}");
+            aspireMetadata.AppendLine();
+            aspireMetadata.AppendLine("    /// <summary>");
+            aspireMetadata.AppendLine("    /// The path to the Aspire Host project.");
+            aspireMetadata.AppendLine("    /// </summary>");
+            aspireMetadata.AppendLine($"    public static string ProjectPath => \"\"\"{hostPath}\"\"\";");
+            aspireMetadata.AppendLine("}");
+            aspireMetadata.AppendLine();
+
+            foreach (var reference in project.ProjectReferences)
+            {
+                var include = reference.Include ?? "";
+                if (string.IsNullOrWhiteSpace(include)) continue;
+                var className = AspireClassName(include);
+                var projectPath = ProjectPathFor(include);
+                aspireMetadata.AppendLine("/// <summary>");
+                aspireMetadata.AppendLine($"/// Metadata for the {className} project.");
+                aspireMetadata.AppendLine("/// </summary>");
+                aspireMetadata.AppendLine("[global::System.CodeDom.Compiler.GeneratedCode(\"Aspire.Hosting\", null)]");
+                aspireMetadata.AppendLine("[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage(Justification = \"Generated code.\")]");
+                aspireMetadata.AppendLine($"[global::System.Diagnostics.DebuggerDisplay(\"Type = {{GetType().Name,nq}}, ProjectPath = {{ProjectPath}}\")]");
+                aspireMetadata.AppendLine($"internal class {className} : global::Aspire.Hosting.IProjectMetadata");
+                aspireMetadata.AppendLine("#pragma warning restore CS8981");
+                aspireMetadata.AppendLine("{");
+                aspireMetadata.AppendLine("    /// <summary>");
+                aspireMetadata.AppendLine($"    /// The path to the {className} project.");
+                aspireMetadata.AppendLine("    /// </summary>");
+                aspireMetadata.AppendLine($"    public string ProjectPath => \"\"\"{projectPath}\"\"\";");
+                aspireMetadata.AppendLine();
+                aspireMetadata.AppendLine("    /// <summary>");
+                aspireMetadata.AppendLine("    /// Gets a value indicating whether building the project before running it should be suppressed.");
+                aspireMetadata.AppendLine("    /// </summary>");
+                aspireMetadata.AppendLine("    public bool SuppressBuild => true;");
+                aspireMetadata.AppendLine("}");
+                aspireMetadata.AppendLine();
+            }
+
+            project.CSFiles.Add(new ProjectFile("_AppHost.ProjectMetadata.g.cs", aspireMetadata.ToString()));
+        }
 
         //var Appsettings = projectFiles.FirstOrDefault(item => Path.GetExtension(item.FilePath) == ".json") // Todo latter will need ConsoleProject, WebApi proeject
         //    ?? throw new ArgumentException("Project does not have c sharp files");

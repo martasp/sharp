@@ -104,17 +104,11 @@ public static class NativeCompiler
 
         var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences,compilationOptions);
 
-        // Feature: source-generator + analyzer pipeline. AOT experiment: the JIT-only dynamic
-        // SourceGeneratorRunner discovery is disabled (comment below) and everything routes through
-        // the statically linked AnalyzerRegistry via AnalyzerRunner (generators merge their trees,
-        // then AnalyzerRegistry.GetAnalyzers() runs over the merged compilation). DELETABLE FEATURES.
-        //
-        // OLD JIT path:
-        //   var (generatedCompilation, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project);
-        //   compilation = generatedCompilation;
-        //
-        // Restore SourceGeneratorRunner.RunGenerators to re-enable reflective package/analyzer-project
-        // generator discovery under JIT (see SourceGeneratorRunner for the disabled body).
+        // Feature: source-generator + analyzer pipeline. Generators always run the statically
+        // linked SDK set; under JIT (not NativeAOT) they additionally discover the project's own
+        // analyzer assemblies (package analyzers + Analyzer project references like
+        // OrchardCore.SourceGenerators) via a shadow-copied load context. AnalyzerRunner merges
+        // their trees, then the static analyzers run over the merged compilation.
         var (generatedCompilation, analyzerErrors) = AnalyzerRunner.Run(compilation, project);
         compilation = generatedCompilation;
         //string? analyzerErrors = "";    

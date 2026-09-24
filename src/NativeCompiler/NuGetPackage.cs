@@ -86,10 +86,27 @@ public static class NuGetPackage
         return FindHighestVersionDirectory(packageName, "0.0.0") ?? string.Empty;
     }
 
-    private static string? FindExactVersionDirectory(string packageName, string packageVersion)
+    // Candidate package directories: an exact (case-insensitive) name match wins; prefix
+    // matches are only a fallback. The global packages folder lowercases names ("anyascii")
+    // while csproj references use original case ("AnyAscii"), and Directory.GetDirectories(pattern)
+    // is case-sensitive on Linux — plus a bare prefix DRAW ("GraphQL" matching "graphql.analyzers",
+    // "YesSql" matching "yessql.abstractions") misresolves to the wrong package entirely.
+    private static IEnumerable<DirectoryInfo> CandidatePackageDirs(string packageName)
     {
         var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());
-        foreach (var packageDir in packageDirectory.GetDirectories($"{packageName}*"))
+        if (!packageDirectory.Exists) yield break;
+
+        var all = packageDirectory.GetDirectories();
+        foreach (var dir in all.Where(dir => dir.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase)))
+            yield return dir;
+        foreach (var dir in all.Where(dir => !dir.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase) &&
+            dir.Name.StartsWith(packageName, StringComparison.OrdinalIgnoreCase)))
+            yield return dir;
+    }
+
+    private static string? FindExactVersionDirectory(string packageName, string packageVersion)
+    {
+        foreach (var packageDir in CandidatePackageDirs(packageName))
         {
             var matchingVersionDir = packageDir.GetDirectories()
                 .FirstOrDefault(dir => dir.Name.Equals(packageVersion, StringComparison.OrdinalIgnoreCase));
@@ -101,17 +118,20 @@ public static class NuGetPackage
 
     private static string? FindHighestVersionDirectory(string packageName, string packageVersion)
     {
-        var packageDirectory = new DirectoryInfo(GlobalPackagesFolderPath());
         var hasRequested = TryParseVersion(packageVersion, out var requested);
 
         (System.Version version, string path)? best = null;
-        foreach (var packageDir in packageDirectory.GetDirectories($"{packageName}*"))
+        var bestIsExact = false;
+        foreach (var packageDir in CandidatePackageDirs(packageName))
         {
+            var isExact = packageDir.Name.Equals(packageName, StringComparison.OrdinalIgnoreCase);
             foreach (var versionDir in packageDir.GetDirectories())
             {
                 if (!TryParseVersion(versionDir.Name, out var parsed)) continue;
                 if (hasRequested && requested.CompareTo(parsed) > 0) continue;
-                if (best is null || parsed.CompareTo(best.Value.version) > 0) best = (parsed, versionDir.FullName);
+                if (best is null || (bestIsExact == isExact && parsed.CompareTo(best.Value.version) > 0) ||
+                    (isExact && !bestIsExact))
+                    (best, bestIsExact) = ((parsed, versionDir.FullName), isExact);
             }
         }
 

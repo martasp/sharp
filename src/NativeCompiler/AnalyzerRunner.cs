@@ -19,10 +19,9 @@ public static class AnalyzerRunner
     public static (CSharpCompilation compilation, string errors) Run(
         CSharpCompilation compilation, Project project)
     {
-        // 1. Source generators (statically linked, rooted into the native image).
-        var (generated, generatorErrors) =
-            SourceGeneratorRunner.RunGeneratorDriver(compilation, project,
-                AnalyzerRegistry.GetSourceGenerators()); //0.7s
+        // 1. Source generators (statically linked SDK set + JIT-only discovery of analyzer
+        //    project/package generators; see SourceGeneratorRunner.RunGenerators).
+        var (generated, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project); //~1s
         compilation = generated;
 
         // 2. Analyzers (statically linked DiagnosticAnalyzer instances).

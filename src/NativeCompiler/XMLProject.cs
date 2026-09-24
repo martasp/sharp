@@ -74,8 +74,14 @@ public class PropertyGroup
     [XmlElement(ElementName = "IsPackable")]
     public string? IsPackable { get; set; }
 
+    [XmlElement(ElementName = "EnableDefaultItems")]
+    public string? EnableDefaultItems { get; set; }
+
     [XmlElement(ElementName = "IsTestProject")]
     public string? IsTestProject { get; set; }
+
+    [XmlElement(ElementName = "IsAspireHost")]
+    public string? IsAspireHost { get; set; }
 
     [XmlElement(ElementName = "AllowUnsafeBlocks")]
     public string? AllowUnsafeBlocks { get; set; }
@@ -109,10 +115,36 @@ public class Content
     public string? Update { get; set; }
 }
 
+[XmlRoot(ElementName = "Compile")]
+public class CompileItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "Remove")]
+    public string? Remove { get; set; }
+}
+
+[XmlRoot(ElementName = "None")]
+public class NoneItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "Remove")]
+    public string? Remove { get; set; }
+}
+
 [XmlRoot(ElementName = "ItemGroup")]
 public class ItemGroup
 {
     [XmlElement(ElementName = "Content")] public List<Content>? Content { get; set; }
+
+    [XmlElement(ElementName = "Compile")]
+    public List<CompileItem> CompileItems { get; set; } = new();
+
+    [XmlElement(ElementName = "None")]
+    public List<NoneItem> NoneItems { get; set; } = new();
 
     [XmlElement(ElementName = "PackageReference")]
     public List<PackageReference> PackageReferences { get; set; } = new();
@@ -281,8 +313,9 @@ public class Project
         VersionPrefix = ElementValue(element, "VersionPrefix"),
         VersionSuffix = ElementValue(element, "VersionSuffix"),
         IsPackable = ElementValue(element, "IsPackable"),
+        EnableDefaultItems = ElementValue(element, "EnableDefaultItems"),
         IsTestProject = ElementValue(element, "IsTestProject"),
-        AllowUnsafeBlocks = ElementValue(element, "AllowUnsafeBlocks"),
+        IsAspireHost = ElementValue(element, "IsAspireHost"),
         UseAppHost = ElementValue(element, "UseAppHost"),
         LangVersion = ElementValue(element, "LangVersion"),
         Nullable = ElementValue(element, "Nullable"),
@@ -297,6 +330,16 @@ public class Project
         {
             Update = AttributeValue(content, "Update"),
             CopyToOutputDirectory = ElementValue(content, "CopyToOutputDirectory"),
+        }).ToList(),
+        CompileItems = Children(element, "Compile").Select(item => new CompileItem
+        {
+            Include = AttributeValue(item, "Include"),
+            Remove = AttributeValue(item, "Remove"),
+        }).ToList(),
+        NoneItems = Children(element, "None").Select(item => new NoneItem
+        {
+            Include = AttributeValue(item, "Include"),
+            Remove = AttributeValue(item, "Remove"),
         }).ToList(),
         PackageReferences = Children(element, "PackageReference").Select(reference => new PackageReference
         {
@@ -313,6 +356,7 @@ public class Project
         {
             Include = AttributeValue(reference, "Include"),
             PrivateAssets = AttributeValue(reference, "PrivateAssets"),
+            OutputItemType = AttributeValue(reference, "OutputItemType"),
         }).ToList(),
         FrameworkReferences = Children(element, "FrameworkReference").Select(reference => new FrameworkReference
         {

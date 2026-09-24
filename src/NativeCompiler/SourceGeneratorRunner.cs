@@ -7,6 +7,7 @@ using System.Runtime.Loader;
 using CustomCompiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
 // ---------------------------------------------------------------------------
@@ -61,11 +62,14 @@ public static class SourceGeneratorRunner
         var analyzerCsprojs = new List<string>();
         foreach (var reference in project.AnalyzerProjectReferences)
         {
-            var include = reference.Include ?? "";
+            var include = (reference.Include ?? "").Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
             if (string.IsNullOrEmpty(include)) continue;
             if (SkippedSelf(project, include)) continue;
 
             var csproj = ProjectReferenceFinder.FindReferencedCsproj(include, project.ProjectRootPath);
+            if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+                Console.WriteLine($"[gens] {project.ProjectName}: analyzer ref '{include}' -> '{csproj}'");
             if (csproj is not null) analyzerCsprojs.Add(csproj);
         }
 
@@ -87,9 +91,6 @@ public static class SourceGeneratorRunner
                 warnings.Add($"Warning: cannot use analyzer project '{Path.GetFileNameWithoutExtension(csproj)}': {ex.Message}");
             }
         }
-
-        // Ref-pack generators are implicit for every net project (what the SDK feeds csc).
-        AddAnalyzerDlls(dlls, AsemblyExtensions.ResolveRefPackAnalyzersLocation);
 
         return (dlls.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), warnings);
     }
@@ -143,52 +144,88 @@ public static class SourceGeneratorRunner
     // Runs the project's generators and returns the compilation with generated trees merged
     // plus any generator-reported error diagnostics.
     //
-    // JIT-only dynamic discovery is DISABLED for the AOT experiment; this method now runs the
-    // statically linked AnalyzerRegistry generator set in both JIT and AOT so the pipeline no
-    // longer loads/reflects analyzer assemblies at runtime. To restore package/analyzer-project
-    // generators under JIT, revert this body to the commented discovery below (CollectGeneratorDlls
-    // + per-assembly reflection through GeneratorAssemblyLoadContext + RunGeneratorDriver).
-    //
-    //     var (generatorDlls, collectorWarnings) = CollectGeneratorDlls(project);
-    //     if (generatorDlls.Count == 0) { PrintWarnings(collectorWarnings); return (compilation, ""); }
-    //     try
-    //     {
-    //         var loadContext = new GeneratorAssemblyLoadContext();
-    //         var generators = new List<ISourceGenerator>();
-    //         var warnings = new List<string>(collectorWarnings);
-    //         foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
-    //         foreach (var dll in generatorDlls)
-    //         {
-    //             List<Type>? types;
-    //             try
-    //             {
-    //                 var assembly = loadContext.LoadGenerator(dll);
-    //                 types = assembly.GetTypes().ToList();
-    //             }
-    //             catch (ReflectionTypeLoadException typeLoad) { warnings.Add(...); continue; }
-    //             catch (Exception ex) { warnings.Add(...); continue; }
-    //             foreach (var type in types)
-    //             {
-    //                 try
-    //                 {
-    //                     if (type.IsAbstract || type.IsInterface) continue;
-    //                     if (type.GetCustomAttribute<GeneratorAttribute>() is null) continue;
-    //                     if (type.GetConstructor(Type.EmptyTypes) is null) continue;
-    //                     var instance = Activator.CreateInstance(type);
-    //                     if (instance is ISourceGenerator sourceGenerator) generators.Add(sourceGenerator);
-    //                     else if (instance is IIncrementalGenerator incrementalGenerator) generators.Add(incrementalGenerator.AsSourceGenerator());
-    //                 }
-    //                 catch (Exception ex) { warnings.Add(...); }
-    //             }
-    //         }
-    //         PrintWarnings(warnings);
-    //         return RunGeneratorDriver(compilation, project, generators.ToImmutableArray());
-    //     }
-    //     catch (Exception ex) { return (compilation, ex.ToString()); }
+    // Generator set = the statically linked SDK set (AnalyzerRegistry, always, so JIT and AOT
+    // behave identically) PLUS, under JIT only (RuntimeFeature.IsDynamicCodeSupported), the
+    // project's own analyzers discovered from package `analyzers/dotnet/cs` folders and Analyzer
+    // project references (e.g. OrchardCore.SourceGenerators, injected into every project via
+    // the evaluated Commons.props import). AOT cannot reflect/load assemblies at runtime, so
+    // project-specific generators are skipped there; the SDK set covers the common cases.
     public static (CSharpCompilation compilation, string errors) RunGenerators(
         CSharpCompilation compilation, Project project)
     {
-        return RunGeneratorDriver(compilation, project, AnalyzerRegistry.GetSourceGenerators());
+        var generators = new List<ISourceGenerator>(AnalyzerRegistry.GetSourceGenerators());
+
+        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+            Console.WriteLine($"[gens] {project.ProjectName}: IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
+
+        if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+        {
+            var (generatorDlls, collectorWarnings) = CollectGeneratorDlls(project);
+            PrintWarnings(collectorWarnings);
+
+            if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+                Console.WriteLine($"[gens] {project.ProjectName}: dynamic supported, discovered {generatorDlls.Count} dlls: [{string.Join("; ", generatorDlls.Select(path => Path.GetFileName(path)))}]");
+
+            if (generatorDlls.Count > 0)
+            {
+                try
+                {
+                    var loadContext = new GeneratorAssemblyLoadContext();
+                    var warnings = new List<string>();
+                    foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
+                    foreach (var dll in generatorDlls)
+                    {
+                        Assembly assembly;
+                        try
+                        {
+                            assembly = loadContext.LoadGenerator(dll);
+                        }
+                        catch (Exception ex)
+                        {
+                            warnings.Add($"Warning: cannot load generator '{Path.GetFileNameWithoutExtension(dll)}': {ex.Message}");
+                            continue;
+                        }
+
+                        Type[] types;
+                        try { types = assembly.GetTypes(); }
+                        catch (ReflectionTypeLoadException typeLoad) { types = typeLoad.Types.Where(t => t is not null).ToArray()!; }
+                        catch (Exception ex)
+                        {
+                            warnings.Add($"Warning: cannot inspect generator '{Path.GetFileNameWithoutExtension(dll)}': {ex.Message}");
+                            continue;
+                        }
+
+                        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+                            Console.WriteLine($"[gens] {project.ProjectName}: loaded {assembly.GetName().Name}, {types.Length} types");
+
+                        foreach (var type in types)
+                        {
+                            try
+                            {
+                                if (type.IsAbstract || type.IsInterface) continue;
+                                if (type.GetCustomAttribute<GeneratorAttribute>() is null) continue;
+                                if (type.GetConstructor(Type.EmptyTypes) is null) continue;
+                                var instance = Activator.CreateInstance(type);
+                                if (instance is ISourceGenerator sourceGenerator) generators.Add(sourceGenerator);
+                                else if (instance is IIncrementalGenerator incrementalGenerator) generators.Add(incrementalGenerator.AsSourceGenerator());
+                            }
+                            catch (Exception ex)
+                            {
+                                warnings.Add($"Warning: cannot instantiate generator '{type.FullName}': {ex.Message}");
+                            }
+                        }
+                    }
+
+                    PrintWarnings(warnings);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: generator discovery failed: {ex.Message}");
+                }
+            }
+        }
+
+        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray());
     }
 
     // Shared driver: builds CSharpGeneratorDriver with the project's parse options (implicit TFM
@@ -202,10 +239,16 @@ public static class SourceGeneratorRunner
         if (generators.IsEmpty)
             return (compilation, "");
 
+        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+            Console.WriteLine($"[gens] running {generators.Length} generators for {project.ProjectName}");
+
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
             .WithPreprocessorSymbols(NativeCompilerUtils.GetSdkPreprocessorSymbols(project));
         parseOptions = NativeCompilerUtils.ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
+
+        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
+            Console.WriteLine($"[gens] {project.ProjectName}: interceptors after seed='{NativeCompilerUtils.GetInterceptorsNamespacesOrEmpty(parseOptions)}'");
 
         var optionsProvider = new ProjectConfigOptionsProvider(project);
         var driver = CSharpGeneratorDriver.Create(
@@ -226,13 +269,47 @@ public static class SourceGeneratorRunner
         if (runResult.GeneratedTrees.Length > 0)
         {
             // Re-parse generated trees with the project's parse options (TMF constants and
-            // interceptor namespaces apply to generated [InterceptsLocation] code too).
+            // interceptor namespaces apply to generated [InterceptsLocation] code too). Sources of
+            // interceptors also seed their own declared namespaces (e.g. the Configuration.Binder
+            // generator emits [InterceptsLocation] inside Microsoft.Extensions.Configuration.Binder.
+            // SourceGeneration, a namespace that the SDK injects through the package's build targets
+            // rather than any project property). Fold those in so generated interceptor callbacks
+            // are always opted in regardless of MSBuild wiring.
+            var seeding = parseOptions;
+            // Fold in namespaces that generated [InterceptsLocation] trees declare themselves on
+            // top of the project's configured interceptor namespaces.
+            var generatedNamespaces = new List<string>();
+            foreach (var tree in runResult.GeneratedTrees)
+            {
+                if (tree.ToString().IndexOf("InterceptsLocation", StringComparison.Ordinal) < 0) continue;
+                generatedNamespaces.AddRange(CollectDeclaredNamespaces(tree));
+            }
+            if (generatedNamespaces.Count > 0)
+            {
+                var combined = string.Join(";", generatedNamespaces.Distinct(StringComparer.Ordinal)
+                    .Append(project.InterceptorsNamespaces ?? ""));
+                seeding = NativeCompilerUtils.ApplyInterceptorsNamespaces(seeding, combined);
+            }
+            parseOptions = seeding;
+
             var generatedTrees = runResult.GeneratedTrees.Select(tree =>
                 CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions, tree.FilePath));
             compilation = compilation.AddSyntaxTrees(generatedTrees);
         }
 
         return (compilation, string.Join("\n", errors));
+    }
+
+    // The namespace(s) a generated tree declares (e.g. from the file that holds [InterceptsLocation]).
+    private static List<string> CollectDeclaredNamespaces(SyntaxTree tree)
+    {
+        var namespaces = new List<string>();
+        foreach (var node in tree.GetRoot().DescendantNodesAndSelf())
+        {
+            if (node is BaseNamespaceDeclarationSyntax ns)
+                namespaces.Add(ns.Name.ToString());
+        }
+        return namespaces.Distinct(StringComparer.Ordinal).ToList();
     }
 
     // Build-property AnalyzerConfigOptions for both the generator driver and CompilationWithAnalyzers.

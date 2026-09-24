@@ -56,10 +56,30 @@ public class Project : IProject
 
     // Interceptor namespaces (SDK <InterceptorsNamespaces>/<InterceptorsPreviewNamespaces>) that
     // opt generated [InterceptsLocation] code in for csc parity (OrchardCore's shape generator).
-    public string? InterceptorsNamespaces =>
-        XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsNamespaces
-        ?? XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsPreviewNamespaces
-        ?? BuildProps.InterceptorsNamespaces;
+    // A csproj value that references $(InterceptorsNamespaces) means "append to the inherited
+    // value", so the props-chain value is folded in and the token is expanded away.
+    public string? InterceptorsNamespaces
+    {
+        get
+        {
+            var declared = XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsNamespaces;
+            var preview = XMLProject.PropertyGroup?.FirstOrDefault()?.InterceptorsPreviewNamespaces;
+            var csprojValue = declared ?? preview;
+            var inherited = BuildProps.InterceptorsNamespaces;
+
+            if (string.IsNullOrEmpty(csprojValue)) return inherited;
+            if (inherited is null) return csprojValue;
+
+            var touchesInherited = csprojValue.Contains("$(InterceptorsNamespaces)", StringComparison.OrdinalIgnoreCase)
+                || csprojValue.Contains("$(InterceptorsPreviewNamespaces)", StringComparison.OrdinalIgnoreCase);
+            if (!touchesInherited) return csprojValue;
+
+            var surplus = csprojValue
+                .Replace("$(InterceptorsNamespaces)", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("$(InterceptorsPreviewNamespaces)", "", StringComparison.OrdinalIgnoreCase);
+            return inherited + surplus;
+        }
+    }
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     public string ExtensionName => ProjectName + "." + ResolvedProjectExtensionType();
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
@@ -108,6 +128,16 @@ public class Project : IProject
     public bool IsWebSdk => (XMLProject.Sdk ?? "").Split(';')
         .Select(sdk => sdk.Trim())
         .Contains("Microsoft.NET.Sdk.Web", StringComparer.OrdinalIgnoreCase);
+
+    // Aspire AppHost projects (Sdk="Aspire.AppHost.Sdk"). The SDK's build targets synthesize
+    // "Projects.<ClassName>" metadata classes for every project resource reference (and the host
+    // itself); those generated files are MSBuild artifacts, not source-generator output, so we
+    // regenerate them here (see AspireHostMetadataSource in GetProjectDetails).
+    public bool IsAspireHost =>
+        (XMLProject.Sdk ?? "").Split(';')
+            .Any(sdk => sdk.Trim().StartsWith("Aspire.AppHost.Sdk", StringComparison.OrdinalIgnoreCase))
+        || ((XMLProject.PropertyGroup?.FirstOrDefault()?.IsAspireHost
+            ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) ?? false);
 
     // True for projects that depend on the ASP.NET Core shared framework (Web SDK projects, or any
     // project declaring <FrameworkReference Include="Microsoft.AspNetCore.App" />). Drives both the

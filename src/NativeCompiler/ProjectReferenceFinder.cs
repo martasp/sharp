@@ -6,6 +6,11 @@ public class ProjectReferenceFinder
 {
     public static string FindReferencedDLL(string projectFilePath, string projectPath)
     {
+        // ProjectReference Include values use Windows separators (backslashes) even on
+        // Linux checkouts; normalize before any Path operation (Path.GetDirectoryName /
+        // Path.GetFileName treat '\' as a regular char on Linux).
+        projectFilePath = projectFilePath.Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         // Extract the directory path of the project file.
         var fileName = Path.GetFileNameWithoutExtension(projectFilePath) ?? throw new Exception("File not found");
 
@@ -49,6 +54,8 @@ public class ProjectReferenceFinder
 
     public static string? FindReferencedCsproj(string projectFilePath, string projectPath)
     {
+        projectFilePath = projectFilePath.Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar);
         var projectDirectory = Path.GetDirectoryName(projectFilePath) ?? throw new Exception("Directory not found");
 
         var referencedProjectDir = Path.Combine(projectPath, projectDirectory);
