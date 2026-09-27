@@ -11,7 +11,7 @@ public class ProjectReferenceFinderTests
     {
         // Replace with the actual paths to your project and referenced project
         var projectFilePath = @"..\NativeCompiler\NativeCompiler.csproj";
-        var projectFullPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
+        var projectFullPath = TestPaths.Src("NativeCompilerCLI");
 
         var referencedDLLPath = ProjectReferenceFinder.FindReferencedDLL(projectFilePath, projectFullPath);
 

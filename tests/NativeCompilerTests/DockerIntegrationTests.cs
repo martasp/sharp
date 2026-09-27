@@ -41,6 +41,13 @@ public class DockerIntegrationTests
     [Fact]
     public async Task Linux_BuildAndCompileHelloWorld()
     {
+        if (!await IsLinuxContainersMode())
+        {
+            // Skip: the test runs a real Linux container, so it needs a reachable Docker daemon.
+            // (The suite stays green on hosts without Docker - same pattern as the Windows test.)
+            return;
+        }
+
         await using var container = new ContainerBuilder()
             .WithImage("mcr.microsoft.com/dotnet/sdk:10.0")
             .WithEntrypoint("/bin/bash", "-c")
@@ -132,7 +139,17 @@ public class DockerIntegrationTests
         run.Stdout.Trim().ShouldBe("Hello from NativeCompiler!");
     }
 
-    private static async Task<bool> IsWindowsContainersMode()
+private static async Task<bool> IsWindowsContainersMode()
+    {
+        return await DockerInfoContains(output => output.Contains("Windows") || output.Contains("nanoserver"));
+    }
+
+    private static async Task<bool> IsLinuxContainersMode()
+    {
+        return await DockerInfoContains(_ => true);
+    }
+
+    private static async Task<bool> DockerInfoContains(Func<string, bool> predicate)
     {
         try
         {
@@ -147,8 +164,9 @@ public class DockerIntegrationTests
             });
             if (process == null) return false;
             await process.WaitForExitAsync();
+            if (process.ExitCode != 0) return false;
             var output = await process.StandardOutput.ReadToEndAsync();
-            return output.Contains("Windows") || output.Contains("nanoserver");
+            return predicate(output);
         }
         catch
         {

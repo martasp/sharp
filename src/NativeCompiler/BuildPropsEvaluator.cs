@@ -20,9 +20,23 @@ public sealed record BuildProps(
     string? LangVersion,
     bool AllowUnsafeBlocks,
     bool UseAppHost,
+    bool EnableRequestDelegateGenerator,
     string? DefineConstants,
     IReadOnlyList<string> AnalyzerProjectReferences,
     string? InterceptorsNamespaces);
+
+// Assembly-identity/versioning properties that the SDK's GenerateAssemblyInfo turns into
+// attributes. Project-level <PropertyGroup> values win over Directory.Build.props (document order).
+public sealed record BuildIdentity(
+    string? Company,
+    string? Product,
+    string? Title,
+    string? Configuration,
+    string? Version,
+    string? AssemblyVersion,
+    string? FileVersion,
+    string? InformationalVersion,
+    string? SourceRevisionId);
 
 public static class BuildPropsEvaluator
 {
@@ -62,6 +76,11 @@ public static class BuildPropsEvaluator
                 .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
             var useAppHost = !Expand(props.GetValueOrDefault("UseAppHost"), props)
                 .Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
+            // Mirrors the SDK gate for the Request Delegate Generator (Microsoft.AspNetCore.Http
+            // .RequestDelegateGenerator): off unless enabled, or the app is published trimmed/AOT
+            // (not evaluated here - this pipeline does not publish).
+            var enableRdg = Expand(props.GetValueOrDefault("EnableRequestDelegateGenerator"), props)
+                .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
 
             return new BuildProps(
                 EmptyToNull(targetFramework),
@@ -70,6 +89,7 @@ public static class BuildPropsEvaluator
                 EmptyToNull(Expand(props.GetValueOrDefault("LangVersion"), props)),
                 allowUnsafe,
                 useAppHost,
+                enableRdg,
                 EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)),
                 analyzerRefs,
                 EmptyToNull(Expand(props.GetValueOrDefault("InterceptorsNamespaces") ??
@@ -82,7 +102,60 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static readonly BuildProps Default = new(null, false, null, null, false, true, null, Array.Empty<string>(), null);
+    private static readonly BuildProps Default = new(null, false, null, null, false, true, false, null, Array.Empty<string>(), null);
+
+    // Resolves the assembly-identity properties for a project folder. Collects Directory.Build.props
+    // (with its imports) then overlays the project's own <PropertyGroup> declarations, which override
+    // because the SDK imports Directory.Build.props before the project body.
+    public static BuildIdentity? EvaluateIdentity(string projectRootPath)
+    {
+        try
+        {
+            var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var analyzerRefs = new List<string>();
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var propsFile = FindNearestPropsFile(projectRootPath);
+            if (propsFile is not null)
+                Traverse(propsFile, props, analyzerRefs, visited);
+
+            var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault();
+            if (csprojFile is not null)
+            {
+                var document = XDocument.Load(csprojFile);
+                var root = document.Root;
+                if (root is not null)
+                {
+                    var directory = Path.GetDirectoryName(Path.GetFullPath(csprojFile)) + Path.DirectorySeparatorChar;
+                    props["MSBuildThisFileDirectory"] = directory;
+                    // Last PropertyGroup wins, mirroring MSBuild document order.
+                    foreach (var group in root.Elements().Where(e => e.Name.LocalName == "PropertyGroup"))
+                        foreach (var property in group.Elements())
+                            props[property.Name.LocalName] = property.Value.Trim();
+                }
+            }
+
+            if (props.Count == 0) return null;
+
+            string? Value(string name) => EmptyToNull(Expand(props.GetValueOrDefault(name), props));
+
+            return new BuildIdentity(
+                Value("Company"),
+                Value("Product"),
+                Value("Title"),
+                Value("Configuration"),
+                Value("Version"),
+                Value("AssemblyVersion"),
+                Value("AssemblyFileVersion"),
+                Value("InformationalVersion"),
+                Value("SourceRevisionId"));
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? FindNearestPropsFile(string projectRootPath)
     {

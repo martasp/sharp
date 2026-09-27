@@ -89,6 +89,9 @@ public class PropertyGroup
     [XmlElement(ElementName = "UseAppHost")]
     public string? UseAppHost { get; set; }
 
+    [XmlElement(ElementName = "EnableRequestDelegateGenerator")]
+    public string? EnableRequestDelegateGenerator { get; set; }
+
     [XmlElement(ElementName = "LangVersion")]
     public string? LangVersion { get; set; }
 
@@ -316,7 +319,9 @@ public class Project
         EnableDefaultItems = ElementValue(element, "EnableDefaultItems"),
         IsTestProject = ElementValue(element, "IsTestProject"),
         IsAspireHost = ElementValue(element, "IsAspireHost"),
+        AllowUnsafeBlocks = ElementValue(element, "AllowUnsafeBlocks"),
         UseAppHost = ElementValue(element, "UseAppHost"),
+        EnableRequestDelegateGenerator = ElementValue(element, "EnableRequestDelegateGenerator"),
         LangVersion = ElementValue(element, "LangVersion"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),

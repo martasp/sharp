@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -50,7 +51,7 @@ public class ConsoleAppTestsSelf
     [Fact]
     public void ITShouldCompileSelfCliProject()
     {
-        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompilerCLI";
+        var csprojFolderPath = TestPaths.Src("NativeCompilerCLI");
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.Success.ShouldBeTrue(result.Errors);
     }
@@ -71,7 +72,8 @@ public class ConsoleAppTestsSelf
         result.Success.ShouldBeTrue(result.Errors);
         var outputDir = Path.Combine(csprojFolderPath, "myc", "Debug", "net10.0");
         File.Exists(Path.Combine(outputDir, "WebApiWorking.dll")).ShouldBeTrue("dll not Exists");
-        File.Exists(Path.Combine(outputDir, "WebApiWorking.exe")).ShouldBeTrue("exe not Exists");
+        var appHost = "WebApiWorking" + (OperatingSystem.IsWindows() ? ".exe" : "");
+        File.Exists(Path.Combine(outputDir, appHost)).ShouldBeTrue("apphost not Exists");
     }
 }
 

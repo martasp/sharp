@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
@@ -14,7 +15,9 @@ using Microsoft.CodeAnalysis.Diagnostics;
 // Feature: real Roslyn source-generator pipeline (GENERATOR_PIPELINE).
 // Mirrors the SDK: every project gets the ref-pack generators (GeneratedRegex,
 // GenerateShape/[JsonSourceGenerator], LibraryImport, JSImport, ComInterface) plus
-// NuGet package analyzers/dotnet/cs assemblies. Generators run through
+// NuGet package analyzers/dotnet/cs assemblies and, for projects holding the matching
+// <FrameworkReference>, targeting-pack analyzers (e.g. AspNetCore.App's source generator
+// that makes the implicit Program public). Generators run through
 // CSharpGeneratorDriver.RunGeneratorsAndUpdateTree exactly like csc does; the
 // generated trees are merged into the compilation and generator diagnostics are
 // relayed as build errors. No hand-rolled code synthesis lives here. DELETABLE.
@@ -54,6 +57,51 @@ public static class SourceGeneratorRunner
             AddAnalyzerDlls(dlls, packagePath);
             foreach (var transitive in NuGetPackage.GetTransitivePackagePaths(packagePath, tfm))
                 AddAnalyzerDlls(dlls, transitive);
+        }
+
+        // <FrameworkReference> targeting packs can ship their own analyzers (e.g. the AspNetCore
+        // pack's Microsoft.AspNetCore.App.SourceGenerators, which emits `public partial class
+        // Program {}` so minimal-API apps get the public Program the SDK produces). Mirror csc:
+        // these only run for projects that actually hold the framework reference - web projects
+        // get Microsoft.AspNetCore.App implicitly. The base Microsoft.NETCore.App pack is skipped
+        // (its generators are the statically linked SDK set, already in AnalyzerRegistry).
+        var frameworkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        NativeCompilerUtils.CollectFrameworkReferenceNames(project.ProjectRootPath, visitedProjects, frameworkNames);
+        if (project.IsWebSdk) frameworkNames.Add("Microsoft.AspNetCore.App");
+
+        foreach (var frameworkName in frameworkNames)
+        {
+            if (string.IsNullOrEmpty(frameworkName)) continue;
+            if (frameworkName.Equals("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)) continue;
+
+            try
+            {
+                var refLocation = AsemblyExtensions.ResolveFrameworkRefLocation(frameworkName, tfm);
+                var packVersionDir = Path.GetDirectoryName(Path.GetDirectoryName(refLocation));
+                if (packVersionDir is null) continue;
+                foreach (var dll in Directory.EnumerateFiles(
+                    Path.Combine(packVersionDir, "analyzers", "dotnet", "cs"), "*.dll", SearchOption.AllDirectories))
+                {
+                    // The Request Delegate Generator is off-by-default in the SDK (gated behind
+                    // EnableRequestDelegateGenerator, or PublishTrimmed/AOT). Mirror that gate,
+                    // otherwise minimal-API apps compile request delegates - and pull in a very
+                    // different reference surface than `dotnet build` - for no opt-in.
+                    if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1" &&
+                        Path.GetFileName(dll).Contains("RequestDelegateGenerator", StringComparison.OrdinalIgnoreCase))
+                        Console.WriteLine($"[gens] {project.ProjectName}: RDG candidate={Path.GetFileName(dll)} enabled={project.EnableRequestDelegateGenerator}");
+                    if (!project.EnableRequestDelegateGenerator &&
+                        Path.GetFileName(dll)
+                            .Equals("Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!IsRoslynDistribution(dll)) dlls.Add(dll);
+                }
+            }
+            catch (Exception)
+            {
+                // Pack (or its analyzers subfolder) not installed; harmless - same tolerance the
+                // framework-ref resolution already has for missing packs.
+            }
         }
 
         // Analyzer project references (OutputItemType="Analyzer") ship generators from source
@@ -293,7 +341,8 @@ public static class SourceGeneratorRunner
             parseOptions = seeding;
 
             var generatedTrees = runResult.GeneratedTrees.Select(tree =>
-                CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions, tree.FilePath));
+                CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions,
+                    Path.Combine(NativeCompilerUtils.GetGeneratedFileRoot(project), tree.FilePath)));
             compilation = compilation.AddSyntaxTrees(generatedTrees);
         }
 

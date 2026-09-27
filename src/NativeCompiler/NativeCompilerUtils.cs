@@ -14,11 +14,25 @@ namespace NativeCompiler;
 
 public static class NativeCompilerUtils
 {
+    // The SDK materializes synthesized/generated sources at obj/<config>/<tfm>/ and records those
+    // paths as the PDB documents. Reusing the same location keeps the PDB document set (names and
+    // SHA-1 checksums) equal to `dotnet build` output.
+    public static string GetGeneratedFileRoot(Project project) =>
+        Path.Combine(project.ProjectRootPath, "obj",
+            BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath)?.Configuration ?? "Debug",
+            project.TargetFramework ?? "net10.0");
+
+    public static string GetGeneratedFileRoot(Project project, string configuration) =>
+        Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? "net10.0");
+
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) Parse(ProjectFile projectFile,
         CSharpParseOptions options)
     {
         var fileContent = projectFile.FileContent;
-        var stringText = SourceText.From(fileContent, Encoding.UTF8);
+        // SHA-256 document checksum, matching csc's PDB output (this Roslyn fork defaults to SHA-1,
+        // and its SourceText.From prefixes Encoding.UTF8's 3-byte BOM preamble to the checksum;
+        // csc does not - hence the BOM-less UTF8 encoding here).
+        var stringText = SourceText.From(fileContent, new UTF8Encoding(false), SourceHashAlgorithm.Sha256);
         var embeddedText = EmbeddedText.FromSource(projectFile.FilePath, stringText);
         var SyntaxTree = SyntaxFactory.ParseSyntaxTree(stringText, options, projectFile.FilePath);
         return (SyntaxTree, embeddedText);
@@ -286,6 +300,9 @@ public static class NativeCompilerUtils
         var files = directory
             .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
             .Where(f => exclude.Contains(f.Name) == false)
+            // Deterministic reference order: Directory.GetFiles order follows the filesystem, and
+            // the compile (and hence the emitted metadata ref table) must not depend on it.
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var defaultReferences = files.Select(f =>
@@ -299,6 +316,7 @@ public static class NativeCompilerUtils
         var directory = new DirectoryInfo(dotNetAssemblyRefPath);
         var files = directory
             .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var defaultReferences = files.Select(f =>
@@ -340,7 +358,7 @@ public static class NativeCompilerUtils
         return references.ToArray();
     }
 
-    private static void CollectFrameworkReferenceNames(string projectRootPath,
+    internal static void CollectFrameworkReferenceNames(string projectRootPath,
         HashSet<string> visitedProjects, HashSet<string> names)
     {
         var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
@@ -427,6 +445,39 @@ public static class NativeCompilerUtils
         }
     }
 
+    // MSBuild copies every <Reference HintPath="..."> assembly into the entry project's output
+        // (CopyLocal), forwarded through the project-reference graph - that is how the SDK-built
+        // CLI's bin/ carries the ILLink + Interop + SourceGeneration generator analyzers and how their
+        // statically-linked types stay bindable at runtime. Mirror it: add the resolved HintPath
+        // files of the whole graph to the copy set. Projects without HintPath references (ordinary
+        // apps) get nothing extra, so the whole-tree parity gate stays clean.
+        public static List<string> GetHintPathCopyLocalFiles(string projectRootPath)
+        {
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectGraphHintPathFiles(projectRootPath, visited, files);
+            return files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static void CollectGraphHintPathFiles(string root, HashSet<string> visited, HashSet<string> files)
+        {
+            var csproj = Directory.EnumerateFiles(root, "*.csproj", SearchOption.TopDirectoryOnly).FirstOrDefault();
+            if (csproj is null || !visited.Add(Path.GetFullPath(csproj))) return;
+
+            var xml = XML.Project.Parse(csproj);
+            CollectHintPathReferences(xml, root, files);
+
+            foreach (var reference in xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences))
+            {
+                var include = (reference.Include ?? "").Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+                if (string.IsNullOrEmpty(include)) continue;
+                var referencedCsproj = ProjectReferenceFinder.FindReferencedCsproj(include, root);
+                if (referencedCsproj is null) continue;
+                CollectGraphHintPathFiles(Path.GetDirectoryName(referencedCsproj) ?? root, visited, files);
+            }
+        }
+
     // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
     // NativeCompiler.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
     private static readonly string[] RefPackAnalyzerFileNames =
@@ -470,6 +521,57 @@ public static class NativeCompilerUtils
             files.Add(Path.Combine(illinkDir, name));
 
         return files.Where(File.Exists).ToList();
+    }
+
+    // SDK mirror for the output tree: the SDK co-locates only non-framework (NuGet/local) runtime
+    // assemblies next to the app in bin/. Everything that ships in a shared framework is resolved
+    // from the installed runtime at run time and is never copied; analyzer/generator DLLs are
+    // compile-time only. Returns the subset of merged run references that the produced app actually
+    // needs beside its own dll/pdb/runtimeconfig/apphost.
+    public static List<string> GetOutputRuntimeFiles(IEnumerable<MetadataReference> mergedRunReferences)
+    {
+        var frameworkNames = SharedFrameworkAssemblyNames();
+        var output = new List<string>();
+        foreach (var reference in mergedRunReferences)
+        {
+            var display = reference.Display;
+            if (string.IsNullOrEmpty(display)) continue;
+            if (frameworkNames.Contains(Path.GetFileName(display))) continue;
+            output.Add(display);
+        }
+        return output;
+    }
+
+    // File-name set of every assembly shipped in an installed shared framework
+    // (Microsoft.NETCore.App, Microsoft.AspNetCore.App, ...). A project with a NuGet reference that
+    // resolves to one of these stays framework-dependent and must not carry a local copy.
+    private static HashSet<string> SharedFrameworkAssemblyNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var sharedRoot = Path.GetDirectoryName(
+                Path.GetDirectoryName(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath));
+            if (!string.IsNullOrEmpty(sharedRoot) && Directory.Exists(sharedRoot))
+            {
+                foreach (var framework in Directory.EnumerateDirectories(sharedRoot))
+                {
+                    foreach (var version in Directory.EnumerateDirectories(framework))
+                    {
+                        foreach (var file in Directory.EnumerateFiles(version, "*.dll"))
+                            names.Add(Path.GetFileName(file));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to only the base runtime pack if the shared root cannot be enumerated.
+            var runtimeDir = AsemblyExtensions.ResolveSdkRuntimeAssemblyPath;
+            foreach (var file in Directory.EnumerateFiles(runtimeDir, "*.dll"))
+                names.Add(Path.GetFileName(file));
+        }
+        return names;
     }
 
     // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
@@ -582,8 +684,15 @@ public static class NativeCompilerUtils
             ? DefaultNamespacesWithGloBalUsingsForTopLevelExe
             : Namespaces;
 
+        // Roslyn's default ModuleName is "<asm>.exe" for Exe output kinds, but csc/MSBuild
+        // embed the actual output filename ("<asm>.dll" for both console and web, the apphost
+        // is a separate artifact). Mirror that so the module-definition name matches the SDK.
+        // deterministic: true mirrors csc(/deterministic): binary-identical output for identical
+        // input (reproducible PE timestamp, MVID and PDB id). HIGH_ENTROPY_VA (any CPU) is set
+        // on EmitOptions in this Roslyn fork, not here.
         var DefaultCompilationOptions =
-            new CSharpCompilationOptions(OutputKind)
+            new CSharpCompilationOptions(OutputKind, moduleName: project.ProjectName + ".dll",
+                deterministic: true)
                 .WithOptimizationLevel(OptimizationLevel.Debug)
                 .WithUsings(DefaultNamespaces)
                 .WithAllowUnsafe(project.AllowUnsafeBlocks);
@@ -839,27 +948,39 @@ public static class NativeCompilerUtils
         // etc. fail (CS0103). Kept general (no provider-specific types). DELETABLE FEATURE.
         var globalUsingFile =
         """
-        global using global::System;
-        global using global::System.Collections.Generic;
-        global using global::System.IO;
-        global using global::System.Linq;
-        global using global::System.Net.Http;
-        global using global::System.Threading;
-        global using global::System.Threading.Tasks;
+        // <auto-generated/>
+        global using System;
+        global using System.Collections.Generic;
+        global using System.IO;
+        global using System.Linq;
+        global using System.Net.Http;
+        global using System.Threading;
+        global using System.Threading.Tasks;
         """;
 
         if (project.IsWebSdk)
         {
-            globalUsingFile +=
+            // Web SDK order mirrors the SDK's generated {Name}.GlobalUsings.g.cs: the ASP.NET Core
+            // group first, then the base set with System.Net.Http.Json added.
+            globalUsingFile =
             """
-            global using global::Microsoft.AspNetCore.Builder;
-            global using global::Microsoft.AspNetCore.Hosting;
-            global using global::Microsoft.AspNetCore.Http;
-            global using global::Microsoft.AspNetCore.Routing;
-            global using global::Microsoft.Extensions.Configuration;
-            global using global::Microsoft.Extensions.DependencyInjection;
-            global using global::Microsoft.Extensions.Hosting;
-            global using global::Microsoft.Extensions.Logging;
+            // <auto-generated/>
+            global using Microsoft.AspNetCore.Builder;
+            global using Microsoft.AspNetCore.Hosting;
+            global using Microsoft.AspNetCore.Http;
+            global using Microsoft.AspNetCore.Routing;
+            global using Microsoft.Extensions.Configuration;
+            global using Microsoft.Extensions.DependencyInjection;
+            global using Microsoft.Extensions.Hosting;
+            global using Microsoft.Extensions.Logging;
+            global using System;
+            global using System.Collections.Generic;
+            global using System.IO;
+            global using System.Linq;
+            global using System.Net.Http;
+            global using System.Net.Http.Json;
+            global using System.Threading;
+            global using System.Threading.Tasks;
             """;
         }
 
@@ -867,41 +988,93 @@ public static class NativeCompilerUtils
         // that inject extra global usings into consuming projects. DELETABLE FEATURE.
         var packageUsings = BuildPackageUsingStatements(project);
 
+        // The SDK materializes its synthesized sources at obj/<config>/<tfm>/, and uses those
+        // paths for the PDB documents too. Mirroring name + path keeps the PDB document set
+        // (names and SHA-1 checksums) equal to `dotnet build` output.
+        var identity = BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath);
+        var configuration = identity?.Configuration ?? "Debug";
+        var generatedRoot = GetGeneratedFileRoot(project, configuration);
+
         if (project.ImplicitUsings)
         {
-            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", globalUsingFile + packageUsings));
+            project.CSFiles.Add(new ProjectFile(Path.Combine(generatedRoot, project.ProjectName + ".GlobalUsings.g.cs"), globalUsingFile + "\n" + packageUsings));
         }
         else if (!string.IsNullOrWhiteSpace(packageUsings))
         {
-            project.CSFiles.Add(new ProjectFile("GlobalUsings.g.cs", packageUsings));
+            project.CSFiles.Add(new ProjectFile(Path.Combine(generatedRoot, project.ProjectName + ".GlobalUsings.g.cs"), packageUsings));
         }
 
         //Todo read from csproj and add this file currently will be ignored
-        //TODO What is this number 936242573a0bbf456eb83abb29521666de5e44d5 checked git git rev-parse HEAD its not the commit hash.
         // Only inject assembly attributes when the project does not declare any itself
         // (projects with their own AssemblyInfo.cs / [assembly:] attributes will have duplicates).
+        // Values mirror the SDK's GenerateAssemblyInfo defaults so produced assemblies carry the
+        // same identity attributes as `dotnet build` output (parity): Company/Product/Title fall
+        // back to the assembly name, versioning to $(Version) / $(AssemblyVersion) etc., and the
+        // informational version appends the SourceRevisionId only when one is evaluated.
         var hasExistingAssemblyAttributes = project.CSFiles.Any(item => item.FileContent.Contains("[assembly:", StringComparison.OrdinalIgnoreCase));
-        var versionInfoSource =
-        hasExistingAssemblyAttributes
-        ? """
-        [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
-        """
-        : """
+
+        var assemblyName = project.ProjectName;
+        var company = identity?.Company ?? assemblyName;
+        var product = identity?.Product ?? assemblyName;
+        var title = identity?.Title ?? assemblyName;
+        var version = identity?.Version ?? "1.0.0";
+        // The SDK pads an unset AssemblyVersion to four parts ("1.0.0" becomes "1.0.0.0"),
+        // matching the AssemblyVersion attribute in its generated AssemblyInfo.cs.
+        var assemblyVersion = identity?.AssemblyVersion ?? PadToFourParts(version);
+        // SDK pads the file version to four parts ("1.0.0" becomes "1.0.0.0"), matching the
+        // AssemblyFileVersion attribute csc emits for a default $(Version).
+        var fileVersion = identity?.FileVersion ?? PadToFourParts(assemblyVersion);
+        var informationalVersion = identity?.InformationalVersion
+            ?? version + (string.IsNullOrEmpty(identity?.SourceRevisionId) ? "" : "+" + identity!.SourceRevisionId);
+
+        var targetFramework = project.TargetFramework ?? "net10.0";
+        var tfmVersion = targetFramework.StartsWith("net", StringComparison.Ordinal) ? targetFramework[3..] : targetFramework;
+
+        // The SDK emits the TargetFramework attribute into its own generated file
+        // (obj/<config>/<tfm>/.NETCoreApp,Version=v<tf>.AssemblyAttributes.cs). The content
+        // mirrors the SDK's byte-for-byte (including the unconventional "// <autogenerated />"
+        // header) so the PDB document checksum equals `dotnet build` output.
+        var targetFrameworkSource =
+        $"""
+        // <autogenerated />
         using System;
         using System.Reflection;
+        [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v{tfmVersion}", FrameworkDisplayName = ".NET {tfmVersion}")]
+        """ + "\n";
 
-        [assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v10.0", FrameworkDisplayName = ".NET 10.0")]
+        project.CSFiles.Add(new ProjectFile(Path.Combine(generatedRoot, $".NETCoreApp,Version=v{tfmVersion}.AssemblyAttributes.cs"), targetFrameworkSource));
 
-        [assembly: System.Reflection.AssemblyCompanyAttribute("MSCompiler")]
-        [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
-        [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-        [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+936242573a0bbf456eb83abb29521666de5e44d5")]
-        [assembly: System.Reflection.AssemblyProductAttribute("MSCompiler")]
-        [assembly: System.Reflection.AssemblyTitleAttribute("MSCompiler")]
-        [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
-        """;
+        if (!hasExistingAssemblyAttributes)
+        {
+            // Mirrors the SDK's generated AssemblyInfo.cs (WriteCodeFragment output) byte-for-byte
+            // so the PDB document checksum equals `dotnet build` output.
+            var assemblyInfoSource =
+            $"""
+            //------------------------------------------------------------------------------
+            // <auto-generated>
+            //     This code was generated by a tool.
+            //
+            //     Changes to this file may cause incorrect behavior and will be lost if
+            //     the code is regenerated.
+            // </auto-generated>
+            //------------------------------------------------------------------------------
 
-        project.CSFiles.Add(new ProjectFile("VersionInfo.g.cs", versionInfoSource));
+            using System;
+            using System.Reflection;
+
+            [assembly: System.Reflection.AssemblyCompanyAttribute({CSharpStringLiteral(company)})]
+            [assembly: System.Reflection.AssemblyConfigurationAttribute({CSharpStringLiteral(configuration)})]
+            [assembly: System.Reflection.AssemblyFileVersionAttribute({CSharpStringLiteral(fileVersion)})]
+            [assembly: System.Reflection.AssemblyInformationalVersionAttribute({CSharpStringLiteral(informationalVersion)})]
+            [assembly: System.Reflection.AssemblyProductAttribute({CSharpStringLiteral(product)})]
+            [assembly: System.Reflection.AssemblyTitleAttribute({CSharpStringLiteral(title)})]
+            [assembly: System.Reflection.AssemblyVersionAttribute({CSharpStringLiteral(assemblyVersion)})]
+
+            // Generated by the MSBuild WriteCodeFragment class.
+
+            """ + "\n";
+            project.CSFiles.Add(new ProjectFile(Path.Combine(generatedRoot, $"{project.ProjectName}.AssemblyInfo.cs"), assemblyInfoSource));
+        }
 
         // <InternalsVisibleTo Include="..." /> (and AssemblyAttribute InternalsVisibleTo) items make
         // internal members visible to named friend assemblies. Real MSBuild flattens both into
@@ -1119,6 +1292,16 @@ public static class NativeCompilerUtils
         File.Copy(appHostTemplate, project.ExePathName, overwrite: true);
         File.SetAttributes(project.ExePathName, FileAttributes.Normal);
 
+        // On Unix the SDK emits the apphost as an executable; the template (and a plain
+        // File.Copy) leave it non-executable, so stage the rwx bits like dotnet build does.
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(project.ExePathName,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+
         var appDllName = Path.GetFileName(project.DllPathName);
         BindAppHost(project.ExePathName, appDllName);
     }
@@ -1134,9 +1317,15 @@ public static class NativeCompilerUtils
         var sdkDir = Path.Combine(AsemblyExtensions.ResolveSdkRoot, "sdk");
         if (!Directory.Exists(sdkDir)) return null;
 
+        // The SDK template file name is platform-specific: apphost.exe on Windows, apphost on
+        // Unix. Some installs ship only one of the two, so probe both per SDK version.
         return Directory.EnumerateDirectories(sdkDir)
             .OrderByDescending(ParseSdkVersion)
-            .Select(sdkVersionDir => Path.Combine(sdkVersionDir, "AppHostTemplate", "apphost.exe"))
+            .SelectMany(sdkVersionDir => new[]
+            {
+                Path.Combine(sdkVersionDir, "AppHostTemplate", "apphost.exe"),
+                Path.Combine(sdkVersionDir, "AppHostTemplate", "apphost")
+            })
             .FirstOrDefault(File.Exists);
     }
 
@@ -1197,4 +1386,14 @@ public static class NativeCompilerUtils
     //managed/Microsoft.NET.HostModel/AppHost/HostWriter.cs. The value never changes between runtime
     //versions or machines, so embedding it here mirrors the SDK exactly.
     private const string AppBinaryPathPlaceholder = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2";
+
+    private static string CSharpStringLiteral(string value) =>
+        "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+
+    private static string PadToFourParts(string version)
+    {
+        var parts = version.Split('.');
+        if (parts.Length >= 4) return version;
+        return string.Join('.', parts.Concat(Enumerable.Repeat("0", 4 - parts.Length)));
+    }
 }

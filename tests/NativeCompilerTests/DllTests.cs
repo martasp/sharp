@@ -25,18 +25,27 @@ namespace Tests;
 [Collection("Sequential Tests 3")]
 public class DllSnapshotTests
 {
-    private const string MSCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MSCompiler";
-    private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
+    private static readonly string MSCompiler = TestPaths.RootProjects("MSCompiler");
+    private static readonly string MyCompiler = TestPaths.RootProjects("MyCompiler");
 
     [Fact]
     public async Task TypeDefinitionUsage()
     {
-        var MsCompilerDllMetadata = ExtractAll(MSCompiler + @"\myc\Debug\net10.0\MSCompiler.dll");
+        var msCompilerDll = Path.Combine(MSCompiler, "myc", "Debug", "net10.0", "MSCompiler.dll");
+        // The golden MSCompiler.dll used to be a checked-out artifact (Windows machine). Make the
+        // test self-contained: build it on first run so a fresh checkout has a reference to compare.
+        if (!File.Exists(msCompilerDll))
+        {
+            var msBuild = NativeCompiler.NativeCompiler.Build(MSCompiler);
+            Assert.True(msBuild.Success, $"Building MSCompiler failed: {msBuild.Errors}");
+        }
+
+        var MsCompilerDllMetadata = ExtractAll(msCompilerDll);
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
         Assert.True(buildDetails.Success, $"Build failed with errors: {buildDetails.Errors}");
 
-        var MyCompilerDllMetadata = ExtractAll(MyCompiler + @"\myc\Debug\net10.0\MSCompiler.dll"); // MyCompiler produces an MSCompiler.exe
+        var MyCompilerDllMetadata = ExtractAll(Path.Combine(MyCompiler, "myc", "Debug", "net10.0", "MSCompiler.dll")); // MyCompiler produces an MSCompiler.exe
 
         var MsCompilerDllMetadataJson = JsonSerializer.Serialize(MsCompilerDllMetadata, new JsonSerializerOptions
         {

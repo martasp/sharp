@@ -136,8 +136,13 @@ public static class NativeCompiler
 
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
 
-        var paths = mergedDefaultReferencesForRunning.Select(item => item?.Display ?? "").ToList();
-        paths.AddRange(GetAnalyzerRuntimeFiles());
+        // SDK mirror: only the app's own artifacts and non-framework NuGet/local assemblies are
+        // co-located in bin. Shared-framework DLLs (Microsoft.NETCore.App & Microsoft.AspNetCore.App)
+        // are resolved from the installed runtime at run time - never copied by `dotnet build`.
+        // HintPath <Reference> assemblies are CopyLocal in MSBuild (the compiler's own graph carries
+        // the SDK generator/analyzer DLLs so the self-hosted JIT stays bindable), so those ride along.
+        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning);
+        paths.AddRange(GetHintPathCopyLocalFiles(projectPath));
         WriteFiles(project.SharpBinFolderPath, paths);
 
         if (produceDll.success)
@@ -342,9 +347,13 @@ public static class NativeCompiler
         {
             //EmitOptions must use PortablePdb: the string Emit overload forces the native Windows PDB
             //format which relies on COM (DiaSymReader) and is not supported under NativeAOT.
+            //highEntropyVirtualAddressSpace: true mirrors the SDK's AnyCPU PE characteristics
+            //(0x8560, HIGH_ENTROPY_VA bit set), matching `dotnet build` output. Deterministic
+            //emission is enabled on the compilation options (this Roslyn fork keeps the flag there).
             var emitOptions = new EmitOptions(
                 debugInformationFormat: DebugInformationFormat.PortablePdb,
-                pdbFilePath: project.PDBPathName);
+                pdbFilePath: project.PDBPathName,
+                highEntropyVirtualAddressSpace: true);
 
             (bool success, string errors) result;
             using (var dllStream = File.Create(project.DllPathName))

@@ -49,6 +49,13 @@ public class Project : IProject
 
     public string? Nullable => XMLProject.PropertyGroup?.FirstOrDefault()?.Nullable ?? BuildProps.Nullable;
 
+    // SDK gate for the Request Delegate Generator (EnableRequestDelegateGenerator). Off unless the
+    // project opts in (the SDK also flips it for PublishTrimmed/AOT, not evaluated here).
+    public bool EnableRequestDelegateGenerator =>
+        (XMLProject.PropertyGroup?.FirstOrDefault()?.EnableRequestDelegateGenerator?.Trim()
+            .Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
+        || BuildProps.EnableRequestDelegateGenerator;
+
     public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion ?? BuildProps.LangVersion;
 
     public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
@@ -81,7 +88,14 @@ public class Project : IProject
         }
     }
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
-    public string ExtensionName => ProjectName + "." + ResolvedProjectExtensionType();
+    public string ExtensionName
+    {
+        get
+        {
+            var extension = ResolvedProjectExtensionType();
+            return string.IsNullOrEmpty(extension) ? ProjectName : ProjectName + "." + extension;
+        }
+    }
     public string ExePathName => Path.Combine(SharpBinFolderPath, ExtensionName);
     public string DllPathName => Path.Combine(SharpBinFolderPath, ProjectName + ".dll");
     public string PDBName => ProjectName + ".pdb";
@@ -188,10 +202,13 @@ public class Project : IProject
 
     public static string GetSharpBinDirectory(string projectRootPath, string? targetFramework)
     {
-        // Dedicated output layout mirroring the SDK ("bin\Debug\<TFM>") but under our own "myc"
-        // folder, so the compiler never clobbers real dotnet build output while keeping the same
-        // path depth (printed `project -> output` lines stay structurally identical).
-        var path = Path.Combine(projectRootPath, "myc", "Debug", targetFramework ?? "net10.0");
+        // SDK-mirroring output layout ("myc\Debug\<TFM>"). Root stays "myc" - the single tiny
+        // difference from real `dotnet build` output ("bin") so this compiler's output never
+        // clobbers SDK build output during development; layout (Debug\<TFM>) and everything inside
+        // the DLLs match. `NATIVECOMPILER_OUTPUT_ROOT` overrides the root (e.g. "bin") for exact
+        // path-parity runs.
+        var root = Environment.GetEnvironmentVariable("NATIVECOMPILER_OUTPUT_ROOT") ?? "myc";
+        var path = Path.Combine(projectRootPath, root, "Debug", targetFramework ?? "net10.0");
         CreateFolderIfNotExists(path);
         return path;
     }
@@ -219,11 +236,8 @@ public class Project : IProject
     {
         var ExeContains = XMLProject.PropertyGroup?.FirstOrDefault()?.OutputType?.Contains("Exe") ?? false;
 
-        return (ExeContains || IsWebSdk) switch
-        {
-            true => "exe",
-            false => "dll"
-        };
+        // SDK apphost naming: <AssemblyName>.exe on Windows, bare <AssemblyName> on Unix.
+        return (ExeContains || IsWebSdk) && OperatingSystem.IsWindows() ? "exe" : "";
     }
 }
 

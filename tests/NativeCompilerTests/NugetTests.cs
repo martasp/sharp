@@ -115,7 +115,7 @@ public class NuGetTests
             project.ImplicitUsings.ShouldBeTrue();
             var globalUsings = project.CSFiles.Single(file => file.FilePath.EndsWith("GlobalUsings.g.cs")).FileContent;
             globalUsings.ShouldContain("global using static global::Parlot.Fluent.Parsers;");
-            globalUsings.ShouldContain("global using global::System.Linq;");
+            globalUsings.ShouldContain("global using System.Linq;");
         }
         finally
         {
@@ -140,8 +140,8 @@ public class NuGetTests
 
             project.IsWebSdk.ShouldBeTrue();
             var globalUsings = project.CSFiles.Single(file => file.FilePath.EndsWith("GlobalUsings.g.cs")).FileContent;
-            globalUsings.ShouldContain("global using global::Microsoft.AspNetCore.Builder;");
-            globalUsings.ShouldContain("global using global::Microsoft.AspNetCore.Http;");
+            globalUsings.ShouldContain("global using Microsoft.AspNetCore.Builder;");
+            globalUsings.ShouldContain("global using Microsoft.AspNetCore.Http;");
         }
         finally
         {

@@ -27,10 +27,14 @@ public class PerformanceComparisonTests
 
     public static string RepoSolution => Path.Combine(RepoRoot, "NativeCompiler.sln");
 
+    // Published compiler executable name is platform-specific (NativeCompilerCLI.exe on Windows,
+    // NativeCompilerCLI on Unix). Default to the publish matching the current OS; the variable
+    // override still wins for custom seeds.
     private static readonly string PublishedCompilerExe =
         Environment.GetEnvironmentVariable("NATIVECOMPILER_PUBLISHED_EXE")
-        ?? Path.Combine(RepoRoot, "src", "NativeCompilerCLI", "bin", "Release", "net10.0", "win-x64",
-            "publish", "NativeCompilerCLI.exe");
+        ?? Path.Combine(RepoRoot, "src", "NativeCompilerCLI", "bin", "Release", "net10.0",
+            OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
+            OperatingSystem.IsWindows() ? "NativeCompilerCLI.exe" : "NativeCompilerCLI");
 
     [Fact]
     public async Task Compare_BuildSolution_Against_DotnetBuild()

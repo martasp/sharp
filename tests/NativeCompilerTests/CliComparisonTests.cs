@@ -72,11 +72,18 @@ public class CliComparisonTests
     {
         string normalized = raw
             .Replace("\r\n", "\n")
-            .Replace(RepoRoot + "\\", SolutionToken + "\\")
+            // Canonicalize separators FIRST: every downstream lookup then matches a single
+            // dialect, so a Windows-authored snapshot (\ separators) and a Linux run (/)
+            // land on byte-identical text. Path.Combine can't do this - it emits the host's
+            // native separator, which is exactly the variance we are removing.
+            .Replace('\\', '/')
+            // Cull the path holder so snapshots stay machine-independent
+            // (windows: {SolutionDirectory}\... linux: {SolutionDirectory}/...).
+            .Replace(RepoRoot.Replace('\\', '/') + '/', SolutionToken + '/')
             // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
             // never overwrites real SDK output in bin\; the physical location is irrelevant to
             // behavior, so map it to the canonical SDK layout for byte-parity with `dotnet build`.
-            .Replace("\\myc\\Debug\\net10.0\\", "\\bin\\Debug\\net10.0\\");
+            .Replace("/myc/Debug/net10.0/", "/bin/Debug/net10.0/");
 
         return string.Join("\n", normalized.Split('\n')
             .Where(line =>

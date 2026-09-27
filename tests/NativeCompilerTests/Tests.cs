@@ -27,7 +27,7 @@ public class ConsoleAppTests
     [Fact]
     public void ITShouldCompileSelfProject()
     {
-        var csprojFolderPath = @"D:\main\Pocs\NativeCompiler\src\NativeCompiler";
+        var csprojFolderPath = TestPaths.Src("NativeCompiler");
         var result = NativeCompiler.NativeCompiler.Build(csprojFolderPath);
         result.Success.ShouldBeTrue(result.Errors);
     }

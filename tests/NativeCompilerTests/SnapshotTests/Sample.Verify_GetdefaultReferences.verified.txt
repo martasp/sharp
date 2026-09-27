@@ -200,6 +200,10 @@
     FilePath: ./System.Composition.TypedParts.dll
   },
   {
+    Display: ./System.Reflection.MetadataLoadContext.dll,
+    FilePath: ./System.Reflection.MetadataLoadContext.dll
+  },
+  {
     Display: ./System.Text.Json.SourceGeneration.dll,
     FilePath: ./System.Text.Json.SourceGeneration.dll
   },

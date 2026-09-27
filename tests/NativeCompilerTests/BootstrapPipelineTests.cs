@@ -30,11 +30,19 @@ public class BootstrapPipelineTests
     private static readonly string RepoRoot = Path.GetFullPath(
         Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
+    // The AOT seed is `dotnet publish` output and its file name is platform-specific: the Windows
+    // RID produces NativeCompilerCLI.exe, the Linux RID NativeCompilerCLI. Pick the publish that
+    // matches the current OS (produced by publish.bat / `dotnet publish -r <rid>`).
     private static readonly string PublishedSeedExe = Path.Combine(
-        RepoRoot, "src", "NativeCompilerCLI", "bin", "Release", "net10.0", "win-x64", "publish",
-        "NativeCompilerCLI.exe");
+        RepoRoot, "src", "NativeCompilerCLI", "bin", "Release", "net10.0",
+        OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
+        OperatingSystem.IsWindows() ? "NativeCompilerCLI.exe" : "NativeCompilerCLI");
 
     private const string SolutionFile = "NativeCompiler.sln";
+
+    // The JIT compiler's apphost name mirrors the SDK: NativeCompilerCLI.exe on Windows,
+    // NativeCompilerCLI on Unix.
+    private static string HostName() => "NativeCompilerCLI" + (OperatingSystem.IsWindows() ? ".exe" : "");
 
     private static readonly string BootstrapReportPath = Path.Combine(
         Path.GetTempPath(), "nc-bootstrap-last-run.txt");
@@ -74,7 +82,7 @@ public class BootstrapPipelineTests
         var gen1Compiler = StageCompilerCopy(jitOutput);
         var gen1 = await Compile(
             $"\"{sln}\"",
-            Path.Combine(gen1Compiler, "NativeCompilerCLI.exe"),
+            Path.Combine(gen1Compiler, HostName()),
             "generation 1");
         AssertClean("generation 1", gen1);
 
@@ -83,7 +91,7 @@ public class BootstrapPipelineTests
         var gen2Compiler = StageCompilerCopy(jitOutput);
         var gen2 = await Compile(
             $"\"{sln}\"",
-            Path.Combine(gen2Compiler, "NativeCompilerCLI.exe"),
+            Path.Combine(gen2Compiler, HostName()),
             "generation 2");
         AssertClean("generation 2", gen2);
 
