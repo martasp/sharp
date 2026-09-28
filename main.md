@@ -5,14 +5,25 @@ Self-hosting C# compiler built on Roslyn. Compiles `.csproj` projects and `.sln`
 ## Usage
 
 ```
-NativeCompilerCLI <target>
+NativeCompilerCLI <command> [target] [arguments]
 ```
+
+Commands mirror the .NET SDK: `build`, `run`, `help`, `version` (`--version`).
+Legacy bare-path invocation still works: `NativeCompilerCLI <target>` routes to `build`.
 
 `<target>` can be:
 
 - a project **folder** (builds the single `.csproj` found in it, output to `bin\sharpbin`)
 - a `.csproj` file path
 - a `.sln` file path (builds every project in dependency order; all failures reported at the end)
+
+When no target is given the current directory is searched for a single `.csproj`/`.sln(x)`,
+exactly like `dotnet build`/`dotnet run` (missing -> MSB1003 / "Couldn't find a project to
+run"; ambiguous -> MSB1011). `run` launches the freshly built app (apphost when present,
+else `dotnet <dll>`), propagates the app exit code, and forwards everything after `--` as
+application arguments. `--version` prints the hosting SDK version; `help` prints the SDK's
+general help text. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
+`--no-incremental`, `--nologo`, `-v`, ...) are accepted and ignored.
 
 ## What we support
 
@@ -42,6 +53,27 @@ NativeCompilerCLI <target>
 ### Scripts
 - `publish.bat` – `dotnet publish` win-x64 Release
 - `publish.sh`  – `dotnet publish` linux-x64 Release (needs Linux/WSL for the AOT native toolchain)
+
+## CLI command parity
+
+Captured, byte-for-byte output comparison of our CLI vs the matching `dotnet` command
+(`CliCommandParityTests`, side-by-side Verify snapshots). One-off detail lines that cannot be
+deterministically reproduced (SDK wall-clock `Time Elapsed`, restore banners) are stripped by
+the shared normalizer. `build` off the fixtures below is run with `--nologo --no-restore
+--no-incremental` on the SDK side.
+
+| Command | Ours | `dotnet` | Parity |
+|---|---|---|---|
+| `build` (success) | project `->` mapping, `Build succeeded.`, `0 Warning(s)` `0 Error(s)`, rc=0 | same text (plus `Time Elapsed` noise line) | identical bytes after normalize |
+| `build` (failure) | `error CS0103 (...)` + `Build FAILED.` + echoed errors + `0 Warning(s)` `1 Error(s)`, rc=1 | same | identical |
+| `run` (success) | application output only, rc=0 | same (incl. `--no-restore`) | identical |
+| `run` (failure) | `error CS0103 (...)` + `The build failed. Fix the build errors and run again.`, rc=1 | same | identical |
+| `run -- <app args>` | args forwarded to the app | same | identical |
+| `--version` / `version` | `10.0.400` (hosting SDK) | `10.0.400` | identical |
+| `help` | full SDK command list | full SDK command list | identical (`diff` empty) |
+| `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
+| `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
+| `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |
 
 ## Benchmarking
 

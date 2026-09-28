@@ -61,43 +61,8 @@ public class CliComparisonTests
         return await outputTask + await errorTask;
     }
 
-    // Token used in place of the repo root so snapshots stay machine-independent. Must be applied
-    // here BEFORE rendering: Verify would otherwise swap the real path for {SolutionDirectory}
-    // after the side-by-side was laid out, shortening only the affected lines and misaligning the
-    // pipes. Normalizing first keeps wrap points and column widths consistent with the saved text.
-    private const string SolutionToken = "{SolutionDirectory}";
-
-    // Wall-clock, restore banners add noise per run; drop them so the snapshot is deterministic.
-    private static string Normalize(string raw)
-    {
-        string normalized = raw
-            .Replace("\r\n", "\n")
-            // Canonicalize separators FIRST: every downstream lookup then matches a single
-            // dialect, so a Windows-authored snapshot (\ separators) and a Linux run (/)
-            // land on byte-identical text. Path.Combine can't do this - it emits the host's
-            // native separator, which is exactly the variance we are removing.
-            .Replace('\\', '/')
-            // Cull the path holder so snapshots stay machine-independent
-            // (windows: {SolutionDirectory}\... linux: {SolutionDirectory}/...).
-            .Replace(RepoRoot.Replace('\\', '/') + '/', SolutionToken + '/')
-            // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
-            // never overwrites real SDK output in bin\; the physical location is irrelevant to
-            // behavior, so map it to the canonical SDK layout for byte-parity with `dotnet build`.
-            .Replace("/myc/Debug/net10.0/", "/bin/Debug/net10.0/");
-
-        return string.Join("\n", normalized.Split('\n')
-            .Where(line =>
-            {
-                string trimmed = line.Trim();
-                return !trimmed.StartsWith("Total time:")
-                       && !trimmed.StartsWith("Solution total time:")
-                       && !trimmed.StartsWith("Time Elapsed")
-                       && !trimmed.StartsWith("Determining projects to restore")
-                       && !trimmed.StartsWith("All projects are up-to-date for restore")
-                       && !trimmed.StartsWith("Restored ");
-            })
-            .Select(line => line.TrimEnd()));
-    }
+    // Wall-clock, restore banners add noise per run; drop them so the comparison is deterministic.
+    private static string Normalize(string raw) => CliComparisonHelper.Normalize(raw);
 
 [Fact]
     public Task Build_HelloWorld_VisualParity_WithDotnetBuild()
