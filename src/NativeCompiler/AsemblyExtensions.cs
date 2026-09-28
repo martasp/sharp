@@ -63,6 +63,18 @@ public static class AsemblyExtensions
 
     public static string ResolveSdkRoot => ResolveDotnetRoot();
 
+    // $(MSBuildSDKsPath) is the "Sdks" folder of the active SDK version, used by HintPath references
+    // into the SDK directory (e.g. Microsoft.Extensions.DependencyModel.dll lives one level up).
+    public static string ResolveSdkMsBuildSdksPath
+    {
+        get
+        {
+            var sdkRoot = Path.Combine(ResolveDotnetRoot(), "sdk");
+            var best = SelectBestVersionDirectory(sdkRoot, preferredMajor: Environment.Version.Major);
+            return Path.Combine(best, "Sdks");
+        }
+    }
+
     private static string ResolveDotnetRoot()
     {
         var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");

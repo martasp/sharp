@@ -23,4 +23,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NativeCompiler\NativeCompiler.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- NativeCompiler embeds deps.json generation via the SDK-shipped M.E.DependencyModel (a
+         HintPath reference), so hosts must carry the assembly too or in-proc builds fail to JIT
+         DepsJsonWriter.Write. -->
+    <Reference Include="Microsoft.Extensions.DependencyModel" Private="true">
+      <HintPath>$(MSBuildSDKsPath)\..\Microsoft.Extensions.DependencyModel.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 </Project>

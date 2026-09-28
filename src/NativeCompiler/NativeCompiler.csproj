@@ -58,6 +58,13 @@
       <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.JavaScript.JSImportGenerator.dll</HintPath>
     </Reference>
 
+    <!-- Microsoft.Extensions.DependencyModel ships only in the SDK (not the ref pack or shared
+         framework). HintPath-copied like the analyzers above so the JIT self-host stays bindable,
+         and so a `dotnet build` of this project copies it to bin/ exactly like the compiler does. -->
+    <Reference Include="Microsoft.Extensions.DependencyModel" Private="true">
+      <HintPath>$(MSBuildSDKsPath)\..\Microsoft.Extensions.DependencyModel.dll</HintPath>
+    </Reference>
+
   </ItemGroup>
 
   <!-- Root System.SR::GetResourceString in analyzer assemblies so NativeAOT keeps their

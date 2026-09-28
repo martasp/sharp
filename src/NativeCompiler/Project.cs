@@ -88,6 +88,11 @@ public class Project : IProject
         }
     }
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
+    // SDK $(Version): the project's <Version> (or the Directory.Build.props overlay), defaulted to
+    // "1.0.0" like the SDK. Becomes the entry's "Name/Version" key in deps.json.
+    public string Version => BuildPropsEvaluator.EvaluateIdentity(ProjectRootPath)?.Version
+                             ?? "1.0.0";
+    public string DepsJsonPathName => Path.Combine(SharpBinFolderPath, ProjectName + ".deps.json");
     public string ExtensionName
     {
         get

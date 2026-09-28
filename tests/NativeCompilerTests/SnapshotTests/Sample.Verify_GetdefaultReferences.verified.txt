@@ -88,6 +88,10 @@
     FilePath: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll
   },
   {
+    Display: ./Microsoft.Extensions.DependencyModel.dll,
+    FilePath: ./Microsoft.Extensions.DependencyModel.dll
+  },
+  {
     Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
   },

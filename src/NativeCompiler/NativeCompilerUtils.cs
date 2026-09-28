@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using XML;
 //See https://aka.ms/new-console-template for more information
 
@@ -528,9 +529,10 @@ public static class NativeCompilerUtils
     // from the installed runtime at run time and is never copied; analyzer/generator DLLs are
     // compile-time only. Returns the subset of merged run references that the produced app actually
     // needs beside its own dll/pdb/runtimeconfig/apphost.
-    public static List<string> GetOutputRuntimeFiles(IEnumerable<MetadataReference> mergedRunReferences)
+    public static List<string> GetOutputRuntimeFiles(IEnumerable<MetadataReference> mergedRunReferences,
+        string projectRootPath, string targetFramework)
     {
-        var frameworkNames = SharedFrameworkAssemblyNames();
+        var frameworkNames = SharedFrameworkAssemblyNames(projectRootPath, targetFramework);
         var output = new List<string>();
         foreach (var reference in mergedRunReferences)
         {
@@ -542,26 +544,65 @@ public static class NativeCompilerUtils
         return output;
     }
 
-    // File-name set of every assembly shipped in an installed shared framework
-    // (Microsoft.NETCore.App, Microsoft.AspNetCore.App, ...). A project with a NuGet reference that
-    // resolves to one of these stays framework-dependent and must not carry a local copy.
-    private static HashSet<string> SharedFrameworkAssemblyNames()
+    // File-name set of the assemblies shipped in the shared frameworks the app actually references.
+    // Mirrors the SDK: only the frameworks listed in the restored assets (frameworkReferences) - i.e.
+    // Microsoft.NETCore.App plus any explicit <FrameworkReference> like Microsoft.AspNetCore.App -
+    // suppress copy-local. Enumerating every installed shared framework would wrongly drop assemblies
+    // that an AspNetCore shared framework happens to carry (e.g. Microsoft.Extensions.*) from an app
+    // that targets the console SDK and does not reference them. The exclusion is version-agnostic:
+    // file names are stable across patches of the same framework, and the app resolves whatever the
+    // targeted runtime provides at run time.
+    private static HashSet<string> SharedFrameworkAssemblyNames(string projectRootPath, string targetFramework)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var sharedRoot = Path.GetDirectoryName(
-                Path.GetDirectoryName(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath));
-            if (!string.IsNullOrEmpty(sharedRoot) && Directory.Exists(sharedRoot))
+            var assetsPath = Path.Combine(projectRootPath, "obj", "project.assets.json");
+            var frameworkNames = new List<string>();
+            if (File.Exists(assetsPath))
             {
-                foreach (var framework in Directory.EnumerateDirectories(sharedRoot))
+                using var document = JsonDocument.Parse(File.ReadAllBytes(assetsPath));
+                var root = document.RootElement;
+                if (root.TryGetProperty("project", out var projectJson) &&
+                    projectJson.TryGetProperty("frameworks", out var frameworks) &&
+                    frameworks.ValueKind == JsonValueKind.Object)
                 {
-                    foreach (var version in Directory.EnumerateDirectories(framework))
+                    foreach (var framework in frameworks.EnumerateObject())
                     {
-                        foreach (var file in Directory.EnumerateFiles(version, "*.dll"))
-                            names.Add(Path.GetFileName(file));
+                        if (!MatchesTargetFramework(framework.Name, targetFramework)) continue;
+                        if (framework.Value.TryGetProperty("frameworkReferences", out var references) &&
+                            references.ValueKind == JsonValueKind.Object)
+                        {
+                            foreach (var reference in references.EnumerateObject())
+                                frameworkNames.Add(reference.Name);
+                        }
                     }
                 }
+            }
+
+            if (frameworkNames.Count == 0)
+                frameworkNames.Add("Microsoft.NETCore.App");
+
+            var sharedRoot = Path.GetDirectoryName(
+                Path.GetDirectoryName(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath));
+            if (string.IsNullOrEmpty(sharedRoot) || !Directory.Exists(sharedRoot))
+                return names;
+
+            foreach (var frameworkName in frameworkNames)
+            {
+                var frameworkDir = Directory.EnumerateDirectories(
+                        Path.Combine(sharedRoot, frameworkName))
+                    .Where(dir => FrameworkFolderMatches(dir, targetFramework))
+                    .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (frameworkDir is null)
+                    frameworkDir = Directory.EnumerateDirectories(Path.Combine(sharedRoot, frameworkName))
+                        .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault();
+                if (frameworkDir is null) continue;
+
+                foreach (var file in Directory.EnumerateFiles(frameworkDir, "*.dll"))
+                    names.Add(Path.GetFileName(file));
             }
         }
         catch
@@ -574,11 +615,30 @@ public static class NativeCompilerUtils
         return names;
     }
 
+    // "net10.0", "net10.0-windows", "netcoreapp3.1" -> "10.0"/"3.1" so the matching installed
+    // shared framework version folder (e.g. "10.0.11") is selected.
+    private static bool FrameworkFolderMatches(string folderPath, string targetFramework)
+    {
+        var numeric = new string(targetFramework.SkipWhile(c => !char.IsDigit(c)).TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+        var parts = numeric.Split('.');
+        if (parts.Length < 2) return true; // unknown shape: accept and rely on the folder name
+        var folderName = Path.GetFileName(folderPath);
+        return folderName.StartsWith(parts[0] + "." + parts[1] + ".", StringComparison.Ordinal);
+    }
+
+    private static bool MatchesTargetFramework(string assetFramework, string projectFramework)
+    {
+        if (string.Equals(assetFramework, projectFramework, StringComparison.OrdinalIgnoreCase)) return true;
+        // Asset entries can be fully-qualified (e.g. "net10.0"), while a project may multi-target;
+        // match by the numeric version shape only as a fallback.
+        return FrameworkFolderMatches(assetFramework + ".0", projectFramework);
+    }
+
     // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
     // e.g. `$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\...`); the native compiler previously only
     // handled ProjectReference/PackageReference items, so projects referencing DLLs by HintPath (like
     // NativeCompiler.csproj itself, via the ILLink/Roslyn generator analyzers) failed to compile under
-    // self-hosting. Only the two analyzer property tokens this codebase actually uses are expanded;
+    // self-hosting. Only the analyzer/SDK property tokens this codebase actually uses are expanded;
     // anything else is skipped rather than emulating MSBuild property evaluation.
     private static void CollectHintPathReferences(XML.Project xml, string projectRootPath,
         HashSet<string> referenceFiles)
@@ -593,6 +653,7 @@ public static class NativeCompilerUtils
                 var expanded = hintPath
                     .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
                     .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath())
+                    .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
                 if (string.IsNullOrEmpty(expanded)) continue;
