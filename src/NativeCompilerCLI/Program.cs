@@ -114,23 +114,50 @@ int BuildCommand(string[] args)
 
         foreach (var error in solutionResult.Errors) WriteLine(error);
 
+        var isSln = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase);
+        var failedErrorLines = new List<string>();
+        var successLines = new List<string>();
         foreach (var project in solutionResult.Projects)
         {
             if (project.Result.Success)
             {
+                // `dotnet build *.sln` suppresses per-project lines on an all-successful build,
+                // but `.slnx` (and any failing solution build) prints them per compiled project.
+                if (isSln && solutionResult.Success) continue;
                 var outputPath = project.Result.Project?.DllPathName ?? project.ProjectFile;
-                WriteLine($"  {project.ProjectName} -> {outputPath}");
+                successLines.Add($"  {project.ProjectName} -> {outputPath}");
             }
             else
             {
-                WriteLine(WithProjectSuffix(project.Result.Errors, project.ProjectFile));
+                failedErrorLines.Add(WithProjectSuffix(project.Result.Errors, project.ProjectFile));
             }
         }
 
-        var failedProjects = solutionResult.Projects.Count(project => !project.Result.Success);
+        // SDK ordering quirk: a failing `.slnx` lists compiled projects before the errors, while a
+        // `.sln` lists the errors first. Both are stable across runs, so mirror them exactly.
+        if (!isSln)
+        {
+            foreach (var line in successLines) WriteLine(line);
+            foreach (var line in failedErrorLines) WriteLine(line);
+        }
+        else
+        {
+            foreach (var line in failedErrorLines) WriteLine(line);
+            foreach (var line in successLines) WriteLine(line);
+        }
+
+        WriteLine();
         WriteLine(solutionResult.Success ? "Build succeeded." : "Build FAILED.");
+        if (!solutionResult.Success)
+        {
+            WriteLine();
+            foreach (var failedLine in failedErrorLines) WriteLine(failedLine);
+        }
+
+        var failedProjects = solutionResult.Projects.Count(project => !project.Result.Success);
         WriteLine("    0 Warning(s)");
         WriteLine($"    {failedProjects} Error(s)");
+        WriteLine();
 
         return solutionResult.Success ? 0 : 1;
     }
@@ -251,6 +278,8 @@ static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
         WriteLine($"Couldn't find a project to run. Ensure a project exists in {dir}, or pass the path to the project using --project.");
         return null;
     }
+    if (resolved.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+        return Path.GetDirectoryName(resolved)!;
     return resolved;
 }
 

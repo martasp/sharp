@@ -25,10 +25,20 @@ public class CliCommandParityTests
     public static string FailingFixtureDir =
         Path.Combine(RepoRoot, "tests", "TestExampleProjects", "FailingFixture");
 
+    public static string TestExampleProjectsDir =
+        Path.Combine(RepoRoot, "tests", "TestExampleProjects");
+
+    public static string SlnxFixturesSolutionPath =
+        Path.Combine(TestExampleProjectsDir, "SlnxFixtures.slnx");
+
+    public static string SlnFixturesSolutionPath =
+        Path.Combine(TestExampleProjectsDir, "SlnFixtures", "SlnFixtures.sln");
+
     static string CliDll =>
         Path.Combine(RepoRoot, "src", "NativeCompilerCLI", "bin", "Debug", "net10.0", "NativeCompilerCLI.dll");
 
-    private static async Task<(string Output, int ExitCode)> RunAsync(string fileName, string arguments)
+    private static async Task<(string Output, int ExitCode)> RunAsync(
+        string fileName, string arguments, string? workingDirectory = null)
     {
         var startInfo = new ProcessStartInfo(fileName, arguments)
         {
@@ -36,6 +46,7 @@ public class CliCommandParityTests
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            WorkingDirectory = workingDirectory ?? Directory.GetCurrentDirectory(),
         };
 
         using var process = Process.Start(startInfo)!;
@@ -75,6 +86,59 @@ public class CliCommandParityTests
     [Fact]
     public Task Help_Output_Parity()
         => Compare("help", "help", "help");
+
+    [Fact]
+    public async Task Build_Sln_Path_Output_Parity()
+    {
+        await EnsureSdkRestore(SlnFixturesSolutionPath);
+        await Compare("build_sln_path", $"build \"{SlnFixturesSolutionPath}\"",
+            $"build \"{SlnFixturesSolutionPath}\" --nologo --no-restore --no-incremental");
+    }
+
+    [Fact]
+    public async Task Build_Slnx_Path_Output_Parity()
+    {
+        await EnsureSdkRestore(SlnxFixturesSolutionPath);
+        await Compare("build_slnx_path", $"build \"{SlnxFixturesSolutionPath}\"",
+            $"build \"{SlnxFixturesSolutionPath}\" --nologo --no-restore --no-incremental");
+    }
+
+    // `dotnet build --no-restore` fails with NETSDK1004 when an asset file is missing, so restore
+    // the solution once first. Restore output is discarded; assets live in gitignored obj/.
+    private async Task EnsureSdkRestore(string solutionPath)
+        => await RunAsync("dotnet", $"restore \"{solutionPath}\"");
+
+    [Fact]
+    public Task Build_Slnx_NoPath_Cwd_Parity()
+        => CompareIn("build_slnx_no_path_cwd", TestExampleProjectsDir, "build",
+            "build --nologo --no-restore --no-incremental");
+
+    [Fact]
+    public Task Build_Csproj_NoPath_Cwd_Parity()
+        => CompareIn("build_csproj_no_path_cwd", HelloParityFixtureDir, "build",
+            "build --nologo --no-restore --no-incremental");
+
+    private async Task CompareIn(string name, string workingDirectory, string oursArgs, string dotnetArgs)
+    {
+        if (!File.Exists(SlnxFixturesSolutionPath) || !Directory.Exists(workingDirectory))
+            throw new InvalidOperationException($"{name} fixture not found - check {workingDirectory}");
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", workingDirectory);
+        var dotnet = await RunAsync("dotnet", dotnetArgs, workingDirectory);
+        var (nativeOutput, nativeExit) = (CliComparisonHelper.Normalize(ours.Output), ours.ExitCode);
+        var (sdkOutput, sdkExit) = (CliComparisonHelper.Normalize(dotnet.Output), dotnet.ExitCode);
+
+        nativeExit.ShouldBe(sdkExit, $"exit code parity for {name}");
+        nativeOutput.ShouldBe(sdkOutput, $"output parity for {name}");
+
+        string comparisonResult = CliComparisonHelper.GenerateSideBySide(
+            nativeOutput,
+            sdkOutput,
+            $"NATIVE {oursArgs}",
+            $"DOTNET {dotnetArgs}");
+
+        await Verify(comparisonResult).UseTextForParameters(name);
+    }
 
     private async Task Compare(string name, string oursArgs, string dotnetArgs)
     {

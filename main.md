@@ -13,7 +13,7 @@ Legacy bare-path invocation still works: `NativeCompilerCLI <target>` routes to 
 
 `<target>` can be:
 
-- a project **folder** (builds the single `.csproj` found in it, output to `bin\sharpbin`)
+- a project **folder** (builds the single `.csproj` found in it, output to `<proj>\myc\<config>\<tfm>\`)
 - a `.csproj` file path
 - a `.sln` file path (builds every project in dependency order; all failures reported at the end)
 
@@ -25,12 +25,79 @@ application arguments. `--version` prints the hosting SDK version; `help` prints
 general help text. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
 `--no-incremental`, `--nologo`, `-v`, ...) are accepted and ignored.
 
+## Examples
+
+Real, captured output (all commands exit `0` unless noted). `<repo>` =
+`<abs path to this repo>`. Full, live examples incl. `run --` forwarding and
+SDK side-by-side output live in **`README.md`**.
+
+```
+# build a single project by folder or .csproj file
+NativeCompilerCLI build <repo>/tests/TestExampleProjects/HelloParityFixture
+  HelloParityFixture -> <repo>/tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+```
+
+```
+# build a classic .sln (all-success silently omits per-project lines, exactly like dotnet)
+NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+```
+
+```
+# build a .slnx (per-project lines always printed)
+NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnxFixtures.slnx
+  LibA -> <repo>/tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
+  LibB -> <repo>/tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
+  SlnApp -> <repo>/tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+```
+
+```
+# build with no target: the current directory is searched for a single project/solution
+cd <repo>/tests/TestExampleProjects/HelloParityFixture && NativeCompilerCLI build
+cd <repo>/tests/TestExampleProjects              && NativeCompilerCLI build   # sole SlnxFixtures.slnx
+```
+
+```
+# run a console app; arguments after `--` are forwarded to the app
+NativeCompilerCLI run <repo>/tests/TestExampleProjects/HelloParityFixture
+Hello from NativeCompiler!
+```
+
+```
+# a failing build reports compile-time errors, re-echoes them and exits 1
+NativeCompilerCLI build <repo>/tests/TestExampleProjects/FailingFixture
+<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
+
+Build FAILED.
+
+<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
+    0 Warning(s)
+    1 Error(s)                          # exit code 1
+```
+
+```
+# version and help mirror the host SDK
+NativeCompilerCLI version    # prints the SDK version, e.g. 10.0.400
+NativeCompilerCLI help       # full dotnet help text
+```
+
 ## What we support
 
 ### Project compilation
 - SDK-style `.csproj` parsing: `TargetFramework`, `OutputType` (Exe / Library), `AllowUnsafeBlocks`, `LangVersion`, `Nullable`, `DefineConstants`, `ImplicitUsings` (generated `GlobalUsings.g.cs`), embedded/`None` compile items
 - C# compilation via Roslyn (syntax trees loaded with embedded `EmbeddedText`), any language version
-- Compile-time diagnostics printed to stderr; successful emit writes the DLL to `bin\sharpbin`
+- Compile-time diagnostics printed to stderr; successful emit writes the DLL to `<proj>\myc\<config>\<tfm>\`
 
 ### References
 - **Project references** – recursive and transitive: a referenced project is built first and its output DLL referenced; deep chains resolve through every level
@@ -74,6 +141,16 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
 | `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |
+| `build <path.sln>` (path) | success suppresses per-project lines (SDK quirk, exactly mirrored); failure echoes errors first then maps successes | same | identical |
+| `build <path.slnx>` (path) | per-project `->` mapping then summary; failure maps successes first, then echoes errors | same | identical |
+| `build <path.csproj>` (path) | `->` mapping + summary | same | identical |
+| `build` (cwd = single `.slnx`) | resolves the sole `SlnxFixtures.slnx`, maps + summary | same | identical |
+| `build` (cwd = single `.csproj`) | resolves sole `HelloParityFixture.csproj`, maps + summary | same | identical |
+
+Solution builds reproduce two SDK quirks for byte parity: a fully-successful `.sln` build prints no
+per-project lines, and a failing `.slnx` lists compiled projects before the errors while a failing
+`.sln` lists the errors first. Verified via `CliCommandParityTests` (`build_sln_path`, `build_slnx_path`,
+`build_slnx_no_path_cwd`, `build_csproj_no_path_cwd` snapshots).
 
 ## Benchmarking
 
