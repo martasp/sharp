@@ -1,0 +1,10 @@
+-------------- speed comparison (NativeCompiler.sln) --------------
+  our BuildSolution  run1  wall   5.39s   (sum of per-project 10.94s, 6/6 OK)
+  our BuildSolution  run2  wall   4.73s   (no cache: always from scratch)
+  dotnet build       cold  wall 4.46s (incl. restore)
+  dotnet build       warm  wall 2.30s (incremental)
+  speed-up vs dotnet build cold: 0.83x
+---------------------------------------------------------------------
+  notes:
+  - ours has no incremental cache; dotnet build warm is incremental
+  - ours reports per-project FAIL for unsupported features (see main.md)
