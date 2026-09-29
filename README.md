@@ -31,7 +31,7 @@ NativeCompilerCLI <command> [target] [-- app args]
 | `build` | compiles the target; identical output/exit code to `dotnet build` |
 | `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards everything after `--`; propagates the app exit code |
 | `version` / `--version` | prints the hosting SDK version (e.g. `10.0.400`) |
-| `help` / `-h` / `--help` | prints the .NET SDK's general help text |
+| `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the version line comes from the hosting SDK |
 | `NativeCompilerCLI <target>` | legacy form, routed to `build` |
 
 `<target>` may be:
@@ -55,18 +55,19 @@ Captured output, `<repo>` = absolute path to this repo.
 
 ### Build a single project (by folder or `.csproj` file)
 
-```
-$ NativeCompilerCLI build <repo>/tests/TestExampleProjects/HelloParityFixture
-  HelloParityFixture -> <repo>/tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+Uses the SDK terminal-logger summary, seconds included, path relative to the current directory:
 
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
+```
+$ cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/HelloParityFixture
+  HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+
+Build succeeded in 1.2s
 ```
 
 ### Build a classic `.sln`
 
-A fully-successful `.sln` build prints no per-project lines — an SDK quirk reproduced exactly:
+Solution builds keep the SDK's classic blocky text. A fully-successful `.sln` build prints no
+per-project lines — an SDK quirk reproduced exactly:
 
 ```
 $ NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
@@ -95,8 +96,9 @@ Build succeeded.
 
 ```
 $ cd <repo>/tests/TestExampleProjects/HelloParityFixture && NativeCompilerCLI build
-  HelloParityFixture -> <repo>/tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
-  ...
+  HelloParityFixture net10.0 succeeded (0.4s) → myc/Debug/net10.0/HelloParityFixture.dll
+
+Build succeeded in 1.2s
 
 $ cd <repo>/tests/TestExampleProjects && NativeCompilerCLI build        # sole .slnx wins
   LibA -> ...
@@ -110,17 +112,14 @@ $ NativeCompilerCLI run <repo>/tests/TestExampleProjects/HelloParityFixture
 Hello from NativeCompiler!
 ```
 
-### A failing build (`error CS0103`, echo, exit code 1)
+### A failing build (`error CS0103`, exit code 1)
 
 ```
 $ NativeCompilerCLI build <repo>/tests/TestExampleProjects/FailingFixture
-<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
+  FailingFixture net10.0 failed with 1 error(s) (0.6s)
+    <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
-Build FAILED.
-
-<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
-    0 Warning(s)
-    1 Error(s)     # $? = 1
+Build failed with 1 error(s) in 1.2s     # $? = 1
 ```
 
 ### Version and help
@@ -129,17 +128,27 @@ Build FAILED.
 $ NativeCompilerCLI --version
 10.0.400                  # the hosting SDK version, matching `dotnet --version`
 $ NativeCompilerCLI help
-...                       # byte-identical to `dotnet help` (SDK version substituted)
+.NET SDK (10.0.400)       # correct SDK version, never hardcoded
+...
+SDK commands:
+  build             Build a .NET project.                                                     [implemented]
+  clean             Clean build outputs of a .NET project.                                    [not implemented]
+  ...               # every command marked against the command registry
 ```
 
 ## Parity contract
 
-Every example above is, after stripping SDK timings (`Time Elapsed`) and restore banners,
-**byte-identical** to the matching `dotnet` invocation — including exit codes and the solution
-layout quirks (`.sln` success suppresses per-project lines; a failing `.slnx` lists compiled
-projects before the errors, a failing `.sln` lists them after). The parity is enforced by
-`CliCommandParityTests` (side-by-side Verify snapshots for `build`, `run`,
-`--version`, `help`, and `build` over `.sln` / `.slnx` / `.csproj`, with and without a path).
+Every `build`/`run` example above is verified against the matching `dotnet` invocation — including
+exit codes and the solution layout quirks (`.sln` success suppresses per-project lines; a failing
+`.slnx` lists compiled projects before the errors, a failing `.sln` lists them after). Single-project
+`build` uses the SDK's terminal-logger summary: the SDK's own terminal logger is forced on
+(`MSBUILDTERMINALLOGGER=on`) in the tests and the run-varying seconds are normalized to a `<secs>`
+token. `help` and `--version`
+deliberately add value: `--version` echoes the hosting SDK version and `help` annotates the
+command list with `[implemented]`/`[not implemented]`, both derived at runtime rather than
+hardcoded. The parity is enforced by `CliCommandParityTests` and `CliComparisonTests`
+(side-by-side Verify snapshots for `build`, `run`, `--version`, `help`, and `build` over
+`.sln` / `.slnx` / `.csproj`, with and without a path).
 
 See **`main.md`** for the feature/limitation matrix, the deps.json output-parity work, and the
 OrchardCore stress-test results.

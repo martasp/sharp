@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Shouldly;
 using VerifyXunit;
@@ -38,7 +39,7 @@ public class CliCommandParityTests
         Path.Combine(RepoRoot, "src", "NativeCompilerCLI", "bin", "Debug", "net10.0", "NativeCompilerCLI.dll");
 
     private static async Task<(string Output, int ExitCode)> RunAsync(
-        string fileName, string arguments, string? workingDirectory = null)
+        string fileName, string arguments, string? workingDirectory = null, params (string Key, string Value)[] env)
     {
         var startInfo = new ProcessStartInfo(fileName, arguments)
         {
@@ -48,6 +49,7 @@ public class CliCommandParityTests
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory ?? Directory.GetCurrentDirectory(),
         };
+        foreach (var (key, value) in env) startInfo.Environment[key] = value;
 
         using var process = Process.Start(startInfo)!;
         using var stdout = process.StandardOutput;
@@ -61,12 +63,12 @@ public class CliCommandParityTests
     // Commands are executed on both compilers and every captured output must match: exit code and bytes.
     [Fact]
     public Task Build_Success_Output_Parity()
-        => Compare("build_success", $"build \"{HelloParityFixtureDir}\"",
+        => CompareTerminal("build_success", $"build \"{HelloParityFixtureDir}\"",
             $"build \"{HelloParityFixtureDir}\" --nologo --no-restore --no-incremental");
 
     [Fact]
     public Task Build_Failure_Output_Parity()
-        => Compare("build_failure", $"build \"{FailingFixtureDir}\"",
+        => CompareTerminal("build_failure", $"build \"{FailingFixtureDir}\"",
             $"build \"{FailingFixtureDir}\" --nologo --no-restore --no-incremental");
 
     [Fact]
@@ -84,8 +86,25 @@ public class CliCommandParityTests
         => Compare("version", "--version", "--version");
 
     [Fact]
-    public Task Help_Output_Parity()
-        => Compare("help", "help", "help");
+    public async Task Help_Output_Parity()
+    {
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" help");
+        var sdkVersion = (await RunAsync("dotnet", "--version")).Output.Trim();
+
+        ours.ExitCode.ShouldBe(0);
+        // Version line is derived from the hosting SDK, never hardcoded.
+        ours.Output.ShouldStartWith($".NET SDK ({sdkVersion})");
+
+        // Implemented commands are annotated from the command registry.
+        ours.Output.Split('\n')
+            .Single(line => line.Contains("Build a .NET project.")).ShouldEndWith("[implemented]");
+        ours.Output.Split('\n')
+            .Single(line => line.Contains("Build and run a .NET project output.")).ShouldEndWith("[implemented]");
+        ours.Output.Split('\n')
+            .Single(line => line.Contains("Clean build outputs of a .NET project.")).ShouldEndWith("[not implemented]");
+
+        await Verify(CliComparisonHelper.Normalize(ours.Output)).UseTextForParameters("help");
+    }
 
     [Fact]
     public async Task Build_Sln_Path_Output_Parity()
@@ -115,8 +134,56 @@ public class CliCommandParityTests
 
     [Fact]
     public Task Build_Csproj_NoPath_Cwd_Parity()
-        => CompareIn("build_csproj_no_path_cwd", HelloParityFixtureDir, "build",
+        => CompareTerminalIn("build_csproj_no_path_cwd", HelloParityFixtureDir, "build",
             "build --nologo --no-restore --no-incremental");
+
+    private async Task CompareTerminalIn(string name, string workingDirectory, string oursArgs, string dotnetArgs)
+    {
+        if (!File.Exists(CliDll) || !Directory.Exists(workingDirectory))
+            throw new InvalidOperationException($"{name} fixture not found - check {workingDirectory}");
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", workingDirectory);
+        var dotnet = await RunAsync("dotnet", dotnetArgs, workingDirectory, ("MSBUILDTERMINALLOGGER", "on"));
+        var (nativeOutput, nativeExit) = (CliComparisonHelper.NormalizeInteractive(ours.Output), ours.ExitCode);
+        var (sdkOutput, sdkExit) = (CliComparisonHelper.NormalizeInteractive(dotnet.Output), dotnet.ExitCode);
+
+        nativeExit.ShouldBe(sdkExit, $"exit code parity for {name}");
+        nativeOutput.ShouldBe(sdkOutput, $"output parity for {name}");
+
+        string comparisonResult = CliComparisonHelper.GenerateSideBySide(
+            nativeOutput,
+            sdkOutput,
+            $"NATIVE {oursArgs}",
+            $"DOTNET {dotnetArgs}");
+
+        await Verify(comparisonResult).UseTextForParameters(name);
+    }
+
+    // Our `build` always prints the SDK terminal-logger summary (build seconds included, project path
+    // relative to CWD), exactly like `dotnet build` on a real terminal. Force the SDK's terminal
+    // logger on (it works redirected) and compare against it, from the repo root so both render the
+    // path identically relative to CWD. Run-varying seconds are normalized to a `<secs>` token.
+    private async Task CompareTerminal(string name, string oursArgs, string dotnetArgs)
+    {
+        if (!File.Exists(CliDll))
+            throw new InvalidOperationException("NativeCompilerCLI is not built - run `dotnet build NativeCompiler.sln` first.");
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", RepoRoot);
+        var dotnet = await RunAsync("dotnet", dotnetArgs, RepoRoot, ("MSBUILDTERMINALLOGGER", "on"));
+        var (nativeOutput, nativeExit) = (CliComparisonHelper.NormalizeInteractive(ours.Output), ours.ExitCode);
+        var (sdkOutput, sdkExit) = (CliComparisonHelper.NormalizeInteractive(dotnet.Output), dotnet.ExitCode);
+
+        nativeExit.ShouldBe(sdkExit, $"exit code parity for {name}");
+        nativeOutput.ShouldBe(sdkOutput, $"output parity for {name}");
+
+        string comparisonResult = CliComparisonHelper.GenerateSideBySide(
+            nativeOutput,
+            sdkOutput,
+            $"NATIVE {oursArgs}",
+            $"DOTNET {dotnetArgs}");
+
+        await Verify(comparisonResult).UseTextForParameters(name);
+    }
 
     private async Task CompareIn(string name, string workingDirectory, string oursArgs, string dotnetArgs)
     {

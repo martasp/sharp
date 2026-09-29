@@ -42,7 +42,8 @@ public class CliComparisonTests
         }
     }
 
-    private static async Task<string> RunCliAsync(string fileName, string arguments)
+    private static async Task<string> RunCliAsync(
+        string fileName, string arguments, params (string Key, string Value)[] env)
     {
         var startInfo = new ProcessStartInfo(fileName, arguments)
         {
@@ -50,7 +51,11 @@ public class CliComparisonTests
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Same CWD for both sides: the terminal-logger summary renders the build path relative
+            // to CWD, and a shallow CWD keeps the emitted relative paths short and comparable.
+            WorkingDirectory = RepoRoot,
         };
+        foreach (var (key, value) in env) startInfo.Environment[key] = value;
 
         using var process = Process.Start(startInfo)!;
         using var stdout = process.StandardOutput;
@@ -61,23 +66,25 @@ public class CliComparisonTests
         return await outputTask + await errorTask;
     }
 
-    // Wall-clock, restore banners add noise per run; drop them so the comparison is deterministic.
-    private static string Normalize(string raw) => CliComparisonHelper.Normalize(raw);
-
+    // Both compilers print the SDK terminal-logger summary (seconds included, path relative to CWD) for
+// `build`. The SDK's own terminal logger is forced on (it works redirected) so the formats line up,
+// and run-varying seconds are normalized to a `<secs>` token.
 [Fact]
     public Task Build_HelloWorld_VisualParity_WithDotnetBuild()
     {
         EnsureCliExists();
 
-        string nativeOutput = Normalize(
+        // Run from the repo root so both render the build path identically, relative to CWD.
+        string nativeOutput = CliComparisonHelper.NormalizeInteractive(
             RunCliAsync("dotnet", $"\"{CliDll}\" \"{HelloParityFixtureDir}\"").Result);
         // --no-restore/--no-incremental keep the SDK output focused on the compile itself (assets
         // already exist for the fixture) and force the mapping line + summary to reprint every run.
-        string dotnetOutput = Normalize(RunCliAsync("dotnet",
-            $"build \"{HelloParityFixtureDir}\" --nologo --no-restore --no-incremental").Result);
+        string dotnetOutput = CliComparisonHelper.NormalizeInteractive(RunCliAsync("dotnet",
+            $"build \"{HelloParityFixtureDir}\" --nologo --no-restore --no-incremental",
+            env: ("MSBUILDTERMINALLOGGER", "on")).Result);
 
-        Assert.Contains("Build succeeded.", nativeOutput);
-        Assert.Contains("Build succeeded.", dotnetOutput);
+        Assert.Contains("Build succeeded in", nativeOutput);
+        Assert.Contains("Build succeeded in", dotnetOutput);
         nativeOutput.ShouldBe(dotnetOutput);
 
         string comparisonResult = CliComparisonHelper.GenerateSideBySide(
@@ -94,15 +101,15 @@ public class CliComparisonTests
     {
         EnsureCliExists();
 
-        string nativeOutput = Normalize(
+        string nativeOutput = CliComparisonHelper.NormalizeInteractive(
             RunCliAsync("dotnet", $"\"{CliDll}\" \"{FailingFixtureDir}\"").Result);
-        string dotnetOutput = Normalize(RunCliAsync("dotnet",
-            $"build \"{FailingFixtureDir}\" --nologo").Result);
+        string dotnetOutput = CliComparisonHelper.NormalizeInteractive(RunCliAsync("dotnet",
+            $"build \"{FailingFixtureDir}\" --nologo", env: ("MSBUILDTERMINALLOGGER", "on")).Result);
 
         Assert.Contains("CS0103", nativeOutput);
         Assert.Contains("CS0103", dotnetOutput);
-        Assert.Contains("Build FAILED.", nativeOutput);
-        Assert.Contains("Build FAILED.", dotnetOutput);
+        Assert.Contains("Build failed with", nativeOutput);
+        Assert.Contains("Build failed with", dotnetOutput);
         nativeOutput.ShouldBe(dotnetOutput);
 
         string comparisonResult = CliComparisonHelper.GenerateSideBySide(

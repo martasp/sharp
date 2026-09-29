@@ -22,7 +22,9 @@ exactly like `dotnet build`/`dotnet run` (missing -> MSB1003 / "Couldn't find a 
 run"; ambiguous -> MSB1011). `run` launches the freshly built app (apphost when present,
 else `dotnet <dll>`), propagates the app exit code, and forwards everything after `--` as
 application arguments. `--version` prints the hosting SDK version; `help` prints the SDK's
-general help text. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
+general help text, with the SDK command list annotated `[implemented]`/`[not implemented]`
+(derived from the command registry, not hardcoded) and the version line taken from the hosting
+SDK. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
 `--no-incremental`, `--nologo`, `-v`, ...) are accepted and ignored.
 
 ## Examples
@@ -32,17 +34,15 @@ Real, captured output (all commands exit `0` unless noted). `<repo>` =
 SDK side-by-side output live in **`README.md`**.
 
 ```
-# build a single project by folder or .csproj file
-NativeCompilerCLI build <repo>/tests/TestExampleProjects/HelloParityFixture
-  HelloParityFixture -> <repo>/tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+# build a single project by folder or .csproj file (terminal-logger summary w/ seconds, path relative to CWD)
+cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/HelloParityFixture
+  HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
 
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
+Build succeeded in 1.2s
 ```
 
 ```
-# build a classic .sln (all-success silently omits per-project lines, exactly like dotnet)
+# build a classic .sln (solution builds keep dotnet's classic text; all-success omits per-project lines)
 NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
 
 Build succeeded.
@@ -75,15 +75,13 @@ Hello from NativeCompiler!
 ```
 
 ```
-# a failing build reports compile-time errors, re-echoes them and exits 1
-NativeCompilerCLI build <repo>/tests/TestExampleProjects/FailingFixture
-<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
+# a failing build reports errors (one indented line per error) and exits 1
+cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/FailingFixture
+  FailingFixture net10.0 failed with 1 error(s) (0.6s)
+    <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
-Build FAILED.
-
-<repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context [<repo>/tests/TestExampleProjects/FailingFixture/FailingFixture.csproj]
-    0 Warning(s)
-    1 Error(s)                          # exit code 1
+Build failed with 1 error(s) in 1.2s
+# $? = 1
 ```
 
 ```
@@ -131,26 +129,33 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 
 | Command | Ours | `dotnet` | Parity |
 |---|---|---|---|
-| `build` (success) | project `->` mapping, `Build succeeded.`, `0 Warning(s)` `0 Error(s)`, rc=0 | same text (plus `Time Elapsed` noise line) | identical bytes after normalize |
-| `build` (failure) | `error CS0103 (...)` + `Build FAILED.` + echoed errors + `0 Warning(s)` `1 Error(s)`, rc=1 | same | identical |
+| `build` (success, single project) | `Name tfm succeeded (0.4s) → <cwd-rel>/...dll` + blank + `Build succeeded in 1.2s`, rc=0 | same terminal-logger summary | identical after normalize (seconds → `<secs>`) |
+| `build` (failure, single project) | `Name tfm failed with N error(s) (0.6s)` + one indented error line per error + blank + `Build failed with N error(s) in 1.2s`, rc=1 | same | identical after normalize |
 | `run` (success) | application output only, rc=0 | same (incl. `--no-restore`) | identical |
 | `run` (failure) | `error CS0103 (...)` + `The build failed. Fix the build errors and run again.`, rc=1 | same | identical |
 | `run -- <app args>` | args forwarded to the app | same | identical |
 | `--version` / `version` | `10.0.400` (hosting SDK) | `10.0.400` | identical |
-| `help` | full SDK command list | full SDK command list | identical (`diff` empty) |
+| `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, version line from the hosting SDK | plain SDK command list | intentionally annotated (byte-identical otherwise) |
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
 | `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |
 | `build <path.sln>` (path) | success suppresses per-project lines (SDK quirk, exactly mirrored); failure echoes errors first then maps successes | same | identical |
 | `build <path.slnx>` (path) | per-project `->` mapping then summary; failure maps successes first, then echoes errors | same | identical |
-| `build <path.csproj>` (path) | `->` mapping + summary | same | identical |
+| `build <path.csproj>` (path) | terminal-logger summary | same | identical after normalize (seconds → `<secs>`) |
 | `build` (cwd = single `.slnx`) | resolves the sole `SlnxFixtures.slnx`, maps + summary | same | identical |
-| `build` (cwd = single `.csproj`) | resolves sole `HelloParityFixture.csproj`, maps + summary | same | identical |
+| `build` (cwd = single `.csproj`) | resolves sole `HelloParityFixture.csproj`, terminal summary | same | identical after normalize |
 
 Solution builds reproduce two SDK quirks for byte parity: a fully-successful `.sln` build prints no
 per-project lines, and a failing `.slnx` lists compiled projects before the errors while a failing
 `.sln` lists the errors first. Verified via `CliCommandParityTests` (`build_sln_path`, `build_slnx_path`,
 `build_slnx_no_path_cwd`, `build_csproj_no_path_cwd` snapshots).
+
+Single-project `build` always prints the SDK terminal-logger summary (the format `dotnet build`
+uses on a terminal): measured seconds included, error counts computed from the actual diagnostics,
+the build path relative to the current directory. The SDK's terminal logger is forced on
+(`MSBUILDTERMINALLOGGER=on`) in the tests, and run-varying seconds are normalized to a `<secs>`
+token via `CliComparisonHelper.NormalizeInteractive` (also strips the SDK's ANSI render noise).
+Solution builds keep the SDK's classic blocky text in every mode.
 
 ## Benchmarking
 

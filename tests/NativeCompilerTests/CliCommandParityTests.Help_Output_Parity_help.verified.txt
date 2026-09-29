@@ -1,63 +1,59 @@
-﻿NATIVE help                                                                                                                        | DOTNET help                                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-.NET SDK (10.0.400)                                                                                                                | .NET SDK (10.0.400)                                                                                                               
-Usage: dotnet [runtime-options] [path-to-application] [arguments]                                                                  | Usage: dotnet [runtime-options] [path-to-application] [arguments]                                                                 
-                                                                                                                                   |                                                                                                                                   
-Execute a .NET application.                                                                                                        | Execute a .NET application.                                                                                                       
-                                                                                                                                   |                                                                                                                                   
-runtime-options:                                                                                                                   | runtime-options:                                                                                                                  
-  --additionalprobingpath <path>   Path containing probing policy and assemblies to probe for.                                     |   --additionalprobingpath <path>   Path containing probing policy and assemblies to probe for.                                    
-  --additional-deps <path>         Path to additional deps.json file.                                                              |   --additional-deps <path>         Path to additional deps.json file.                                                             
-  --depsfile                       Path to <application>.deps.json file.                                                           |   --depsfile                       Path to <application>.deps.json file.                                                          
-  --fx-version <version>           Version of the installed Shared Framework to use to run the application.                        |   --fx-version <version>           Version of the installed Shared Framework to use to run the application.                       
-  --roll-forward <setting>         Roll forward to framework version  (LatestPatch, Minor, LatestMinor, Major, LatestMajor, Disabl |   --roll-forward <setting>         Roll forward to framework version  (LatestPatch, Minor, LatestMinor, Major, LatestMajor, Disabl
-e).                                                                                                                                | e).                                                                                                                               
-  --runtimeconfig                  Path to <application>.runtimeconfig.json file.                                                  |   --runtimeconfig                  Path to <application>.runtimeconfig.json file.                                                 
-                                                                                                                                   |                                                                                                                                   
-path-to-application:                                                                                                               | path-to-application:                                                                                                              
-  The path to an application .dll file to execute.                                                                                 |   The path to an application .dll file to execute.                                                                                
-                                                                                                                                   |                                                                                                                                   
-Usage: dotnet [sdk-options] [command] [command-options] [arguments]                                                                | Usage: dotnet [sdk-options] [command] [command-options] [arguments]                                                               
-                                                                                                                                   |                                                                                                                                   
-Execute a .NET SDK command.                                                                                                        | Execute a .NET SDK command.                                                                                                       
-                                                                                                                                   |                                                                                                                                   
-sdk-options:                                                                                                                       | sdk-options:                                                                                                                      
-  -d|--diagnostics  Enable diagnostic output.                                                                                      |   -d|--diagnostics  Enable diagnostic output.                                                                                     
-  -h|--help         Show command line help.                                                                                        |   -h|--help         Show command line help.                                                                                       
-  --info            Display .NET information.                                                                                      |   --info            Display .NET information.                                                                                     
-  --list-runtimes   Display the installed runtimes.                                                                                |   --list-runtimes   Display the installed runtimes.                                                                               
-  --list-sdks       Display the installed SDKs.                                                                                    |   --list-sdks       Display the installed SDKs.                                                                                   
-  --version         Display .NET SDK version in use.                                                                               |   --version         Display .NET SDK version in use.                                                                              
-                                                                                                                                   |                                                                                                                                   
-SDK commands:                                                                                                                      | SDK commands:                                                                                                                     
-  build             Build a .NET project.                                                                                          |   build             Build a .NET project.                                                                                         
-  build-server      Interact with servers started by a build.                                                                      |   build-server      Interact with servers started by a build.                                                                     
-  clean             Clean build outputs of a .NET project.                                                                         |   clean             Clean build outputs of a .NET project.                                                                        
-  format            Apply style preferences to a project or solution.                                                              |   format            Apply style preferences to a project or solution.                                                             
-  help              Opens the reference page in a browser for the specified command.                                               |   help              Opens the reference page in a browser for the specified command.                                              
-  msbuild           Run Microsoft Build Engine (MSBuild) commands.                                                                 |   msbuild           Run Microsoft Build Engine (MSBuild) commands.                                                                
-  new               Create a new .NET project or file.                                                                             |   new               Create a new .NET project or file.                                                                            
-  nuget             Provides additional NuGet commands.                                                                            |   nuget             Provides additional NuGet commands.                                                                           
-  pack              Create a NuGet package.                                                                                        |   pack              Create a NuGet package.                                                                                       
-  package           Search for, add, remove, or list PackageReferences for a .NET project.                                         |   package           Search for, add, remove, or list PackageReferences for a .NET project.                                        
-  publish           Publish a .NET project for deployment.                                                                         |   publish           Publish a .NET project for deployment.                                                                        
-  reference         Add, remove, or list ProjectReferences for a .NET project.                                                     |   reference         Add, remove, or list ProjectReferences for a .NET project.                                                    
-  restore           Restore dependencies specified in a .NET project.                                                              |   restore           Restore dependencies specified in a .NET project.                                                             
-  run               Build and run a .NET project output.                                                                           |   run               Build and run a .NET project output.                                                                          
-  sdk               Manage .NET SDK installation.                                                                                  |   sdk               Manage .NET SDK installation.                                                                                 
-  solution          Modify Visual Studio solution files.                                                                           |   solution          Modify Visual Studio solution files.                                                                          
-  store             Store the specified assemblies in the runtime package store.                                                   |   store             Store the specified assemblies in the runtime package store.                                                  
-  test              Run unit tests using the test runner specified in a .NET project.                                              |   test              Run unit tests using the test runner specified in a .NET project.                                             
-  tool              Install or manage tools that extend the .NET experience.                                                       |   tool              Install or manage tools that extend the .NET experience.                                                      
-  vstest            Run Microsoft Test Engine (VSTest) commands.                                                                   |   vstest            Run Microsoft Test Engine (VSTest) commands.                                                                  
-  workload          Manage optional workloads.                                                                                     |   workload          Manage optional workloads.                                                                                    
-                                                                                                                                   |                                                                                                                                   
-Additional commands from bundled tools:                                                                                            | Additional commands from bundled tools:                                                                                           
-  dev-certs         Create and manage development certificates.                                                                    |   dev-certs         Create and manage development certificates.                                                                   
-  fsi               Start F# Interactive / execute F# scripts.                                                                     |   fsi               Start F# Interactive / execute F# scripts.                                                                    
-  user-jwts         Manage JSON Web Tokens in development.                                                                         |   user-jwts         Manage JSON Web Tokens in development.                                                                        
-  user-secrets      Manage development user secrets.                                                                               |   user-secrets      Manage development user secrets.                                                                              
-  watch             Start a file watcher that runs a command when files change.                                                    |   watch             Start a file watcher that runs a command when files change.                                                   
-                                                                                                                                   |                                                                                                                                   
-Run 'dotnet [command] --help' for more information on a command.                                                                   | Run 'dotnet [command] --help' for more information on a command.                                                                  
-                                                                                                                                   |                                                                                                                                   
+﻿.NET SDK (10.0.400)
+Usage: dotnet [runtime-options] [path-to-application] [arguments]
+
+Execute a .NET application.
+
+runtime-options:
+  --additionalprobingpath <path>   Path containing probing policy and assemblies to probe for.
+  --additional-deps <path>         Path to additional deps.json file.
+  --depsfile                       Path to <application>.deps.json file.
+  --fx-version <version>           Version of the installed Shared Framework to use to run the application.
+  --roll-forward <setting>         Roll forward to framework version  (LatestPatch, Minor, LatestMinor, Major, LatestMajor, Disable).
+  --runtimeconfig                  Path to <application>.runtimeconfig.json file.
+
+path-to-application:
+  The path to an application .dll file to execute.
+
+Usage: dotnet [sdk-options] [command] [command-options] [arguments]
+
+Execute a .NET SDK command.
+
+sdk-options:
+  -d|--diagnostics  Enable diagnostic output.
+  -h|--help         Show command line help.
+  --info            Display .NET information.
+  --list-runtimes   Display the installed runtimes.
+  --list-sdks       Display the installed SDKs.
+  --version         Display .NET SDK version in use.
+
+SDK commands:
+  build             Build a .NET project.                                                     [implemented]
+  build-server      Interact with servers started by a build.                                 [not implemented]
+  clean             Clean build outputs of a .NET project.                                    [not implemented]
+  format            Apply style preferences to a project or solution.                         [not implemented]
+  help              Opens the reference page in a browser for the specified command.          [implemented]
+  msbuild           Run Microsoft Build Engine (MSBuild) commands.                            [not implemented]
+  new               Create a new .NET project or file.                                        [not implemented]
+  nuget             Provides additional NuGet commands.                                       [not implemented]
+  pack              Create a NuGet package.                                                   [not implemented]
+  package           Search for, add, remove, or list PackageReferences for a .NET project.    [not implemented]
+  publish           Publish a .NET project for deployment.                                    [not implemented]
+  reference         Add, remove, or list ProjectReferences for a .NET project.                [not implemented]
+  restore           Restore dependencies specified in a .NET project.                         [not implemented]
+  run               Build and run a .NET project output.                                      [implemented]
+  sdk               Manage .NET SDK installation.                                             [not implemented]
+  solution          Modify Visual Studio solution files.                                      [not implemented]
+  store             Store the specified assemblies in the runtime package store.              [not implemented]
+  test              Run unit tests using the test runner specified in a .NET project.         [not implemented]
+  tool              Install or manage tools that extend the .NET experience.                  [not implemented]
+  vstest            Run Microsoft Test Engine (VSTest) commands.                              [not implemented]
+  workload          Manage optional workloads.                                                [not implemented]
+
+Additional commands from bundled tools:
+  dev-certs         Create and manage development certificates.
+  fsi               Start F# Interactive / execute F# scripts.
+  user-jwts         Manage JSON Web Tokens in development.
+  user-secrets      Manage development user secrets.
+  watch             Start a file watcher that runs a command when files change.
+
+Run 'dotnet [command] --help' for more information on a command.

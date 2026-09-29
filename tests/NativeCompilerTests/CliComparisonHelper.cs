@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace NativeCompilerTests;
 
@@ -21,15 +22,21 @@ public static class CliComparisonHelper
     {
         string RepoRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."));
 
-        string normalized = raw
+        string normalized = StripTerminalFrames(raw)
             .Replace("\r\n", "\n")
+            // A pty stream may leave stray CRs that weren't part of a CRLF pair.
+            .Replace('\r', ' ')
             // Canonicalize separators FIRST: every downstream lookup then matches a single dialect.
             .Replace('\\', '/')
             // Cull the path holder so snapshots stay machine-independent.
             .Replace(RepoRoot.Replace('\\', '/') + '/', SolutionToken + '/')
             // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
-            // never overwrites real SDK output in bin\; map it to the canonical SDK layout.
-            .Replace("/myc/Debug/net10.0/", "/bin/Debug/net10.0/");
+            // never overwrites real SDK output in bin\; map it to the canonical SDK layout. The path
+            // may be absolute (".../myc/Debug/...") or relative from the CWD ("myc/Debug/...").
+            .Replace("myc/Debug/net10.0/", "bin/Debug/net10.0/")
+            // Terminal-logger durations ("succeeded (0.4s)", "in 1.2s") are wall-clock noise that
+            // varies per run; collapse any "x.xs" to a token so parity is asserted on structure.
+            .ReplaceRegex(@"\d+\.\d+s", "<secs>");
 
         return string.Join("\n", normalized.Split('\n')
             .Where(line =>
@@ -44,6 +51,52 @@ public static class CliComparisonHelper
             })
             .Select(line => line.TrimEnd()));
     }
+
+    // Reduces an interactive (pty-captured) build to its stable summary, so ours can be compared
+    // with the SDK's terminal logger. The pty captures every spinner frame and per-target task line
+    // (names + durations) the logger redraws while compiling; those are transient render noise, so
+    // we keep only the terminal-logger grammar that is deterministic: the final status line, error
+    // lines, and the "Build succeeded/failed in Ns" summary.
+    public static string NormalizeInteractive(string raw)
+    {
+        var kept = new List<string>();
+        foreach (string line in Normalize(raw).Split('\n'))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length == 0)
+            {
+                // Collapse consecutive blanks so the logger's trailing redraw frames don't matter.
+                if (kept.Count > 0 && kept[^1].Length == 0) continue;
+                kept.Add(string.Empty);
+                continue;
+            }
+
+            bool isSummary = trimmed.Contains("succeeded (")
+                             || trimmed.Contains("failed with")
+                             || trimmed.StartsWith("Build succeeded in")
+                             || trimmed.StartsWith("Build failed with")
+                             || trimmed.Contains(": error ");
+            if (isSummary) kept.Add(trimmed);
+        }
+
+        while (kept.Count > 0 && kept[0].Length == 0) kept.RemoveAt(0);
+        while (kept.Count > 0 && kept[^1].Length == 0) kept.RemoveAt(kept.Count - 1);
+        return string.Join("\n", kept);
+    }
+
+    private static string StripTerminalFrames(string raw)
+    {
+        string s = raw;
+        // OSC sequences (links/progress): ESC ] ... ( BEL | ESC \ ). e.g. "ESC]8;;file://..\a" (hyperlink)
+        // and "ESC]9;4;0;ESC\\" (progress bar).
+        s = s.ReplaceRegex(@"\x1b\][^\x1b]*(?:\x07|\x1b\\)", string.Empty);
+        // CSI sequences (cursor/mode moves): "ESC[?1h" (autowrap) and the logger's cursor frames.
+        s = s.ReplaceRegex(@"\x1b\[[0-9;?]*[a-zA-Z]", string.Empty);
+        return s.Replace("\x1b", string.Empty);
+    }
+
+    private static string ReplaceRegex(this string input, string pattern, string replacement) =>
+        Regex.Replace(input, pattern, replacement);
 
     // Renders two CLI outputs side-by-side for visual behavior-parity snapshots. Column widths and
     // titles are configurable so the same helper is reusable across the whole suite. Columns are

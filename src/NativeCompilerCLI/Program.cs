@@ -10,10 +10,37 @@ using static System.Console;
 // (current-directory project search, exit codes, and the SDK's error/help texts).
 // Legacy bare-path invocation (`NativeCompilerCLI <folder>`) routes to `build`.
 
-// Byte-identical to `dotnet help` for the host SDK (the version line is substituted at run time so
-// the text stays in step with whichever SDK hosts the CLI).
-const string HelpTemplate = """
-.NET SDK (10.0.400)
+// SDK command registry - the single source of truth for the `SDK commands:` section of help. Flip
+// `Implemented` here when a command gains parity; the help text is derived from it (and from the
+// hosting SDK version), so nothing in the output is hardcoded.
+var SdkCommands = new (string Name, string Description, bool Implemented)[]
+{
+    ("build", "Build a .NET project.", true),
+    ("build-server", "Interact with servers started by a build.", false),
+    ("clean", "Clean build outputs of a .NET project.", false),
+    ("format", "Apply style preferences to a project or solution.", false),
+    ("help", "Opens the reference page in a browser for the specified command.", true),
+    ("msbuild", "Run Microsoft Build Engine (MSBuild) commands.", false),
+    ("new", "Create a new .NET project or file.", false),
+    ("nuget", "Provides additional NuGet commands.", false),
+    ("pack", "Create a NuGet package.", false),
+    ("package", "Search for, add, remove, or list PackageReferences for a .NET project.", false),
+    ("publish", "Publish a .NET project for deployment.", false),
+    ("reference", "Add, remove, or list ProjectReferences for a .NET project.", false),
+    ("restore", "Restore dependencies specified in a .NET project.", false),
+    ("run", "Build and run a .NET project output.", true),
+    ("sdk", "Manage .NET SDK installation.", false),
+    ("solution", "Modify Visual Studio solution files.", false),
+    ("store", "Store the specified assemblies in the runtime package store.", false),
+    ("test", "Run unit tests using the test runner specified in a .NET project.", false),
+    ("tool", "Install or manage tools that extend the .NET experience.", false),
+    ("vstest", "Run Microsoft Test Engine (VSTest) commands.", false),
+    ("workload", "Manage optional workloads.", false),
+};
+
+// SDK-independent spine of the help output, mirroring `dotnet help`. The version line (top) and the
+// SDK command list are generated with live values.
+const string HelpPreamble = """
 Usage: dotnet [runtime-options] [path-to-application] [arguments]
 
 Execute a .NET application.
@@ -42,28 +69,9 @@ sdk-options:
   --version         Display .NET SDK version in use.
 
 SDK commands:
-  build             Build a .NET project.
-  build-server      Interact with servers started by a build.
-  clean             Clean build outputs of a .NET project.
-  format            Apply style preferences to a project or solution.
-  help              Opens the reference page in a browser for the specified command.
-  msbuild           Run Microsoft Build Engine (MSBuild) commands.
-  new               Create a new .NET project or file.
-  nuget             Provides additional NuGet commands.
-  pack              Create a NuGet package.
-  package           Search for, add, remove, or list PackageReferences for a .NET project.
-  publish           Publish a .NET project for deployment.
-  reference         Add, remove, or list ProjectReferences for a .NET project.
-  restore           Restore dependencies specified in a .NET project.
-  run               Build and run a .NET project output.
-  sdk               Manage .NET SDK installation.
-  solution          Modify Visual Studio solution files.
-  store             Store the specified assemblies in the runtime package store.
-  test              Run unit tests using the test runner specified in a .NET project.
-  tool              Install or manage tools that extend the .NET experience.
-  vstest            Run Microsoft Test Engine (VSTest) commands.
-  workload          Manage optional workloads.
+""";
 
+const string HelpEpilogue = """
 Additional commands from bundled tools:
   dev-certs         Create and manage development certificates.
   fsi               Start F# Interactive / execute F# scripts.
@@ -73,6 +81,23 @@ Additional commands from bundled tools:
 
 Run 'dotnet [command] --help' for more information on a command.
 """;
+
+// Column to the left of the `[implemented]`/`[not implemented]` markers (past the longest description).
+const int SdkCommandAnnotationColumn = 94;
+
+string HelpText()
+{
+    var text = new System.Text.StringBuilder();
+    text.AppendLine($".NET SDK ({SdkVersion()})");
+    text.Append(HelpPreamble);
+    text.AppendLine();
+    foreach (var (name, description, implemented) in SdkCommands)
+        text.AppendLine($"  {name.PadRight(18)}{description}".PadRight(SdkCommandAnnotationColumn)
+            + (implemented ? "[implemented]" : "[not implemented]"));
+    text.AppendLine();
+    text.Append(HelpEpilogue);
+    return text.ToString();
+}
 
 var first = args.Length == 0 ? "help" : args[0];
 bool explicitCommand = first is "build" or "run" or "help" or "version" or "--version" or "-h" or "--help";
@@ -162,30 +187,39 @@ int BuildCommand(string[] args)
         return solutionResult.Success ? 0 : 1;
     }
 
+    var totalTimer = Stopwatch.StartNew();
     var buildResult = NativeCompiler.NativeCompiler.Build(target);
+    totalTimer.Stop();
 
+    // Always use the SDK terminal-logger summary (the format `dotnet build` prints to a terminal):
+    // it carries the measured seconds and the build path relative to the current directory.
     if (buildResult.Success && buildResult.Project is { } builtProject)
     {
-        WriteLine($"  {builtProject.ProjectName} -> {builtProject.DllPathName}");
+        var tfm = builtProject.TargetFramework ?? "net10.0";
+        var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), builtProject.DllPathName);
+        WriteLine($"  {builtProject.ProjectName} {tfm} succeeded ({buildResult.Duration.TotalSeconds:0.0}s) → {relativePath}");
         WriteLine();
-        WriteLine("Build succeeded.");
-        WriteLine("    0 Warning(s)");
-        WriteLine("    0 Error(s)");
-        WriteLine();
+        WriteLine($"Build succeeded in {totalTimer.Elapsed.TotalSeconds:0.0}s");
         return 0;
     }
 
-    var errors = WithProjectSuffix(buildResult.Errors, buildResult.Project?.CsProjFile.FilePath);
-    WriteLine(errors);
+    var errorLines = buildResult.Errors
+        .Replace("\r\n", "\n")
+        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var errorCount = ErrorLineCount(buildResult.Errors);
+    var name = buildResult.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target);
+    var failureTfm = buildResult.Project?.TargetFramework ?? "net10.0";
+    WriteLine($"  {name} {failureTfm} failed with {errorCount} error(s) ({buildResult.Duration.TotalSeconds:0.0}s)");
+    foreach (var line in errorLines) WriteLine($"    {line}");
     WriteLine();
-    WriteLine("Build FAILED.");
-    WriteLine();
-    WriteLine(errors);
-    WriteLine("    0 Warning(s)");
-    WriteLine("    1 Error(s)");
-    WriteLine();
+    WriteLine($"Build failed with {errorCount} error(s) in {totalTimer.Elapsed.TotalSeconds:0.0}s");
     return 1;
 }
+
+int ErrorLineCount(string errors) => errors
+    .Replace("\r\n", "\n")
+    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Length;
 
 int RunCommand(string[] args)
 {
@@ -333,7 +367,7 @@ static string SdkVersion()
     return version;
 }
 
-static void PrintHelp()
+void PrintHelp()
 {
-    WriteLine(HelpTemplate.Replace(".NET SDK (10.0.400)", $".NET SDK ({SdkVersion()})"));
+    WriteLine(HelpText());
 }
