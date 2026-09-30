@@ -137,54 +137,56 @@ int BuildCommand(string[] args)
     {
         var solutionResult = NativeCompiler.NativeCompiler.BuildSolution(target);
 
+        // Top-level resolution errors (missing projects, unresolved references, cycles) come first.
         foreach (var error in solutionResult.Errors) WriteLine(error);
 
-        var isSln = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase);
-        var failedErrorLines = new List<string>();
-        var successLines = new List<string>();
+        // SDK terminal-logger grammar for solution builds: one status line per project in build
+        // order, each carrying the measured seconds and the output path relative to the CWD
+        // (exactly like a single-project build). Warnings are listed indented under their project.
+        var totalWarnings = 0;
+        var totalErrors = 0;
         foreach (var project in solutionResult.Projects)
         {
-            if (project.Result.Success)
+            var result = project.Result;
+            var tfm = result.Project?.TargetFramework ?? "net10.0";
+
+            if (result.Success)
             {
-                // `dotnet build *.sln` suppresses per-project lines on an all-successful build,
-                // but `.slnx` (and any failing solution build) prints them per compiled project.
-                if (isSln && solutionResult.Success) continue;
-                var outputPath = project.Result.Project?.DllPathName ?? project.ProjectFile;
-                successLines.Add($"  {project.ProjectName} -> {outputPath}");
+                var outputPath = result.Project?.DllPathName ?? project.ProjectFile;
+                var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), outputPath);
+                var warnings = SplitLines(result.Warnings);
+                totalWarnings += warnings.Length;
+                if (warnings.Length > 0)
+                {
+                    WriteLine($"  {project.ProjectName} {tfm} succeeded with {warnings.Length} warning(s) ({result.Duration.TotalSeconds:0.0}s) → {relativePath}");
+                    foreach (var warning in warnings) WriteLine($"    {warning}");
+                }
+                else
+                {
+                    WriteLine($"  {project.ProjectName} {tfm} succeeded ({result.Duration.TotalSeconds:0.0}s) → {relativePath}");
+                }
             }
             else
             {
-                failedErrorLines.Add(WithProjectSuffix(project.Result.Errors, project.ProjectFile));
+                var projectErrorCount = ErrorLineCount(result.Errors);
+                totalErrors += projectErrorCount;
+                WriteLine($"  {project.ProjectName} {tfm} failed with {projectErrorCount} error(s) ({result.Duration.TotalSeconds:0.0}s)");
+                foreach (var line in SplitLines(WithProjectSuffix(result.Errors, project.ProjectFile)))
+                    WriteLine($"    {line}");
             }
         }
 
-        // SDK ordering quirk: a failing `.slnx` lists compiled projects before the errors, while a
-        // `.sln` lists the errors first. Both are stable across runs, so mirror them exactly.
-        if (!isSln)
-        {
-            foreach (var line in successLines) WriteLine(line);
-            foreach (var line in failedErrorLines) WriteLine(line);
-        }
-        else
-        {
-            foreach (var line in failedErrorLines) WriteLine(line);
-            foreach (var line in successLines) WriteLine(line);
-        }
-
         WriteLine();
-        WriteLine(solutionResult.Success ? "Build succeeded." : "Build FAILED.");
-        if (!solutionResult.Success)
+        if (solutionResult.Success)
         {
-            WriteLine();
-            foreach (var failedLine in failedErrorLines) WriteLine(failedLine);
+            WriteLine(totalWarnings > 0
+                ? $"Build succeeded with {totalWarnings} warning(s) in {solutionResult.Duration.TotalSeconds:0.0}s"
+                : $"Build succeeded in {solutionResult.Duration.TotalSeconds:0.0}s");
+            return 0;
         }
 
-        var failedProjects = solutionResult.Projects.Count(project => !project.Result.Success);
-        WriteLine("    0 Warning(s)");
-        WriteLine($"    {failedProjects} Error(s)");
-        WriteLine();
-
-        return solutionResult.Success ? 0 : 1;
+        WriteLine($"Build failed with {totalErrors} error(s) in {solutionResult.Duration.TotalSeconds:0.0}s");
+        return 1;
     }
 
     var totalTimer = Stopwatch.StartNew();
@@ -197,15 +199,25 @@ int BuildCommand(string[] args)
     {
         var tfm = builtProject.TargetFramework ?? "net10.0";
         var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), builtProject.DllPathName);
+        var warnings = SplitLines(buildResult.Warnings);
+        if (warnings.Length > 0)
+        {
+            // SDK terminal grammar: a project with warnings reports
+            // "succeeded with N warning(s) (Xs)" and lists them indented underneath.
+            WriteLine($"  {builtProject.ProjectName} {tfm} succeeded with {warnings.Length} warning(s) ({buildResult.Duration.TotalSeconds:0.0}s) → {relativePath}");
+            foreach (var warning in warnings) WriteLine($"    {warning}");
+            WriteLine();
+            WriteLine($"Build succeeded with {warnings.Length} warning(s) in {totalTimer.Elapsed.TotalSeconds:0.0}s");
+            return 0;
+        }
+
         WriteLine($"  {builtProject.ProjectName} {tfm} succeeded ({buildResult.Duration.TotalSeconds:0.0}s) → {relativePath}");
         WriteLine();
         WriteLine($"Build succeeded in {totalTimer.Elapsed.TotalSeconds:0.0}s");
         return 0;
     }
 
-    var errorLines = buildResult.Errors
-        .Replace("\r\n", "\n")
-        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var errorLines = SplitLines(buildResult.Errors);
     var errorCount = ErrorLineCount(buildResult.Errors);
     var name = buildResult.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target);
     var failureTfm = buildResult.Project?.TargetFramework ?? "net10.0";
@@ -216,10 +228,12 @@ int BuildCommand(string[] args)
     return 1;
 }
 
-int ErrorLineCount(string errors) => errors
+int ErrorLineCount(string errors) => SplitLines(errors).Length;
+
+// Diagnostics come back as one blob with embedded newlines; split into individual message lines.
+static string[] SplitLines(string text) => text
     .Replace("\r\n", "\n")
-    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    .Length;
+    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 int RunCommand(string[] args)
 {
@@ -323,20 +337,24 @@ static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
 // `dotnet run`); everything after the `--` separator is handed to the running application.
 static (string? Path, string[] AppArgs) PositionalAndFlags(string[] args)
 {
+    // Mirrors `dotnet run` forwarding: only --project/-p are consumed as options, everything else
+    // is forwarded to the app (positionals and unknown flags alike), and the first positional is
+    // the project path - exactly like `dotnet run --project <proj> <args>` (the path is not
+    // re-forwarded; dotnet only echoes a path given as a bare positional, a legacy quirk).
     string? path = null;
     var appArgs = new System.Collections.Generic.List<string>();
     bool afterSeparator = false;
     for (int i = 0; i < args.Length; i++)
     {
         var arg = args[i];
-        if (afterSeparator) { appArgs.Add(arg); continue; }
         if (arg == "--") { afterSeparator = true; continue; }
-        if (arg is "--project" or "-p")
+        if (!afterSeparator && arg is "--project" or "-p")
         {
             if (i + 1 < args.Length) path = args[++i];
             continue;
         }
-        if (path is null && !arg.StartsWith("-")) path = arg;
+        if (!afterSeparator && path is null && !arg.StartsWith("-")) { path = arg; continue; }
+        appArgs.Add(arg);
     }
     return (path, appArgs.ToArray());
 }

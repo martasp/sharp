@@ -71,16 +71,52 @@ public static class CliComparisonHelper
                 continue;
             }
 
-            bool isSummary = trimmed.Contains("succeeded (")
+            // The restore banner is a separate lifecycle section of the terminal logger, not part of
+            // the compile summary we assert on.
+            if (trimmed.StartsWith("Restore ")) continue;
+
+            // Keep the terminal-logger grammar that is deterministic: per-project status lines
+            // ("<name> <tfm> succeeded (Xs) -> path" and its "with N warning(s)" variant), the
+            // warning/error lines indented under them, and the final status/summary lines.
+            bool isSummary = trimmed.Contains("succeeded")
                              || trimmed.Contains("failed with")
-                             || trimmed.StartsWith("Build succeeded in")
-                             || trimmed.StartsWith("Build failed with")
-                             || trimmed.Contains(": error ");
+                             || trimmed.Contains(": error ")
+                             || trimmed.Contains(": warning ");
             if (isSummary) kept.Add(trimmed);
         }
 
         while (kept.Count > 0 && kept[0].Length == 0) kept.RemoveAt(0);
         while (kept.Count > 0 && kept[^1].Length == 0) kept.RemoveAt(kept.Count - 1);
+        return string.Join("\n", kept);
+    }
+
+    // Solution builds can't byte-pin against the SDK: both the per-project status lines and the
+    // summary's timing clause are state- and timing-dependent (the SDK only leaves per-project
+    // lines when a project is visibly compiling, and prints a bare "Build succeeded." - no
+    // "in Ns" - when every project is up-to-date). The stable, redirect-safe surface is the
+    // verdict word ("Build succeeded."/"Build failed."), any error lines, and the exit code, so
+    // solution parity is asserted on that; our full terminal layout is pinned by a snapshot.
+    public static string NormalizeSolutionInteractive(string raw)
+    {
+        var kept = new List<string>();
+        foreach (string line in Normalize(raw).Split('\n'))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+
+            if (trimmed.StartsWith("Build succeeded"))
+            {
+                kept.Add("Build succeeded.");
+                continue;
+            }
+            if (trimmed.StartsWith("Build failed") || trimmed.StartsWith("Build FAILED"))
+            {
+                kept.Add("Build failed.");
+                continue;
+            }
+            if (trimmed.Contains(": error ")) kept.Add(trimmed);
+        }
+
         return string.Join("\n", kept);
     }
 

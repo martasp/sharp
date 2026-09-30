@@ -109,7 +109,7 @@ public static class NativeCompiler
         // analyzer assemblies (package analyzers + Analyzer project references like
         // OrchardCore.SourceGenerators) via a shadow-copied load context. AnalyzerRunner merges
         // their trees, then the static analyzers run over the merged compilation.
-        var (generatedCompilation, analyzerErrors) = AnalyzerRunner.Run(compilation, project);
+        var (generatedCompilation, analyzerErrors, analyzerWarnings) = AnalyzerRunner.Run(compilation, project);
         compilation = generatedCompilation;
         //string? analyzerErrors = "";    
 
@@ -131,7 +131,8 @@ public static class NativeCompiler
                 timer.Elapsed,
                 compilation,
                 project,
-                embeddedTexts);
+                embeddedTexts,
+                analyzerWarnings);
         }
 
         var produceDll = ProduceDll(compilation, project); // slowest part 1sec, (TODO dont need to save dll if running on compile time)
@@ -143,9 +144,12 @@ public static class NativeCompiler
         // the SDK generator/analyzer DLLs so the self-hosted JIT stays bindable), so those ride along.
         var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? "net10.0");
         // SDK mirror: restore-derived runtime graph (*.deps.json). Only the NuGet/local runtime set
-        // feeds it - HintPath copies are reference/analyzer assemblies, never package assets.
-        DepsJsonWriter.Write(project, paths);
-        paths.AddRange(GetHintPathCopyLocalFiles(projectPath));
+        // feeds it - HintPath copies are reference/analyzer assemblies, never package assets. They
+        // are still registered in deps.json as "reference" libraries (DepsJsonWriter) so a JIT
+        // build of the compiler can bind its statically linked generators at runtime.
+        var hintPathCopies = GetHintPathCopyLocalFiles(projectPath);
+        DepsJsonWriter.Write(project, paths, hintPathCopies);
+        paths.AddRange(hintPathCopies);
         WriteFiles(project.SharpBinFolderPath, paths);
 
         if (produceDll.success)
@@ -158,7 +162,8 @@ public static class NativeCompiler
             timer.Elapsed,
             compilation,
             project,
-            embeddedTexts);
+            embeddedTexts,
+            analyzerWarnings);
     }
 
     public static BuildSolutionResult BuildSolution(string solutionPath)
@@ -185,7 +190,7 @@ public static class NativeCompiler
             {
                 return new BuildResult(false, ex.ToString(),
                     new[] { $"{Path.GetFileName(csproj)} failed: {ex.Message}" },
-                    TimeSpan.Zero, null, null, null);
+                    TimeSpan.Zero, null, null, null, string.Empty);
             }
         }
 
@@ -524,7 +529,8 @@ public sealed record BuildResult(
     TimeSpan Duration,
     CSharpCompilation? Compilation,
     Project? Project,
-    IEnumerable<EmbeddedText>? EmbeddedTexts);
+    IEnumerable<EmbeddedText>? EmbeddedTexts,
+    string Warnings);
 
 public sealed record SolutionProjectResult(
     string ProjectName,

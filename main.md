@@ -42,24 +42,13 @@ Build succeeded in 1.2s
 ```
 
 ```
-# build a classic .sln (solution builds keep dotnet's classic text; all-success omits per-project lines)
+# build a solution (.sln/.slnx use the terminal-logger grammar: per-project timing lines + summary)
 NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
+  LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
+  LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
+  SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
 
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-```
-
-```
-# build a .slnx (per-project lines always printed)
-NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnxFixtures.slnx
-  LibA -> <repo>/tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
-  LibB -> <repo>/tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
-  SlnApp -> <repo>/tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
-
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
+Build succeeded in 0.4s
 ```
 
 ```
@@ -139,23 +128,33 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
 | `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |
-| `build <path.sln>` (path) | success suppresses per-project lines (SDK quirk, exactly mirrored); failure echoes errors first then maps successes | same | identical |
-| `build <path.slnx>` (path) | per-project `->` mapping then summary; failure maps successes first, then echoes errors | same | identical |
+| `build <path.sln>` (path) | terminal-logger grammar: per-project timing lines, failures echo errors under the project, then `Build succeeded[ in Ns]` | same | verdict + exit code identical; layout snapshot-pinned (SDK's own solution rendering is build-state dependent) |
+| `build <path.slnx>` (path) | same grammar as `.sln` | same | verdict + exit code identical; layout snapshot-pinned |
 | `build <path.csproj>` (path) | terminal-logger summary | same | identical after normalize (seconds → `<secs>`) |
 | `build` (cwd = single `.slnx`) | resolves the sole `SlnxFixtures.slnx`, maps + summary | same | identical |
 | `build` (cwd = single `.csproj`) | resolves sole `HelloParityFixture.csproj`, terminal summary | same | identical after normalize |
 
-Solution builds reproduce two SDK quirks for byte parity: a fully-successful `.sln` build prints no
-per-project lines, and a failing `.slnx` lists compiled projects before the errors while a failing
-`.sln` lists the errors first. Verified via `CliCommandParityTests` (`build_sln_path`, `build_slnx_path`,
-`build_slnx_no_path_cwd`, `build_csproj_no_path_cwd` snapshots).
+Solution builds use the same terminal grammar as single-project builds. They cannot be byte-pinned
+against the SDK: the SDK's own solution rendering is build-state dependent — it only leaves
+per-project status lines when a project is visibly compiling, and prints a bare `Build succeeded.`
+(no `in Ns`) when every project is up-to-date. So `CliCommandParityTests` asserts the deterministic
+surface (exit code + `Build succeeded`/`Build failed` verdict via
+`CliComparisonHelper.NormalizeSolutionInteractive`) and pins our full layout with Verify
+snapshots (`build_sln_path`, `build_slnx_path`, `build_slnx_no_path_cwd`).
+
+Known gap: NuGet restore warnings (e.g. `NU1510`) are not reproduced, so the warning count in the
+summary matches the SDK only for diagnostics the compile pipeline itself produces.
 
 Single-project `build` always prints the SDK terminal-logger summary (the format `dotnet build`
 uses on a terminal): measured seconds included, error counts computed from the actual diagnostics,
 the build path relative to the current directory. The SDK's terminal logger is forced on
 (`MSBUILDTERMINALLOGGER=on`) in the tests, and run-varying seconds are normalized to a `<secs>`
 token via `CliComparisonHelper.NormalizeInteractive` (also strips the SDK's ANSI render noise).
-Solution builds keep the SDK's classic blocky text in every mode.
+Solution builds print the same terminal-logger grammar (per-project timing lines, warnings indented
+under their project, `Build succeeded[ in Ns]` / `Build failed with N error(s) in Ns`).
+Info-severity diagnostics (e.g. `SYSLIB1045`) are dropped, matching the SDK at default verbosity;
+warning-severity diagnostics travel through `BuildResult.Warnings` and are rendered by the CLI
+rather than printed from the analyzer pipeline.
 
 ## Benchmarking
 

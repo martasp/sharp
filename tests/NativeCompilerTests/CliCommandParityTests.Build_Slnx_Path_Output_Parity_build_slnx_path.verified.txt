@@ -1,11 +1,5 @@
-﻿NATIVE build "{SolutionDirectory}tests/TestExampleProjects/SlnxFixtures.slnx"            | DOTNET build "{SolutionDirectory}tests/TestExampleProjects/SlnxFixtures.slnx" --nologo --no-restore --no-incremental
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  LibA -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/LibA/bin/Debug/net10.0/LibA.dll       |   LibA -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/LibA/bin/Debug/net10.0/LibA.dll      
-  LibB -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/LibB/bin/Debug/net10.0/LibB.dll       |   LibB -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/LibB/bin/Debug/net10.0/LibB.dll      
-  SlnApp -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/SlnApp/bin/Debug/net10.0/SlnApp.dll |   SlnApp -> {SolutionDirectory}/tests/TestExampleProjects/SlnFixtures/SlnApp/bin/Debug/net10.0/SlnApp.dll
-                                                                                                          |                                                                                                          
-Build succeeded.                                                                                          | Build succeeded.                                                                                         
-    0 Warning(s)                                                                                          |     0 Warning(s)                                                                                         
-    0 Error(s)                                                                                            |     0 Error(s)                                                                                           
-                                                                                                          |                                                                                                          
-                                                                                                          |                                                                                                          
+﻿LibA net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibA/bin/Debug/net10.0/LibA.dll
+LibB net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibB/bin/Debug/net10.0/LibB.dll
+SlnApp net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/SlnApp/bin/Debug/net10.0/SlnApp.dll
+
+Build succeeded in <secs>

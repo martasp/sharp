@@ -16,7 +16,8 @@ namespace NativeCompiler;
 // otherwise the file is skipped entirely.
 public static class DepsJsonWriter
 {
-    public static void Write(Project project, IReadOnlyList<string> runtimeFilePaths)
+    public static void Write(Project project, IReadOnlyList<string> runtimeFilePaths,
+        IReadOnlyList<string> hintPathFiles)
     {
         try
         {
@@ -36,7 +37,7 @@ public static class DepsJsonWriter
             if (tfm is null) return;
 
             var builder = new DependencyContextBuilderPort(project, root, targets.GetProperty(tfm),
-                runtimeFilePaths, DotNetFrameworkName(tfm), tfm);
+                runtimeFilePaths, hintPathFiles, DotNetFrameworkName(tfm), tfm);
             var dependencyContext = builder.Build();
 
             using var stream = File.Create(project.DepsJsonPathName);
@@ -108,12 +109,19 @@ public static class DepsJsonWriter
         private readonly IReadOnlyList<string> _inputs;
         private readonly HashSet<string> _consumed = new(StringComparer.OrdinalIgnoreCase);
 
+        // Copy-local HintPath <Reference> assemblies (the SDK generator/analyzer set the compiler
+        // itself links). The SDK emits each as a standalone "reference" runtime library so the
+        // produced app can bind the type at runtime; without these entries a JIT build of the
+        // compiler cannot resolve its statically instantiated generators (AnalyzerRegistry).
+        private readonly IReadOnlyList<string> _referenceFiles;
+
         private readonly string _mainProjectName;
         private readonly string _mainProjectVersion;
         private readonly string _outputName;
 
         public DependencyContextBuilderPort(Project project, JsonElement root, JsonElement target,
-            IReadOnlyList<string> runtimeFilePaths, string dotnetFrameworkName, string tfm)
+            IReadOnlyList<string> runtimeFilePaths, IReadOnlyList<string> hintPathFiles,
+            string dotnetFrameworkName, string tfm)
         {
             _mainProjectName = project.ProjectName;
             _mainProjectVersion = project.Version;
@@ -121,6 +129,7 @@ public static class DepsJsonWriter
             _dotnetFrameworkName = dotnetFrameworkName;
             _tfm = tfm;
             _inputs = runtimeFilePaths;
+            _referenceFiles = hintPathFiles;
 
             var libraries = root.TryGetProperty("libraries", out var libs) ? libs : default;
 
@@ -247,6 +256,34 @@ public static class DepsJsonWriter
             }
 
             TrimLibrariesWithoutAssets(runtimeLibraries);
+
+            foreach (var hintPath in _referenceFiles)
+            {
+                var fileName = Path.GetFileName(hintPath);
+                var baseName = Path.GetFileNameWithoutExtension(fileName);
+                if (string.IsNullOrEmpty(baseName)) continue;
+
+                // A reference library is only emitted when nothing already claimed the name - a
+                // package or project named identically wins (the SDK's user-assembly dedup).
+                if (runtimeLibraries.Any(library => library.Library.Name.Equals(baseName, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var runtimeFile = CreateRuntimeFile(fileName, hintPath);
+                var version = runtimeFile.AssemblyVersion ?? "0.0.0";
+                runtimeLibraries.Add(new ModifiableRuntimeLibrary(new RuntimeLibrary(
+                    type: "reference",
+                    name: baseName,
+                    version: version,
+                    hash: string.Empty,
+                    runtimeAssemblyGroups: new[] { new RuntimeAssetGroup(string.Empty, new[] { runtimeFile }) },
+                    nativeLibraryGroups: Array.Empty<RuntimeAssetGroup>(),
+                    resourceAssemblies: Array.Empty<ResourceAssembly>(),
+                    dependencies: Array.Empty<Dependency>(),
+                    path: null,
+                    hashPath: null,
+                    runtimeStoreManifestName: null,
+                    serviceable: false)));
+            }
 
             var libraryNames = runtimeLibraries.Select(library => library.Library.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);

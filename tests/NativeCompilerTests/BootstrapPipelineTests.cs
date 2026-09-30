@@ -131,7 +131,9 @@ public class BootstrapPipelineTests
 
         Log($"{Environment.NewLine}[{stage}] {fileName} {arguments}");
         foreach (var line in result.Output.Split('\n')
-                     .Where(line => line.Contains(" -> ") || line.Contains("Error(s)") || line.Contains("Warning(s)"))
+                     .Where(line => line.Contains(" -> ") || line.Contains("succeeded (")
+                                 || line.Contains("Error(s)") || line.Contains("Warning(s)")
+                                 || line.StartsWith("Build succeeded") || line.StartsWith("Build failed"))
                      .Select(line => line.TrimEnd()))
             Log("  " + line);
         Log($"  exit={result.ExitCode}");
@@ -139,11 +141,17 @@ public class BootstrapPipelineTests
         return result;
     }
 
-    // A clean solution build reports 0 Error(s); anything else (a compiler crash, a blocked
-    // binary, a compile error) must surface as a test failure with the full output attached.
+    // A clean solution build exits 0 and reports the success verdict (the SDK terminal-logger
+    // summary "Build succeeded[ in Ns]" / "Build succeeded with N warning(s) in Ns"); anything else
+    // (a compiler crash, a blocked binary, a compile error) must surface as a test failure with
+    // the full output attached.
     private static void AssertClean(string stage, CompilationResult result) =>
         Assert.True(
-            result.ExitCode == 0 && result.Output.Contains("0 Error(s)") && !result.Output.Contains("error CS"),
+            result.ExitCode == 0
+            && (result.Output.Contains("Build succeeded in")
+                || result.Output.Contains("Build succeeded with"))
+            && !result.Output.Contains("error CS")
+            && !result.Output.Contains("Build failed"),
             $"[{stage}] expected a clean solution build. exit={result.ExitCode}\n{result.Output}");
 
     // Written to the on-screen test output (visible with a detailed console logger) AND to the

@@ -29,7 +29,7 @@ NativeCompilerCLI <command> [target] [-- app args]
 | Command | Behaviour |
 |---|---|
 | `build` | compiles the target; identical output/exit code to `dotnet build` |
-| `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards everything after `--`; propagates the app exit code |
+| `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
 | `version` / `--version` | prints the hosting SDK version (e.g. `10.0.400`) |
 | `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the version line comes from the hosting SDK |
 | `NativeCompilerCLI <target>` | legacy form, routed to `build` |
@@ -64,33 +64,28 @@ $ cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/HelloParityFixt
 Build succeeded in 1.2s
 ```
 
-### Build a classic `.sln`
+### Build a solution (`.sln` / `.slnx`)
 
-Solution builds keep the SDK's classic blocky text. A fully-successful `.sln` build prints no
-per-project lines — an SDK quirk reproduced exactly:
+Solution builds use the same terminal-logger grammar as a single-project build: one status line per
+project in dependency order, each with the measured seconds and the output path relative to the
+current directory, then the summary. Warning-severity diagnostics are listed indented under their
+project; info-severity diagnostics stay hidden, exactly like the SDK at default verbosity.
 
 ```
 $ NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
+  LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
+  LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
+  SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
 
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
+Build succeeded in 0.4s
 ```
 
-### Build a `.slnx`
+A failing project reports `failed with N error(s) (Xs)` with its errors underneath, and the
+summary becomes `Build failed with N error(s) in Xs` (exit code 1).
 
-Per-project lines are always printed for `.slnx`:
-
-```
-$ NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnxFixtures.slnx
-  LibA -> <repo>/tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
-  LibB -> <repo>/tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
-  SlnApp -> <repo>/tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
-
-Build succeeded.
-    0 Warning(s)
-    0 Error(s)
-```
+Known gap: the SDK also counts NuGet **restore** warnings (e.g. `NU1510`) in that summary; our
+restore is silent, so a project whose only warnings come from NuGet reports `Build succeeded in
+Xs` where the SDK would say `Build succeeded with N warning(s) in Xs`.
 
 ### Build with no target (current-directory search)
 
@@ -138,12 +133,14 @@ SDK commands:
 
 ## Parity contract
 
-Every `build`/`run` example above is verified against the matching `dotnet` invocation — including
-exit codes and the solution layout quirks (`.sln` success suppresses per-project lines; a failing
-`.slnx` lists compiled projects before the errors, a failing `.sln` lists them after). Single-project
-`build` uses the SDK's terminal-logger summary: the SDK's own terminal logger is forced on
+Every `build`/`run` example above is verified against the matching `dotnet` invocation. `build` uses
+the SDK's terminal-logger summary: the SDK's own terminal logger is forced on
 (`MSBUILDTERMINALLOGGER=on`) in the tests and the run-varying seconds are normalized to a `<secs>`
-token. `help` and `--version`
+token. Single-project output is compared byte-for-byte; solution output is compared on the
+deterministic surface only (exit code plus the `Build succeeded`/`Build failed` verdict), because
+the SDK's own solution rendering is build-state dependent — it drops per-project lines and the
+summary's timing clause when every project is up-to-date. Our full solution layout is pinned by
+Verify snapshots. `help` and `--version`
 deliberately add value: `--version` echoes the hosting SDK version and `help` annotates the
 command list with `[implemented]`/`[not implemented]`, both derived at runtime rather than
 hardcoded. The parity is enforced by `CliCommandParityTests` and `CliComparisonTests`

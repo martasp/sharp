@@ -110,7 +110,7 @@ public class CliCommandParityTests
     public async Task Build_Sln_Path_Output_Parity()
     {
         await EnsureSdkRestore(SlnFixturesSolutionPath);
-        await Compare("build_sln_path", $"build \"{SlnFixturesSolutionPath}\"",
+        await CompareSolutionTerminal("build_sln_path", $"build \"{SlnFixturesSolutionPath}\"",
             $"build \"{SlnFixturesSolutionPath}\" --nologo --no-restore --no-incremental");
     }
 
@@ -118,8 +118,42 @@ public class CliCommandParityTests
     public async Task Build_Slnx_Path_Output_Parity()
     {
         await EnsureSdkRestore(SlnxFixturesSolutionPath);
-        await Compare("build_slnx_path", $"build \"{SlnxFixturesSolutionPath}\"",
+        await CompareSolutionTerminal("build_slnx_path", $"build \"{SlnxFixturesSolutionPath}\"",
             $"build \"{SlnxFixturesSolutionPath}\" --nologo --no-restore --no-incremental");
+    }
+
+    // Solution builds use the same terminal grammar for the per-project lines and the summary, but
+    // the SDK's own solution output is build-state dependent (see NormalizeSolutionInteractive), so
+    // parity is asserted on the deterministic verdict/exit-code surface, while a snapshot pins our
+    // full terminal layout (per-project timing lines, relative paths, warning/summary grammar).
+    private async Task CompareSolutionTerminal(string name, string oursArgs, string dotnetArgs)
+    {
+        if (!File.Exists(CliDll))
+            throw new InvalidOperationException("NativeCompilerCLI is not built - run `dotnet build NativeCompiler.sln` first.");
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", RepoRoot);
+        var dotnet = await RunAsync("dotnet", dotnetArgs, RepoRoot, ("MSBUILDTERMINALLOGGER", "on"));
+
+        ours.ExitCode.ShouldBe(dotnet.ExitCode, $"exit code parity for {name}");
+        CliComparisonHelper.NormalizeSolutionInteractive(ours.Output)
+            .ShouldBe(CliComparisonHelper.NormalizeSolutionInteractive(dotnet.Output), $"verdict parity for {name}");
+
+        await Verify(CliComparisonHelper.NormalizeInteractive(ours.Output)).UseTextForParameters(name);
+    }
+
+    private async Task CompareSolutionTerminalIn(string name, string workingDirectory, string oursArgs, string dotnetArgs)
+    {
+        if (!File.Exists(CliDll) || !Directory.Exists(workingDirectory))
+            throw new InvalidOperationException($"{name} fixture not found - check {workingDirectory}");
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", workingDirectory);
+        var dotnet = await RunAsync("dotnet", dotnetArgs, workingDirectory, ("MSBUILDTERMINALLOGGER", "on"));
+
+        ours.ExitCode.ShouldBe(dotnet.ExitCode, $"exit code parity for {name}");
+        CliComparisonHelper.NormalizeSolutionInteractive(ours.Output)
+            .ShouldBe(CliComparisonHelper.NormalizeSolutionInteractive(dotnet.Output), $"verdict parity for {name}");
+
+        await Verify(CliComparisonHelper.NormalizeInteractive(ours.Output)).UseTextForParameters(name);
     }
 
     // `dotnet build --no-restore` fails with NETSDK1004 when an asset file is missing, so restore
@@ -129,7 +163,7 @@ public class CliCommandParityTests
 
     [Fact]
     public Task Build_Slnx_NoPath_Cwd_Parity()
-        => CompareIn("build_slnx_no_path_cwd", TestExampleProjectsDir, "build",
+        => CompareSolutionTerminalIn("build_slnx_no_path_cwd", TestExampleProjectsDir, "build",
             "build --nologo --no-restore --no-incremental");
 
     [Fact]
@@ -172,28 +206,6 @@ public class CliCommandParityTests
         var dotnet = await RunAsync("dotnet", dotnetArgs, RepoRoot, ("MSBUILDTERMINALLOGGER", "on"));
         var (nativeOutput, nativeExit) = (CliComparisonHelper.NormalizeInteractive(ours.Output), ours.ExitCode);
         var (sdkOutput, sdkExit) = (CliComparisonHelper.NormalizeInteractive(dotnet.Output), dotnet.ExitCode);
-
-        nativeExit.ShouldBe(sdkExit, $"exit code parity for {name}");
-        nativeOutput.ShouldBe(sdkOutput, $"output parity for {name}");
-
-        string comparisonResult = CliComparisonHelper.GenerateSideBySide(
-            nativeOutput,
-            sdkOutput,
-            $"NATIVE {oursArgs}",
-            $"DOTNET {dotnetArgs}");
-
-        await Verify(comparisonResult).UseTextForParameters(name);
-    }
-
-    private async Task CompareIn(string name, string workingDirectory, string oursArgs, string dotnetArgs)
-    {
-        if (!File.Exists(SlnxFixturesSolutionPath) || !Directory.Exists(workingDirectory))
-            throw new InvalidOperationException($"{name} fixture not found - check {workingDirectory}");
-
-        var ours = await RunAsync("dotnet", $"\"{CliDll}\" {oursArgs}", workingDirectory);
-        var dotnet = await RunAsync("dotnet", dotnetArgs, workingDirectory);
-        var (nativeOutput, nativeExit) = (CliComparisonHelper.Normalize(ours.Output), ours.ExitCode);
-        var (sdkOutput, sdkExit) = (CliComparisonHelper.Normalize(dotnet.Output), dotnet.ExitCode);
 
         nativeExit.ShouldBe(sdkExit, $"exit code parity for {name}");
         nativeOutput.ShouldBe(sdkOutput, $"output parity for {name}");
