@@ -15,13 +15,25 @@ public static class CliComparisonHelper
     // Normalizing first keeps wrap points and column widths consistent with the saved text.
     public const string SolutionToken = "{SolutionDirectory}";
 
+    // Replaces the repo root with the token in arbitrary text. Exposed separately from Normalize
+    // because the column layout depends on the *rendered* length of every line, so any text that
+    // reaches GenerateSideBySide - body output and titles alike - must be culled first. A title
+    // still carrying the real path would size the columns from this machine's checkout depth and
+    // leave the saved snapshot unmatchable anywhere else.
+    public static string CullRepoPath(string text) =>
+        text
+            .Replace('\\', '/')
+            .Replace(GetRepoRootPrefixed(), SolutionToken + '/');
+
+    private static string GetRepoRootPrefixed() =>
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."))
+            .Replace('\\', '/') + '/';
+
     // Shared normalization for any our-vs-dotnet comparison, so behavior parity is asserted on
     // identical text regardless of which command produced it. Wall-clock and restore banners add
     // noise per run; drop them so the comparison is deterministic.
     public static string Normalize(string raw)
     {
-        string RepoRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."));
-
         string normalized = StripTerminalFrames(raw)
             .Replace("\r\n", "\n")
             // A pty stream may leave stray CRs that weren't part of a CRLF pair.
@@ -29,7 +41,7 @@ public static class CliComparisonHelper
             // Canonicalize separators FIRST: every downstream lookup then matches a single dialect.
             .Replace('\\', '/')
             // Cull the path holder so snapshots stay machine-independent.
-            .Replace(RepoRoot.Replace('\\', '/') + '/', SolutionToken + '/')
+            .Replace(GetRepoRootPrefixed(), SolutionToken + '/')
             // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
             // never overwrites real SDK output in bin\; map it to the canonical SDK layout. The path
             // may be absolute (".../myc/Debug/...") or relative from the CWD ("myc/Debug/...").
@@ -147,6 +159,12 @@ public static class CliComparisonHelper
         string rightTitle = "NEW CLI",
         int columnWidth = 0)
     {
+        // Cull the titles too: they carry the fixture path, and the auto-sized column width is
+        // derived from the widest rendered line, so an unculled title makes the whole table
+        // machine-dependent.
+        leftTitle = CullRepoPath(leftTitle);
+        rightTitle = CullRepoPath(rightTitle);
+
         var leftLines = leftOutput.Replace("\r\n", "\n").Split('\n');
         var rightLines = rightOutput.Replace("\r\n", "\n").Split('\n');
 
