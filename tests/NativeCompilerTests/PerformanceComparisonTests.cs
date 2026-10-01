@@ -149,7 +149,8 @@ public class PerformanceComparisonTests
             lines.Add("  - in-process JIT comparison lives in Compare_BuildSolution_Against_DotnetBuild");
             lines.Add("  - ours has no incremental cache; dotnet build warm is incremental");
             lines.Add("  - ours reports per-project FAIL for unsupported features (see main.md)");
-            lines.Add($"  exe: {PublishedCompilerExe}");
+            // Relative to the repo so committed captures never contain absolute machine paths.
+            lines.Add($"  exe: {Path.GetRelativePath(RepoRoot, PublishedCompilerExe)}");
 
             var latestPath = SaveBenchmark("published", lines);
 
@@ -228,7 +229,7 @@ public class PerformanceComparisonTests
 
     private static string SaveBenchmark(string kind, List<string> lines)
     {
-        // Written into the repo (benchmarks/) so results can be committed to git.
+        // Written into the repo (benchmarks/) so results can be committed to git:
         // - a dated file keeps a per-run history
         // - a stable "latest-<kind>.txt" is overwritten every run so `git diff` shows the
         //   change between consecutive benchmark runs.

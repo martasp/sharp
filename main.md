@@ -164,9 +164,9 @@ dotnet test tests\NativeCompilerTests --filter "Category=Benchmark" --nologo
 
 Runs with the suite every time and prints how `BuildSolution` compares to `dotnet build`
 (cold incl. restore, and warm/incremental) on `NativeCompiler.sln`. Both tools build a
-clean temp copy so the repo is untouched. The table is also saved to
-`%TEMP%\opencode-bench\latest-benchmark.txt`. Timings are informational — no thresholds are
-asserted. Set `NATIVECOMPILER_SKIP_BENCHMARK=1` to skip it for a fast suite run.
+clean temp copy so the repo is untouched. The table is also saved to `benchmarks/` in the repo so
+results can be committed to git. Timings are informational — no thresholds are asserted. Set
+`NATIVECOMPILER_SKIP_BENCHMARK=1` to skip it for a fast suite run.
 
 ## What we do NOT support (by design, for now)
 
