@@ -25,25 +25,28 @@ namespace Tests;
 [Collection("Sequential Tests 3")]
 public class HostingTest
 {
-    private const string MyCompiler = @"D:\main\Pocs\NativeCompiler\testProjects\MyCompiler";
+    private static readonly string MyCompiler = Path.Combine(TestPaths.RepoRoot, "testProjects", "MyCompiler");
 
     // [Fact] Delete obsolete, we already have docker tests.
     public async Task TypeDefinitionUsage()
     {
-        //publis host shell 
-        //publish.bat the tool is located here D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Release\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe
+        var hostExeName = OperatingSystem.IsWindows() ? "DotnetRuntimeHostExe.exe" : "DotnetRuntimeHostExe";
 
         var buildDetails = NativeCompiler.NativeCompiler.Build(MyCompiler);
-        var sharbin = MyCompiler + @"\myc\Debug\net10.0";
-        var dll = MyCompiler + @"\myc\Debug\net10.0\MSCompiler.dll";
+        var sharbin = Path.Combine(MyCompiler, "myc", "Debug", "net10.0");
+        var dll = Path.Combine(sharbin, "MSCompiler.dll");
 
         // copy tool to myCompiler output folder
-        File.Copy(@"D:\main\Pocs\NativeCompiler\DotnetRuntimeHostExe\bin\Release\net10.0\win-x64\publish\DotnetRuntimeHostExe.exe", sharbin + @"\DotnetRuntimeHostExe.exe", true);
+        File.Copy(
+            Path.Combine(TestPaths.RepoRoot, "DotnetRuntimeHostExe", "bin", "Release", "net10.0", "win-x64", "publish", hostExeName),
+            Path.Combine(sharbin, hostExeName),
+            true);
 
         //remove exe if exists
-        if (File.Exists(sharbin + @"\MSCompiler.exe"))
+        var appExe = Path.Combine(sharbin, hostExeName);
+        if (File.Exists(appExe))
         {
-            File.Delete(sharbin + @"\MSCompiler.exe");
+            File.Delete(appExe);
         }
 
         var runtimeconfigjson =
@@ -90,10 +93,8 @@ public class HostingTest
             """;
 
         // write runtimeconfig.json and deps.json , always overwrite
-        File.WriteAllText(sharbin + @"\MSCompiler.runtimeconfig.json", runtimeconfigjson);
-        File.WriteAllText(sharbin + @"\MSCompiler.deps.json", MSCompilerdepsFile);
-
-        var fullpath = sharbin + @"\MSCompiler.runtimeconfig.json";
+        File.WriteAllText(Path.Combine(sharbin, "MSCompiler.runtimeconfig.json"), runtimeconfigjson);
+        File.WriteAllText(Path.Combine(sharbin, "MSCompiler.deps.json"), MSCompilerdepsFile);
 
         await Task.Delay(1000);
 
@@ -101,7 +102,7 @@ public class HostingTest
         // should be set to the folder containing the DLLs and config files (sharbin).
         var startInfo = new ProcessStartInfo
         {
-            FileName = sharbin + @"\DotnetRuntimeHostExe.exe",
+            FileName = appExe,
             // Argument should be the simple filename if your host executable is looking for 
             // a file name only, and relying on the CWD.
             Arguments = "MSCompiler.runtimeconfig.json",

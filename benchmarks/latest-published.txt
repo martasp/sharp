@@ -1,9 +1,9 @@
 -------------- published AOT compiler vs dotnet build (NativeCompiler.sln) --------------
-  NativeCompilerCLI.exe  run1  wall 3.42s (exit 0)
-  NativeCompilerCLI.exe  run2  wall 4.09s (exit 0)   (no cache: always from scratch)
-  dotnet build           cold  wall 11.46s (incl. restore)
-  dotnet build           warm  wall 4.81s (incremental)
-  speed-up vs dotnet build cold: 3.35x
+  NativeCompilerCLI.exe  run1  wall 2.72s (exit 0)
+  NativeCompilerCLI.exe  run2  wall 2.88s (exit 0)   (no cache: always from scratch)
+  dotnet build           cold  wall 8.48s (incl. restore)
+  dotnet build           warm  wall 4.38s (incremental)
+  speed-up vs dotnet build cold: 3.11x
 ---------------------------------------------------------------------
   notes:
   - ours is measured as the published signed native-AOT compiler (subprocess, wall clock)
