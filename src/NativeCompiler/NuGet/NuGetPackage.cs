@@ -1,6 +1,6 @@
 ﻿using System.Xml.Linq;
 
-namespace NativeCompiler;
+namespace NativeCompiler.NuGet;
 
 public static class NuGetPackage
 {
@@ -174,6 +174,14 @@ public static class NuGetPackage
 
         return candidates.ToArray();
     }
+
+    // A package's direct dependencies for one target framework, read from its .nuspec. Picks the
+    // best-matching <group targetFramework> (or the ungrouped form), lowers bracket ranges to
+    // their minimum, and reports exclude="All" so callers can keep the dependency out of the
+    // output graph. Shared by the transitive DLL walk and by restore's graph traversal.
+    public static IReadOnlyList<(string Id, string Version, bool Excluded)> ReadDependencies(
+        string packagePath, string targetTfm) =>
+        FindDependencies(packagePath, targetTfm);
 
     // Resolves a package's own dependencies (from its .nuspec) transitively. Used to add the packages
     // that a referenced project depends on, which are not listed by the referencing project itself.

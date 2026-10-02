@@ -122,6 +122,17 @@ public static class NativeCompiler
             compilation = compilation.AddSyntaxTrees(BuildTestEntryPointTree(project.ProjectName));
         }
 
+        // NU1001/NU1002: a PackageReference that never resolved. Reported as warnings alongside the
+        // analyzer diagnostics so the user learns which package is missing before the CS0246s
+        // that it will cause.
+        var packageWarnings = GetUnresolvedPackageWarnings(project);
+        if (packageWarnings.Count > 0)
+        {
+            analyzerWarnings = string.Join(
+                Environment.NewLine,
+                analyzerWarnings.Split('\n', StringSplitOptions.RemoveEmptyEntries).Concat(packageWarnings));
+        }
+
         if (!string.IsNullOrEmpty(analyzerErrors))
         {
             return new BuildResult(

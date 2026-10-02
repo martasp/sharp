@@ -1,3 +1,4 @@
+using NativeCompiler.NuGet;
 using System;
 using System.IO;
 using System.Linq;

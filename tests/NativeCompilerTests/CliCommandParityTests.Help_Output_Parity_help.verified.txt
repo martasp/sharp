@@ -29,7 +29,7 @@ sdk-options:
 SDK commands:
   build             Build a .NET project.                                                     [implemented]
   build-server      Interact with servers started by a build.                                 [not implemented]
-  clean             Clean build outputs of a .NET project.                                    [not implemented]
+  clean             Clean build outputs of a .NET project.                                    [implemented]
   format            Apply style preferences to a project or solution.                         [not implemented]
   help              Opens the reference page in a browser for the specified command.          [implemented]
   msbuild           Run Microsoft Build Engine (MSBuild) commands.                            [not implemented]
@@ -39,7 +39,7 @@ SDK commands:
   package           Search for, add, remove, or list PackageReferences for a .NET project.    [not implemented]
   publish           Publish a .NET project for deployment.                                    [not implemented]
   reference         Add, remove, or list ProjectReferences for a .NET project.                [not implemented]
-  restore           Restore dependencies specified in a .NET project.                         [not implemented]
+  restore           Restore dependencies specified in a .NET project.                         [implemented]
   run               Build and run a .NET project output.                                      [implemented]
   sdk               Manage .NET SDK installation.                                             [not implemented]
   solution          Modify Visual Studio solution files.                                      [not implemented]
