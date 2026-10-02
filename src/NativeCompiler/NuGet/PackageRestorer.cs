@@ -55,11 +55,10 @@ public static class PackageRestorer
             var references = CollectPackageReferences(projectDirectory, out var targetFramework);
             state.TargetFramework = targetFramework;
 
+            // Nothing to restore is a success, not a warning: `dotnet restore` on a project with
+            // no PackageReference reports success without comment.
             if (references.Count == 0)
-            {
-                warnings.Add($"No PackageReference found in '{Path.GetFileName(csproj)}'.");
                 return new RestoreResult(true, errors, warnings, [csproj], downloaded, cached, timer.Elapsed);
-            }
 
             foreach (var (id, version) in references)
             {

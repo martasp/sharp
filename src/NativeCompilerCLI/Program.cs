@@ -387,6 +387,7 @@ int CleanCommand(string[] args)
 
 int CleanTarget(string target, string configuration)
 {
+    var cleanTimer = Stopwatch.StartNew();
     var roots = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
                 target.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)
         ? SolutionFile.Parse(target).Projects
@@ -419,7 +420,14 @@ int CleanTarget(string target, string configuration)
 
     // SDK grammar: a clean that removed something still reports a (no-op) build line; one that
     // found nothing says so, which is the only useful distinction here.
-    if (removed == 0) WriteLine($"Nothing to clean for configuration '{configuration}'.");
+    if (removed == 0)
+    {
+        WriteLine($"Nothing to clean for configuration '{configuration}'.");
+        return 0;
+    }
+
+    WriteLine();
+    WriteLine($"Clean succeeded in {cleanTimer.Elapsed.TotalSeconds:0.0}s");
     return 0;
 }
 
