@@ -1,4 +1,4 @@
-namespace NativeCompiler;
+namespace NativeCompiler.NuGet;
 
 public static class NuGetTfm
 {

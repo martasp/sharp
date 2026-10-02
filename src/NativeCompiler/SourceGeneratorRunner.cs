@@ -1,3 +1,4 @@
+using NativeCompiler.NuGet;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;

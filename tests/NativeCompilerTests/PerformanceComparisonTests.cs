@@ -11,8 +11,11 @@ namespace NativeCompilerTests;
 
 // Always runs with the suite and prints how our BuildSolution compares to `dotnet build` on the
 // same solution (timings are informational only - no thresholds are asserted, machines differ).
-// Set NATIVECOMPILER_SKIP_BENCHMARK=1 to skip it for a fast suite run.
 // Filter it on its own:  dotnet test --filter "Category=Benchmark"
+//
+// Both tests below compare against the SAME `dotnet build` on the SAME solution, so that baseline
+// is measured once and shared (see DotnetBaseline). Measuring it per test doubled the benchmark
+// cost for numbers that cannot differ.
 [CollectionDefinition("Sequential Tests 5", DisableParallelization = true)]
 [Trait("Category", "Benchmark")]
 [Collection("Sequential Tests 5")]
@@ -21,6 +24,12 @@ public class PerformanceComparisonTests
     private readonly ITestOutputHelper _output;
 
     public PerformanceComparisonTests(ITestOutputHelper output) => _output = output;
+
+    // One measured `dotnet build` cold+warm pair, shared by both benchmarks.
+    private static readonly Lazy<Task<DotnetBaseline>> Baseline =
+        new(MeasureDotnetBaselineAsync, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private sealed record DotnetBaseline(TimeSpan Cold, TimeSpan Warm, bool TimedOut);
 
     public static string RepoRoot =>
         Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."));
@@ -39,12 +48,6 @@ public class PerformanceComparisonTests
     [Fact]
     public async Task Compare_BuildSolution_Against_DotnetBuild()
     {
-        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_SKIP_BENCHMARK") == "1")
-        {
-            _output.WriteLine("Skipped: NATIVECOMPILER_SKIP_BENCHMARK=1");
-            return;
-        }
-
         // Work on a clean copy so obj/bin state of the repo is untouched and both tools build cold.
         var benchRoot = Path.Combine(Path.GetTempPath(), "opencode-bench", Guid.NewGuid().ToString("N"));
         CopyTree(RepoRoot, benchRoot);
@@ -62,13 +65,12 @@ public class PerformanceComparisonTests
             oursSecond.Stop();
 
             // dotnet build: cold (fresh restore) then warm (incremental).
-            var (dotnetCold, _, dotnetColdTimedOut) = await RunDotnetBuild(benchSolution);
-            var (dotnetWarm, _, dotnetWarmTimedOut) = await RunDotnetBuild(benchSolution);
+            var (dotnetCold, dotnetWarm, dotnetTimedOut) = await Baseline.Value;
 
             var oursTotal1 = resultFirst.Projects.Sum(project => project.Result.Duration.TotalSeconds);
 
-            var dotnetColdText = dotnetColdTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetCold.TotalSeconds:0.00}s (incl. restore)";
-            var dotnetWarmText = dotnetWarmTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetWarm.TotalSeconds:0.00}s (incremental)";
+            var dotnetColdText = dotnetTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetCold.TotalSeconds:0.00}s (incl. restore)";
+            var dotnetWarmText = dotnetTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetWarm.TotalSeconds:0.00}s (incremental)";
 
             var lines = new List<string>
             {
@@ -78,7 +80,7 @@ public class PerformanceComparisonTests
                 $"  dotnet build       cold  wall {dotnetColdText}",
                 $"  dotnet build       warm  wall {dotnetWarmText}",
             };
-            if (!dotnetColdTimedOut && !dotnetWarmTimedOut)
+            if (!dotnetTimedOut)
                 lines.Add($"  speed-up vs dotnet build cold: {dotnetCold.TotalSeconds / Math.Max(0.001, oursFirst.Elapsed.TotalSeconds):0.00}x");
             lines.Add("---------------------------------------------------------------------");
             lines.Add("  notes:");
@@ -100,12 +102,6 @@ public class PerformanceComparisonTests
     [Fact]
     public async Task Compare_PublishedAotCompiler_Against_DotnetBuild()
     {
-        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_SKIP_BENCHMARK") == "1")
-        {
-            _output.WriteLine("Skipped: NATIVECOMPILER_SKIP_BENCHMARK=1");
-            return;
-        }
-
         if (!File.Exists(PublishedCompilerExe))
         {
             throw new InvalidOperationException(
@@ -125,13 +121,12 @@ public class PerformanceComparisonTests
             var (oursSecond, oursSecondExit, oursSecondTimedOut, _) = await RunPublishedCompiler(benchSolution);
 
             // dotnet build: cold (fresh restore) then warm (incremental).
-            var (dotnetCold, _, dotnetColdTimedOut) = await RunDotnetBuild(benchSolution);
-            var (dotnetWarm, _, dotnetWarmTimedOut) = await RunDotnetBuild(benchSolution);
+            var (dotnetCold, dotnetWarm, dotnetTimedOut) = await Baseline.Value;
 
             var oursFirstText = oursFirstTimedOut ? "TIMED OUT (killed after 300s)" : $"{oursFirst.TotalSeconds:0.00}s (exit {oursFirstExit})";
             var oursSecondText = oursSecondTimedOut ? "TIMED OUT (killed after 300s)" : $"{oursSecond.TotalSeconds:0.00}s (exit {oursSecondExit})";
-            var dotnetColdText = dotnetColdTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetCold.TotalSeconds:0.00}s (incl. restore)";
-            var dotnetWarmText = dotnetWarmTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetWarm.TotalSeconds:0.00}s (incremental)";
+            var dotnetColdText = dotnetTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetCold.TotalSeconds:0.00}s (incl. restore)";
+            var dotnetWarmText = dotnetTimedOut ? "TIMED OUT (killed after 180s)" : $"{dotnetWarm.TotalSeconds:0.00}s (incremental)";
 
             var lines = new List<string>
             {
@@ -141,7 +136,7 @@ public class PerformanceComparisonTests
                 $"  dotnet build           cold  wall {dotnetColdText}",
                 $"  dotnet build           warm  wall {dotnetWarmText}",
             };
-            if (!dotnetColdTimedOut && !oursFirstTimedOut)
+            if (!dotnetTimedOut && !oursFirstTimedOut)
                 lines.Add($"  speed-up vs dotnet build cold: {dotnetCold.TotalSeconds / Math.Max(0.001, oursFirst.TotalSeconds):0.00}x");
             lines.Add("---------------------------------------------------------------------");
             lines.Add("  notes:");
@@ -225,6 +220,26 @@ public class PerformanceComparisonTests
 
         var exitCode = timedOut ? -1 : process.ExitCode;
         return (sw.Elapsed, exitCode, timedOut);
+    }
+
+    // Measures `dotnet build` cold then warm, once per suite run, on its own clean copy. Both
+    // benchmarks report against this so the numbers are directly comparable to each other and we
+    // pay for two `dotnet build` invocations instead of four.
+    private static async Task<DotnetBaseline> MeasureDotnetBaselineAsync()
+    {
+        var benchRoot = Path.Combine(Path.GetTempPath(), "opencode-bench", Guid.NewGuid().ToString("N"));
+        CopyTree(RepoRoot, benchRoot);
+        try
+        {
+            var solution = Path.Combine(benchRoot, "NativeCompiler.sln");
+            var (cold, _, coldTimedOut) = await RunDotnetBuild(solution);
+            var (warm, _, warmTimedOut) = await RunDotnetBuild(solution);
+            return new DotnetBaseline(cold, warm, coldTimedOut || warmTimedOut);
+        }
+        finally
+        {
+            try { Directory.Delete(benchRoot, true); } catch { /* best effort */ }
+        }
     }
 
     private static string SaveBenchmark(string kind, List<string> lines)

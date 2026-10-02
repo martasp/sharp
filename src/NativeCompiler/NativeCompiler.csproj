@@ -23,8 +23,9 @@
 
   <!-- Locate SDK Analyzers Path -->
   <PropertyGroup>
-    <_NativeCompilerTfmVersion>$(TargetFramework.Replace('net', ''))</_NativeCompilerTfmVersion>
-    <_NativeCompilerRefPackVersionDir>$([System.String]::Join(';', $([System.IO.Directory]::GetDirectories('$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref', '$(_NativeCompilerTfmVersion).*'))))</_NativeCompilerRefPackVersionDir>
+    <!-- Pin the ref pack of the SDK running the build. Globbing '<tfm>.*' and joining matches with
+         ';' produced one bogus HintPath when several ref packs were installed (CS0234 on CI). -->
+    <_NativeCompilerRefPackVersionDir>$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref\$(BundledNETCoreAppPackageVersion)</_NativeCompilerRefPackVersionDir>
     <_NativeCompilerRefPackAnalyzersPath>$(_NativeCompilerRefPackVersionDir)\analyzers\dotnet\cs</_NativeCompilerRefPackAnalyzersPath>
   </PropertyGroup>
 
@@ -36,6 +37,8 @@
     <Reference Include="ILLink.CodeFixProvider" Private="true">
       <HintPath>$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\ILLink.CodeFixProvider.dll</HintPath>
     </Reference>
+    <!-- Listed one by one on purpose: our own compiler reads <Reference> items straight out of
+         the csproj and does not expand wildcards, so a glob here breaks self-hosting. -->
     <Reference Include="System.Text.RegularExpressions.Generator" Private="true">
       <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\System.Text.RegularExpressions.Generator.dll</HintPath>
     </Reference>

@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using NativeCompiler.NuGet;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Text;
@@ -696,28 +697,67 @@ public static class NativeCompilerUtils
 
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
     {
-        var tfm = project.TargetFramework ?? "net10.0";
         var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var item in project.PackageReferences)
+        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project))
         {
-            var packageName = item.Include ?? "";
-            var packageVersion = item.Version ?? NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
-            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
+            if (packagePath is null) continue;
 
-            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
-            if (string.IsNullOrEmpty(packagePath)) continue;
-
-            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, tfm))
+            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? "net10.0"))
                 referenceFiles.Add(dll);
 
-            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, tfm))
+            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? "net10.0"))
                 referenceFiles.Add(dll);
         }
 
         return referenceFiles
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
             .ToArray();
+    }
+
+    // Single place where a PackageReference becomes a version and a directory on disk, so the
+    // reference collection and the diagnostics below can never disagree about what resolved.
+    private static IEnumerable<(string Name, string Version, string? Path)> ResolvePackageReferences(Project project)
+    {
+        foreach (var item in project.PackageReferences)
+        {
+            var packageName = item.Include ?? "";
+            var packageVersion = item.Version ?? NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
+            if (string.IsNullOrEmpty(packageName)) continue;
+
+            yield return (packageName, packageVersion ?? "",
+                string.IsNullOrEmpty(packageVersion)
+                    ? null
+                    : NuGetPackage.FindPackagePath(packageName, packageVersion));
+        }
+    }
+
+    // A PackageReference that cannot be satisfied used to be skipped in silence, surfacing later
+    // as a confusing CS0246 about a type from a package the user never mentioned. Naming the
+    // package is the whole point of this.
+    public static IReadOnlyList<string> GetUnresolvedPackageWarnings(Project project)
+    {
+        var warnings = new List<string>();
+
+        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project))
+        {
+            if (string.IsNullOrEmpty(packageVersion))
+            {
+                warnings.Add(
+                    $"NU1002: Unable to find package '{packageName}'. No version was specified on the " +
+                    "PackageReference and no central PackageVersion entry was found in a Directory.Packages.props file.");
+                continue;
+            }
+
+            if (packagePath is null)
+            {
+                warnings.Add(
+                    $"NU1001: Package '{packageName}' version '{packageVersion}' was not found in the global " +
+                    "packages folder. Run 'NativeCompilerCLI restore' to download it.");
+            }
+        }
+
+        return warnings;
     }
 
     public static CSharpCompilationOptions GetCompilationOptions(Project project)

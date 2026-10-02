@@ -1,3 +1,4 @@
+using NativeCompiler.NuGet;
 using NativeCompiler;
 using System;
 using System.Diagnostics;
@@ -17,7 +18,7 @@ var SdkCommands = new (string Name, string Description, bool Implemented)[]
 {
     ("build", "Build a .NET project.", true),
     ("build-server", "Interact with servers started by a build.", false),
-    ("clean", "Clean build outputs of a .NET project.", false),
+    ("clean", "Clean build outputs of a .NET project.", true),
     ("format", "Apply style preferences to a project or solution.", false),
     ("help", "Opens the reference page in a browser for the specified command.", true),
     ("msbuild", "Run Microsoft Build Engine (MSBuild) commands.", false),
@@ -27,7 +28,7 @@ var SdkCommands = new (string Name, string Description, bool Implemented)[]
     ("package", "Search for, add, remove, or list PackageReferences for a .NET project.", false),
     ("publish", "Publish a .NET project for deployment.", false),
     ("reference", "Add, remove, or list ProjectReferences for a .NET project.", false),
-    ("restore", "Restore dependencies specified in a .NET project.", false),
+    ("restore", "Restore dependencies specified in a .NET project.", true),
     ("run", "Build and run a .NET project output.", true),
     ("sdk", "Manage .NET SDK installation.", false),
     ("solution", "Modify Visual Studio solution files.", false),
@@ -100,7 +101,8 @@ string HelpText()
 }
 
 var first = args.Length == 0 ? "help" : args[0];
-bool explicitCommand = first is "build" or "run" or "help" or "version" or "--version" or "-h" or "--help";
+bool explicitCommand = first is "build" or "run" or "restore" or "clean" or "help" or "version"
+    or "--version" or "-h" or "--help";
 if (!explicitCommand)
 {
     // Legacy bare-path invocation: `NativeCompilerCLI <folder|sln>` IS a build; the path stays in
@@ -120,6 +122,10 @@ switch (first)
         return BuildCommand(explicitCommand ? args.Skip(1).ToArray() : args);
     case "run":
         return RunCommand(args.Skip(1).ToArray());
+    case "restore":
+        return await RestoreCommandAsync(args.Skip(1).ToArray());
+    case "clean":
+        return CleanCommand(args.Skip(1).ToArray());
     default:
         throw new InvalidOperationException($"unreachable command {first}");
 }
@@ -268,6 +274,170 @@ int RunCommand(string[] args)
     return process.ExitCode;
 }
 
+async Task<int> RestoreCommandAsync(string[] args)
+{
+    // `dotnet restore` accepts -p/--project as the path (not an app-args forwarding flag), so the
+    // shared positional parser is not reused here: the first non-flag argument is the path and
+    // everything else is an error, matching the SDK's strictness.
+    string? pathArg = null;
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg is "--project" or "-p")
+        {
+            if (i + 1 < args.Length) pathArg = args[++i];
+            continue;
+        }
+        if (!arg.StartsWith("-") && pathArg is null) { pathArg = arg; continue; }
+
+        WriteLine($"Unknown option: {arg}");
+        WriteLine("Run 'dotnet restore --help' for more information.");
+        return 1;
+    }
+
+    var target = ResolveTargetOrFail(pathArg, checkRunnable: false);
+    if (target is null) return 1;
+
+    WriteLine("Determining projects to restore...");
+
+    var isSolution = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                     target.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase);
+
+    var errors = new List<string>();
+    var warnings = new List<string>();
+    var restored = 0;
+
+    if (isSolution)
+    {
+        var (success, projects, duration) =
+            await PackageRestorer.RestoreSolution(target).ConfigureAwait(false);
+
+        foreach (var project in projects)
+        {
+            foreach (var warning in project.Warnings) warnings.Add(warning);
+            foreach (var error in project.Errors) errors.Add($"  {error}");
+
+            if (project.Success)
+            {
+                restored++;
+                WriteLine($"Restored {RelativePath(project.ProjectFile)} ({project.Duration.TotalMilliseconds:0} ms).");
+            }
+            else
+            {
+                var detail = Path.GetRelativePath(Directory.GetCurrentDirectory(), project.ProjectFile);
+                WriteLine($"  {detail} failed with {project.Errors.Count} error(s) ({project.Duration.TotalSeconds:0.0}s)");
+                foreach (var error in project.Errors) WriteLine($"    {error}");
+            }
+        }
+
+        WriteLine();
+        if (success)
+        {
+            WriteLine($"Restore succeeded in {duration.TotalSeconds:0.0}s");
+            return 0;
+        }
+
+        WriteLine($"Restore failed with {errors.Count} error(s) in {duration.TotalSeconds:0.0}s");
+        return 1;
+    }
+
+    var result = await PackageRestorer.RestoreProject(target).ConfigureAwait(false);
+    foreach (var warning in result.Warnings) WriteLine(warning);
+
+    if (result.Success)
+    {
+        WriteLine($"Restored {RelativePath(result.ProjectsRestored.FirstOrDefault() ?? target)} ({result.Duration.TotalMilliseconds:0} ms).");
+        WriteLine();
+        WriteLine($"Restore succeeded in {result.Duration.TotalSeconds:0.0}s");
+        return 0;
+    }
+
+    foreach (var error in result.Errors) WriteLine($"  {error}");
+    WriteLine();
+    WriteLine($"Restore failed with {result.Errors.Count} error(s) in {result.Duration.TotalSeconds:0.0}s");
+    return 1;
+}
+
+int CleanCommand(string[] args)
+{
+    // `dotnet clean -c|--configuration <name>` selects which configuration's outputs to delete.
+    var configuration = "Debug";
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg is "-c" or "--configuration")
+        {
+            if (i + 1 < args.Length) configuration = args[++i];
+            continue;
+        }
+        if (!arg.StartsWith("-"))
+        {
+            var (pathArg, _) = PositionalAndFlags(args);
+            var target = ResolveTargetOrFail(pathArg, checkRunnable: false);
+            if (target is null) return 1;
+            return CleanTarget(target, configuration);
+        }
+    }
+
+    var (implicitPath, _) = PositionalAndFlags(args);
+    var implicitTarget = ResolveTargetOrFail(implicitPath, checkRunnable: false);
+    if (implicitTarget is null) return 1;
+    return CleanTarget(implicitTarget, configuration);
+}
+
+int CleanTarget(string target, string configuration)
+{
+    var cleanTimer = Stopwatch.StartNew();
+    var roots = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                target.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)
+        ? SolutionFile.Parse(target).Projects
+            .Select(project => Path.GetDirectoryName(project.ProjectPath))
+            .Where(directory => !string.IsNullOrEmpty(directory))
+            .Select(directory => directory!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray()
+        : [target];
+
+    var removed = 0;
+    foreach (var root in roots)
+    {
+        // Only this compiler's own trees. bin/ belongs to the SDK and is what the parity tests
+        // compare against, so deleting it would destroy the comparison baseline.
+        foreach (var candidate in CleanTargets(root, configuration))
+        {
+            if (!Directory.Exists(candidate)) continue;
+            try
+            {
+                Directory.Delete(candidate, recursive: true);
+                removed++;
+            }
+            catch (Exception exception)
+            {
+                WriteLine($"Warning: could not delete '{RelativePath(candidate)}': {exception.Message}");
+            }
+        }
+    }
+
+    // SDK grammar: a clean that removed something still reports a (no-op) build line; one that
+    // found nothing says so, which is the only useful distinction here.
+    if (removed == 0)
+    {
+        WriteLine($"Nothing to clean for configuration '{configuration}'.");
+        return 0;
+    }
+
+    WriteLine();
+    WriteLine($"Clean succeeded in {cleanTimer.Elapsed.TotalSeconds:0.0}s");
+    return 0;
+}
+
+static IEnumerable<string> CleanTargets(string projectDirectory, string configuration)
+{
+    var root = Environment.GetEnvironmentVariable("NATIVECOMPILER_OUTPUT_ROOT") ?? "myc";
+    yield return Path.Combine(projectDirectory, root, configuration);
+    yield return Path.Combine(projectDirectory, "obj");
+}
+
 // --- resolution -------------------------------------------------------------
 
 static string[] DirectChildProjectFiles(string dir) =>
@@ -358,6 +528,12 @@ static (string? Path, string[] AppArgs) PositionalAndFlags(string[] args)
     }
     return (path, appArgs.ToArray());
 }
+
+// Restore and clean report paths the way the SDK does: relative to the current directory.
+static string RelativePath(string path) =>
+    string.IsNullOrEmpty(path)
+        ? path
+        : Path.GetRelativePath(Directory.GetCurrentDirectory(), path);
 
 // dotnet's safe sign-off: `dotnet build` prints the errors to stdout with the owning `[csproj]`
 // suffix, then re-echoes them after `Build FAILED.`.

@@ -101,7 +101,10 @@ public class CliCommandParityTests
         ours.Output.Split('\n')
             .Single(line => line.Contains("Build and run a .NET project output.")).ShouldEndWith("[implemented]");
         ours.Output.Split('\n')
-            .Single(line => line.Contains("Clean build outputs of a .NET project.")).ShouldEndWith("[not implemented]");
+            .Single(line => line.Contains("Clean build outputs of a .NET project.")).ShouldEndWith("[implemented]");
+        ours.Output.Split('\n')
+            .Single(line => line.Contains("Restore dependencies specified in a .NET project."))
+            .ShouldEndWith("[implemented]");
 
         await Verify(CliComparisonHelper.Normalize(ours.Output)).UseTextForParameters("help");
     }
