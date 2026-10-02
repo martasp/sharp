@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Restore-only fixture. Never built, never referenced by NativeCompiler.sln, and never loaded.
+
+    NuGetTests reads these packages out of the global packages folder as *data* - it asserts how
+    our package reader interprets a real .nuspec (lib folder selection, dependency groups,
+    `using` items). Declaring them as PackageReference is what guarantees they are present, so the
+    assertions run against the exact versions pinned here instead of whatever happens to sit in
+    the developer's or CI agent's NuGet cache.
+
+    Without this the tests silently depend on a warm machine cache and fail on a cold CI runner.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Restored for its side effect on the global packages folder; never compiled. -->
+    <IsPackable>false</IsPackable>
+    <!--
+      NU1608: the pinned versions are deliberately mixed (Microsoft.CodeAnalysis 5.0.0 alongside
+      Microsoft.CodeAnalysis.CSharp 5.3.0). They are read as independent data by NuGetTests, never
+      compiled together, so the dependency constraints between them are irrelevant here.
+    -->
+    <NoWarn>$(NoWarn);NU1608</NoWarn>
+    <!--
+      NU1903: Testcontainers 4.4.0 pulls SSH.NET 2024.2.0, which has published advisories. The
+      package is never referenced, loaded, or shipped from here - it is inert data in the NuGet
+      cache that NuGetTests reads - so the finding does not apply to anything we build or ship.
+      It is pinned deliberately: NuGetTests asserts TFM selection against this exact version.
+    -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="5.0.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <PackageReference Include="Parlot" Version="1.5.8" />
+    <PackageReference Include="Testcontainers" Version="4.4.0" />
+  </ItemGroup>
+
+</Project>

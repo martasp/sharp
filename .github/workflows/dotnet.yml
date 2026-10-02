@@ -25,9 +25,11 @@ jobs:
     # outside NativeCompiler.sln, so `dotnet restore NativeCompiler.sln` does not cover them.
     # A cold clone has no obj/ assets, and the parity tests compare our output against the SDK's
     # build of these same projects, so both must exist before the suite runs.
+    # PackageCacheFixtures is restore-only: it pins the exact packages NuGetTests reads out of the
+    # global cache as data, so those assertions do not depend on a warm machine cache.
     - name: Restore test fixtures
       run: |
-        find testProjects tests/TestExampleProjects -name '*.csproj' -print0 \
+        find testProjects tests/TestExampleProjects tests/PackageCacheFixtures -name '*.csproj' -print0 \
           | xargs -0 -n1 dotnet restore
 
     # Tests build Debug: the parity tests compare against paths under bin/Debug, and

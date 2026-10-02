@@ -1,4 +1,4 @@
-﻿.NET SDK (10.0.400)
+﻿.NET SDK (<sdkver>)
 Usage: dotnet [runtime-options] [path-to-application] [arguments]
 
 Execute a .NET application.

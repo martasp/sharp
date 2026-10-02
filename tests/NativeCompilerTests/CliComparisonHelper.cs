@@ -48,7 +48,12 @@ public static class CliComparisonHelper
             .Replace("myc/Debug/net10.0/", "bin/Debug/net10.0/")
             // Terminal-logger durations ("succeeded (0.4s)", "in 1.2s") are wall-clock noise that
             // varies per run; collapse any "x.xs" to a token so parity is asserted on structure.
-            .ReplaceRegex(@"\d+\.\d+s", "<secs>");
+            .ReplaceRegex(@"\d+\.\d+s", "<secs>")
+            // The SDK patch version is not ours to pin: CI resolves '10.0.x' to whatever is
+            // current, so a snapshot containing 10.0.401 fails against a 10.0.400 laptop. The only
+            // three-part version these outputs contain is the SDK's own (no package or TFM
+            // versions are printed), so this cannot mask a real behavioural difference.
+            .ReplaceRegex(@"\d+\.\d+\.\d+(?=[^\d])", "<sdkver>");
 
         return string.Join("\n", normalized.Split('\n')
             .Where(line =>
