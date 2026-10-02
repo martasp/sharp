@@ -24,9 +24,22 @@
   <!-- Locate SDK Analyzers Path -->
   <PropertyGroup>
     <_NativeCompilerTfmVersion>$(TargetFramework.Replace('net', ''))</_NativeCompilerTfmVersion>
-    <_NativeCompilerRefPackVersionDir>$([System.String]::Join(';', $([System.IO.Directory]::GetDirectories('$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref', '$(_NativeCompilerTfmVersion).*'))))</_NativeCompilerRefPackVersionDir>
+    <!--
+      Pin to the ref pack that ships with the SDK actually running the build. Globbing
+      '$(_NativeCompilerTfmVersion).*' and joining the matches with ';' used to produce a single
+      bogus HintPath whenever more than one matching ref pack was present (e.g. 10.0.9 and 10.0.12
+      side by side), so all six SDK analyzer references silently failed to resolve and every
+      `using Microsoft.Interop...` became CS0234. Glob order also picked an arbitrary version.
+    -->
+    <_NativeCompilerRefPackVersionDir>$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref\$(BundledNETCoreAppPackageVersion)</_NativeCompilerRefPackVersionDir>
     <_NativeCompilerRefPackAnalyzersPath>$(_NativeCompilerRefPackVersionDir)\analyzers\dotnet\cs</_NativeCompilerRefPackAnalyzersPath>
   </PropertyGroup>
+
+  <!-- Fail loudly instead of emitting MSB3245 warnings that cascade into CS0234. -->
+  <Target Name="_NativeCompilerValidateRefPackAnalyzers" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(_NativeCompilerRefPackAnalyzersPath)')"
+           Text="SDK analyzer path '$(_NativeCompilerRefPackAnalyzersPath)' does not exist. Expected the .NET $(BundledNETCoreAppPackageVersion) targeting pack under '$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref'. Run 'dotnet restore' first, or install the SDK matching TargetFramework $(TargetFramework)." />
+  </Target>
 
   <!-- Expose SDK Analyzer DLLs as compile-time references -->
   <ItemGroup>
