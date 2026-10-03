@@ -125,6 +125,65 @@ public class CliCommandParityTests
             $"build \"{SlnxFixturesSolutionPath}\" --nologo --no-restore --no-incremental");
     }
 
+    [Fact]
+    public async Task Build_Directory_Holding_Solution_Parity()
+    {
+        // A directory named on the command line must resolve to the solution it contains, the same
+        // way the working directory does. This regressed once: the folder was passed through to the
+        // compiler untouched, which globbed every .cs beneath it, so building this directory compiled
+        // the fixture's sources under an unrelated project's properties.
+        var dir = Path.GetDirectoryName(SlnFixturesSolutionPath)!;
+        await EnsureSdkRestore(SlnFixturesSolutionPath);
+
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" build \"{dir}\"", RepoRoot);
+        ours.ExitCode.ShouldBe(0, $"building a directory holding a solution failed.\n{ours.Output}");
+
+        // Resolution evidence: all three projects in the solution were built, not just one of them.
+        foreach (var project in new[] { "LibA", "LibB", "SlnApp" })
+            ours.Output.ShouldContain(project);
+
+        var dotnet = await RunAsync("dotnet", $"build \"{dir}\" --nologo --no-restore --no-incremental",
+            RepoRoot, ("MSBUILDTERMINALLOGGER", "on"));
+        ours.ExitCode.ShouldBe(dotnet.ExitCode, "exit code parity for build_dir_holding_solution");
+    }
+
+    [Fact]
+    public async Task Build_Directory_Ambiguous_Parity()
+    {
+        // MSBuild distinguishes the two ambiguity diagnostics: MSB1011 for the working directory and
+        // MSB1050 when the directory is named on the command line, echoing the path as given.
+        // Unifying them was the easy mistake, so both spellings are pinned here.
+        var dir = Path.Combine(Path.GetTempPath(), "sharp-ambiguous-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (var name in new[] { "One.csproj", "Two.csproj" })
+            {
+                File.WriteAllText(Path.Combine(dir, name), """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net10.0</TargetFramework>
+                      </PropertyGroup>
+                    </Project>
+                    """);
+            }
+
+            var ours = await RunAsync("dotnet", $"\"{CliDll}\" build \"{dir}\"", RepoRoot);
+            var dotnet = await RunAsync("dotnet", $"build \"{dir}\"", RepoRoot,
+                ("MSBUILDTERMINALLOGGER", "on"));
+
+            ours.ExitCode.ShouldNotBe(0);
+            dotnet.ExitCode.ShouldNotBe(0);
+            CliComparisonHelper.Normalize(ours.Output)
+                .ShouldBe(CliComparisonHelper.Normalize(dotnet.Output), "MSB1050 parity for build_dir_ambiguous");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
     // Solution builds use the same terminal grammar for the per-project lines and the summary, but
     // the SDK's own solution output is build-state dependent (see NormalizeSolutionInteractive), so
     // parity is asserted on the deterministic verdict/exit-code surface, while a snapshot pins our

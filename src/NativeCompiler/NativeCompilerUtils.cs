@@ -764,10 +764,15 @@ public static class NativeCompilerUtils
         // with explicit <Compile Include>/<Compile Remove> items. Without this, template projects
         // (e.g. OrchardCore.ProjectTemplates, which disables default items and packs its *.cs
         // under content/ as None) accidentally compile files that must not be compiled.
-        var allFiles = EnumerateProjectSourceFiles(projectPath).ToList();
+        // Without a project file in this directory there is no project here to compile, and globbing
+        // anyway silently swept in every .cs beneath it: building a repository root compiled sibling
+        // projects' sources under whichever project's properties were picked, which surfaced as
+        // unrelated diagnostics such as SYSLIB1062. Returning nothing keeps the failure local.
         var csprojFile = Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly)
             .FirstOrDefault();
-        if (csprojFile is null) return allFiles.ToArray();
+        if (csprojFile is null) return Array.Empty<string>();
+
+        var allFiles = EnumerateProjectSourceFiles(projectPath).ToList();
 
         XML.Project xml;
         try { xml = XML.Project.Parse(csprojFile); }
