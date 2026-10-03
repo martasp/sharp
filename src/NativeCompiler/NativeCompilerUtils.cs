@@ -231,88 +231,6 @@ public static class NativeCompilerUtils
         return LanguageVersion.Latest;
     }
 
-    public static MetadataReference[] GetdefaultReferencesForRunning(string dotNetAssemblyPath)
-    {
-        var exclude = new List<string>
-        {
-            @"ucrtbase.dll",
-            @"System.IO.Compression.Native.dll",
-            @"msquic.dll",
-            @"mscorrc.dll",
-            @"mscordbi.dll",
-            @"mscordaccore_amd64_amd64_6.0.121.56705.dll",
-            @"mscordaccore_amd64_amd64_6.0.1823.26907.dll",
-            @"mscordaccore.dll",
-            @"Microsoft.DiaSymReader.Native.amd64.dll",
-            @"hostpolicy.dll",
-            @"dbgshim.dll",
-            @"coreclr.dll",
-            @"clrjit.dll",
-            @"clretwrc.dll",
-            @"api-ms-win-crt-utility-l1-1-0.dll",
-            @"api-ms-win-crt-time-l1-1-0.dll",
-            @"api-ms-win-crt-string-l1-1-0.dll",
-            @"api-ms-win-crt-stdio-l1-1-0.dll",
-            @"api-ms-win-crt-runtime-l1-1-0.dll",
-            @"api-ms-win-crt-process-l1-1-0.dll",
-            @"api-ms-win-crt-private -l1 - 1 - 0.dll",
-            @"api-ms-win-crt-multibyte-l1-1-0.dll",
-            @"api-ms-win-crt-math-l1-1-0.dll",
-            @"api-ms-win-crt-locale-l1-1-0.dll",
-            @"api-ms-win-crt-heap-l1-1-0.dll",
-            @"api-ms-win-crt-filesystem-l1-1-0.dll",
-            @"api-ms-win-crt-environment-l1-1-0.dll",
-            @"api-ms-win-crt-convert-l1-1-0.dll",
-            @"api-ms-win-crt-conio-l1-1-0.dll",
-            @"api-ms-win-core-util-l1-1-0.dll",
-            @"api-ms-win-core-timezone-l1-1-0.dll",
-            @"api-ms-win-core-sysinfo-l1-1-0.dll",
-            @"api-ms-win-core-synch-l1-2-0.dll",
-            @"api-ms-win-core-synch-l1-1-0.dll",
-            @"api-ms-win-core-string-l1-1-0.dll",
-            @"api-ms-win-core-rtlsupport-l1-1-0.dll",
-            @"api-ms-win-core-profile-l1-1-0.dll",
-            @"api-ms-win-core-processthreads-l1-1-1.dll",
-            @"api-ms-win-core-processthreads-l1-1-0.dll",
-            @"api-ms-win-core-processenvironment-l1-1-0.dll",
-            @"api-ms-win-core-namedpipe-l1-1-0.dll",
-            @"api-ms-win-core-memory-l1-1-0.dll",
-            @"api-ms-win-core-localization-l1-2-0.dll",
-            @"api-ms-win-core-libraryloader-l1-1-0.dll",
-            @"api-ms-win-core-interlocked-l1-1-0.dll",
-            @"api-ms-win-core-heap-l1-1-0.dll",
-            @"api-ms-win-core-handle-l1-1-0.dll",
-            @"api-ms-win-core-file-l2-1-0.dll",
-            @"api-ms-win-core-file-l1-2-0.dll",
-            @"api-ms-win-core-file-l1-1-0.dll",
-            @"api-ms-win-core-errorhandling-l1-1-0.dll",
-            @"api-ms-win-core-debug-l1-1-0.dll",
-            @"api-ms-win-core-datetime-l1-1-0.dll",
-            @"api-ms-win-core-console-l1-2-0.dll",
-            @"api-ms-win-core-console-l1-1-0.dll",
-            @"api-ms-win-crt-private-l1-1-0.dll",
-            @"hostfxr.dll",
-            @"api-ms-win-core-fibers-l1-1-0.dll",
-            @"mscordaccore_amd64_amd64_8.0.724.31311.dll",
-            @"clrgc.dll",
-            //@"System.Private.CoreLib.dll"
-        };
-
-        var directory = new DirectoryInfo(dotNetAssemblyPath);
-        var files = directory
-            .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
-            .Where(f => exclude.Contains(f.Name) == false)
-            // Deterministic reference order: Directory.GetFiles order follows the filesystem, and
-            // the compile (and hence the emitted metadata ref table) must not depend on it.
-            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var defaultReferences = files.Select(f =>
-            (MetadataReference)MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, f.Name))).ToArray();
-
-        return defaultReferences.ToArray();
-    }
-
     public static MetadataReference[] GetdefaultReferencesForCompiling(string dotNetAssemblyRefPath)
     {
         var directory = new DirectoryInfo(dotNetAssemblyRefPath);
@@ -498,16 +416,7 @@ public static class NativeCompilerUtils
         "ILLink.CodeFixProvider.dll",
     };
 
-    private static string IllinkTasksPackagePath() =>
-        NuGetPackage.FindHighestPackagePath("Microsoft.NET.ILLink.Tasks") ?? string.Empty;
-
-    private static string IllinkAnalyzersDirectory()
-    {
-        var packagePath = IllinkTasksPackagePath();
-        return string.IsNullOrEmpty(packagePath)
-            ? string.Empty
-            : Path.Combine(packagePath, "analyzers", "dotnet", "cs");
-    }
+    private static string IllinkAnalyzersDirectory() => EmbeddedSdkRefs.IllinkAnalyzers;
 
     // Produced app folders must carry the analyzer assemblies so a runnable JIT build of the compiler
     // can resolve the statically registered AnalyzerRegistry types at runtime.
@@ -584,34 +493,24 @@ public static class NativeCompilerUtils
             if (frameworkNames.Count == 0)
                 frameworkNames.Add("Microsoft.NETCore.App");
 
-            var sharedRoot = Path.GetDirectoryName(
-                Path.GetDirectoryName(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath));
-            if (string.IsNullOrEmpty(sharedRoot) || !Directory.Exists(sharedRoot))
-                return names;
-
+            // The shared framework assemblies themselves are not embedded (~106 MB); only their names
+            // are, which is all this method needs in order to decide copy-local suppression.
             foreach (var frameworkName in frameworkNames)
             {
-                var frameworkDir = Directory.EnumerateDirectories(
-                        Path.Combine(sharedRoot, frameworkName))
-                    .Where(dir => FrameworkFolderMatches(dir, targetFramework))
-                    .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                if (frameworkDir is null)
-                    frameworkDir = Directory.EnumerateDirectories(Path.Combine(sharedRoot, frameworkName))
-                        .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
-                        .FirstOrDefault();
-                if (frameworkDir is null) continue;
-
-                foreach (var file in Directory.EnumerateFiles(frameworkDir, "*.dll"))
-                    names.Add(Path.GetFileName(file));
+                try
+                {
+                    names.UnionWith(EmbeddedSdkRefs.GetSharedFrameworkAssemblyNames(frameworkName));
+                }
+                catch (FileNotFoundException)
+                {
+                    // A framework with no embedded name list (e.g. an SDK workload) contributes nothing.
+                }
             }
         }
         catch
         {
-            // Fall back to only the base runtime pack if the shared root cannot be enumerated.
-            var runtimeDir = AsemblyExtensions.ResolveSdkRuntimeAssemblyPath;
-            foreach (var file in Directory.EnumerateFiles(runtimeDir, "*.dll"))
-                names.Add(Path.GetFileName(file));
+            // Fall back to only the base runtime pack if the assets file cannot be read.
+            names.UnionWith(EmbeddedSdkRefs.GetSharedFrameworkAssemblyNames("Microsoft.NETCore.App"));
         }
         return names;
     }
@@ -651,9 +550,16 @@ public static class NativeCompilerUtils
                 var hintPath = reference.HintPath;
                 if (string.IsNullOrEmpty(hintPath)) continue;
 
+                // The ILLink analyzers come from the embedded payload rather than the NuGet cache, and they are not
+    // laid out as a package, so the package-relative path is rewritten to the payload directory before
+    // the generic property tokens are expanded.
                 var expanded = hintPath
+                    .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs",
+                        EmbeddedSdkRefs.IllinkAnalyzers)
+                    .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs",
+                        EmbeddedSdkRefs.IllinkAnalyzers)
                     .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
-                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath())
+                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", EmbeddedSdkRefs.SdkDirectory)
                     .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
@@ -1312,7 +1218,7 @@ public static class NativeCompilerUtils
 
     public static void WriteRuntimeConfig(Project project)
     {
-        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
+        var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
         var versionParts = runtimeVersion.Split('.');
         var tfm = $"net{versionParts[0]}.{versionParts[1]}";
 
@@ -1341,7 +1247,7 @@ public static class NativeCompilerUtils
     // Microsoft.AspNetCore.App).
     public static void WriteRuntimeConfigWeb(Project project)
     {
-        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
+        var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
         var versionParts = runtimeVersion.Split('.');
         var tfm = $"net{versionParts[0]}.{versionParts[1]}";
 

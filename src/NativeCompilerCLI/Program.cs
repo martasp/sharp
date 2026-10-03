@@ -548,18 +548,10 @@ static string WithProjectSuffix(string errors, string? projectFile)
         .Select(line => line + $" [{projectFile}]"));
 }
 
-// The version of the SDK hosting this compiler, byte-identical to `dotnet --version`.
-static string SdkVersion()
-{
-    using var process = Process.Start(new ProcessStartInfo("dotnet", "--version")
-    {
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-    }) ?? throw new InvalidOperationException("Unable to start `dotnet --version`.");
-    var version = process.StandardOutput.ReadToEnd().Trim();
-    process.WaitForExit();
-    return version;
-}
+// The version of the SDK this compiler was built against, matching `dotnet --version` for that SDK.
+// It comes from the payload embedded in the binary rather than by running `dotnet --version`, so it
+// still works on a machine with no .NET SDK installed.
+static string SdkVersion() => EmbeddedSdkRefs.SdkVersion;
 
 void PrintHelp()
 {

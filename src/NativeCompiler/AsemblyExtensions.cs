@@ -8,48 +8,25 @@ namespace NativeCompiler;
 
 public static class AsemblyExtensions
 {
-    public static string ResolveSdkRuntimeAssemblyPath
-    {
-        get
-        {
-            var runtimeRoot = Path.Combine(ResolveDotnetRoot(), "shared", "Microsoft.NETCore.App"); // shared dlls are for running, have to be copied near exe.
-            return SelectBestVersionDirectory(runtimeRoot, preferredMajor: Environment.Version.Major);
-        }
-    }
-
-    public static string ResolveSdkRefLocation
-    {
-        get
-        {
-            var refPackRoot = Path.Combine(ResolveDotnetRoot(), "packs", "Microsoft.NETCore.App.Ref"); // refs are for compiling
-            var versionDir = SelectBestVersionDirectory(refPackRoot, preferredMajor: Environment.Version.Major);
-            return SelectBestVersionDirectory(Path.Combine(versionDir, "ref"));
-        }
-    }
+    // Every path below is served from the payload embedded in this assembly (see EmbeddedSdkRefs), so
+    // sharp resolves SDK layout without an installed .NET SDK.
+    public static string ResolveSdkRefLocation => EmbeddedSdkRefs.ReferenceAssemblies;
 
     // The targeting pack ships real Roslyn source generators (System.Text.RegularExpressions.Generator,
     // System.Text.Json.SourceGeneration, Microsoft.Interop.*, ...) under analyzers/dotnet/cs. The same
     // assemblies .NET SDK feeds to csc for every project. Used by the GENERATOR_PIPELINE feature.
-    public static string ResolveRefPackAnalyzersLocation
-    {
-        get
-        {
-            var refPackRoot = Path.Combine(ResolveDotnetRoot(), "packs", "Microsoft.NETCore.App.Ref");
-            var versionDir = SelectBestVersionDirectory(refPackRoot, preferredMajor: Environment.Version.Major);
-            return Path.Combine(versionDir, "analyzers", "dotnet", "cs");
-        }
-    }
+    public static string ResolveRefPackAnalyzersLocation => EmbeddedSdkRefs.RefPackAnalyzers;
 
-    // Resolves the targeting-pack ref folder for a shared-framework <FrameworkReference> item, e.g.
-    // "Microsoft.AspNetCore.App" -> <dotnet>/packs/Microsoft.AspNetCore.App.Ref/<ver>/ref/<tfm>.
+    // Resolves the ref folder for a shared-framework <FrameworkReference> item, e.g.
+    // "Microsoft.AspNetCore.App" -> <payload>/packs/Microsoft.AspNetCore.App.Ref/<ver>/ref/<tfm>.
     public static string ResolveFrameworkRefLocation(string frameworkName, string? targetTfm)
     {
         if (!frameworkName.EndsWith(".Ref", StringComparison.OrdinalIgnoreCase))
+        {
             frameworkName += ".Ref";
+        }
 
-        var packRoot = Path.Combine(ResolveDotnetRoot(), "packs", frameworkName);
-        var versionDir = SelectBestVersionDirectory(packRoot, preferredMajor: Environment.Version.Major);
-
+        var versionDir = Path.Combine(EmbeddedSdkRefs.Root, "packs", frameworkName, EmbeddedSdkRefs.RefPackVersion);
         var refDir = Path.Combine(versionDir, "ref");
         var tfm = string.IsNullOrWhiteSpace(targetTfm) ? "net" + Environment.Version.Major + ".0" : targetTfm;
 
@@ -59,41 +36,11 @@ public static class AsemblyExtensions
         return SelectBestVersionDirectory(refDir);
     }
 
-    public static string ResolveSdkHostLocation => Path.Combine(ResolveDotnetRoot(), "host", "fxr");
+    public static string ResolveSdkRoot => EmbeddedSdkRefs.Root;
 
-    public static string ResolveSdkRoot => ResolveDotnetRoot();
-
-    // $(MSBuildSDKsPath) is the "Sdks" folder of the active SDK version, used by HintPath references
-    // into the SDK directory (e.g. Microsoft.Extensions.DependencyModel.dll lives one level up).
-    public static string ResolveSdkMsBuildSdksPath
-    {
-        get
-        {
-            var sdkRoot = Path.Combine(ResolveDotnetRoot(), "sdk");
-            var best = SelectBestVersionDirectory(sdkRoot, preferredMajor: Environment.Version.Major);
-            return Path.Combine(best, "Sdks");
-        }
-    }
-
-    private static string ResolveDotnetRoot()
-    {
-        var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-        if (!string.IsNullOrWhiteSpace(dotnetRoot) && Directory.Exists(dotnetRoot))
-            return dotnetRoot;
-
-        foreach (var candidate in new[]
-                 {
-                     @"C:\Program Files\dotnet",
-                     @"C:\Program Files (x86)\dotnet",
-                     @"/usr/share/dotnet",
-                 })
-        {
-            if (Directory.Exists(candidate)) return candidate;
-        }
-
-        throw new DirectoryNotFoundException(
-            "Could not locate the .NET SDK install directory. Set the DOTNET_ROOT environment variable.");
-    }
+    // The "Sdks" folder of the active SDK version, used by HintPath references into the SDK directory
+    // (e.g. Microsoft.Extensions.DependencyModel.dll lives one level up).
+    public static string ResolveSdkMsBuildSdksPath => Path.Combine(EmbeddedSdkRefs.SdkDirectory, "Sdks");
 
     private static string SelectBestVersionDirectory(string parent, int? preferredMajor = null)
     {
