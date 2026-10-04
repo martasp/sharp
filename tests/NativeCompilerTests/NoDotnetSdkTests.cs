@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using Shouldly;
 using Xunit;
 
@@ -109,6 +112,141 @@ public class NoDotnetSdkTests
             try { Directory.Delete(root, recursive: true); }
             catch (IOException) { }
         }
+    }
+
+    // The AOT binary runs a *different* generator pipeline from the JIT one every other test uses:
+    // IsDynamicCodeSupported is false, so SourceGeneratorRunner skips runtime discovery entirely and
+    // the set comes only from AnalyzerRegistry. A generator that is merely "present" in the SDK is
+    // therefore not evidence that it ran - if it is missing from the registry, the AOT binary
+    // silently produces different source and nothing else in this suite notices, because every other
+    // parity test exercises the JIT path where the generator is discovered dynamically.
+    //
+    // So this compares the AOT binary's output against the real SDK's, on the same fixture, over the
+    // two signals that expose generator differences: the public type surface (did the generator emit
+    // the type?) and the referenced-assembly set (did its generated code pull in more references?).
+    // Both directions matter, which is why the console project is compared too - a generator applied
+    // where the SDK does not apply it is just as much a regression as one missing.
+    [Fact]
+    public void AotOutputMatchesSdkGeneratorSurface()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        if (!File.Exists(Sharp))
+            throw new InvalidOperationException(
+                $"Missing AOT seed at '{Sharp}'. Run publish.bat (or `dotnet publish " +
+                "src/NativeCompilerCLI/NativeCompilerCLI.csproj -c Release -r linux-x64`) first.");
+
+        if (!BwrapWorks())
+        {
+            _output.WriteLine("SKIP: bwrap is unavailable or unprivileged user namespaces are disabled.");
+            return;
+        }
+
+        var root = WriteSampleSolution();
+        try
+        {
+            // Reference: what the SDK itself produces for these projects. Built on the host, where an
+            // SDK is present - only the sandbox below has to be SDK-free.
+            foreach (var project in new[] { "Domain", "Cli", "Api" })
+            {
+                var sdk = Run("dotnet", $"build \"{Path.Combine(root, project)}\" -c Debug --nologo -v:q", root);
+                sdk.Exit.ShouldBe(0, $"SDK reference build of {project} failed:\n{sdk.Output}");
+            }
+
+            // Precondition, same negative control as the other test: the sandbox must be unable to
+            // reach an SDK, or the comparison below proves nothing about the embedded payload.
+            var control = Sandbox(root, "dotnet build /src/Cli");
+            control.Exit.ShouldNotBe(0, $"dotnet build unexpectedly succeeded:\n{control.Output}");
+
+            var sharp = SharpInside;
+            var build = Sandbox(root,
+                $"{sharp} build /src/Domain && {sharp} build /src/Cli && {sharp} build /src/Api");
+            build.Exit.ShouldBe(0, build.Output);
+
+            // Cli is Microsoft.NET.Sdk with top-level statements; Api is Microsoft.NET.Sdk.Web with
+            // the same shape. The SDK makes Program public only for the web one, so these two
+            // together pin both directions of the minimal-API public-Program generator.
+            foreach (var project in new[] { "Cli", "Api" })
+            {
+                var ours = Path.Combine(root, project, "myc", "Debug", "net10.0", project + ".dll");
+                var sdkDll = Path.Combine(root, project, "bin", "Debug", "net10.0", project + ".dll");
+                File.Exists(ours).ShouldBeTrue($"AOT output missing at {ours}");
+
+                var ourSurface = ReadSurface(ours);
+                var sdkSurface = ReadSurface(sdkDll);
+
+                ourSurface.PublicTypes.ShouldBe(sdkSurface.PublicTypes,
+                    $"{project}: public type surface differs from the SDK (a source generator that the " +
+                    "AOT registry does not run, or runs when the SDK would not)");
+                ourSurface.References.ShouldBe(sdkSurface.References,
+                    $"{project}: referenced assembly set differs from the SDK (generated code pulled in " +
+                    "extra references, or a generator that should have been inert was not)");
+            }
+
+            // Spelled out as well, so the intent survives a future edit that weakens the loop above.
+            ReadSurface(Path.Combine(root, "Api", "myc", "Debug", "net10.0", "Api.dll"))
+                .PublicTypes.ShouldContain("Program",
+                    "minimal-API web app must expose a public Program; the SDK's public-Program " +
+                    "generator is registry-only under AOT");
+            ReadSurface(Path.Combine(root, "Cli", "myc", "Debug", "net10.0", "Cli.dll"))
+                .PublicTypes.ShouldNotContain("Program",
+                    "console app must keep an internal Program; the public-Program generator must " +
+                    "stay gated on IsWebSdk");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (IOException) { }
+        }
+    }
+
+    // The two metadata signals that expose a missing or misapplied source generator: the public
+    // type surface and the referenced-assembly set. Read straight from metadata so no dependency
+    // resolution is needed - MetadataLoadContext would have to resolve every reference, which for a
+    // web app means the whole ASP.NET Core ref pack.
+    private static (List<string> PublicTypes, List<string> References) ReadSurface(string dllPath)
+    {
+        using var stream = File.OpenRead(dllPath);
+        using var peReader = new PEReader(stream);
+        var reader = peReader.GetMetadataReader();
+
+        var publicTypes = new List<string>();
+        foreach (var handle in reader.TypeDefinitions)
+        {
+            var type = reader.GetTypeDefinition(handle);
+            if ((type.Attributes & System.Reflection.TypeAttributes.VisibilityMask)
+                != System.Reflection.TypeAttributes.Public)
+                continue;
+            // Match Type.FullName: a top-level Program sits in the global namespace, so no dot.
+            var space = reader.GetString(type.Namespace);
+            publicTypes.Add(space.Length == 0 ? reader.GetString(type.Name) : space + "." + reader.GetString(type.Name));
+        }
+        publicTypes.Sort(StringComparer.Ordinal);
+
+        var references = new List<string>();
+        foreach (var handle in reader.AssemblyReferences)
+        {
+            var reference = reader.GetAssemblyReference(handle);
+            references.Add($"{reader.GetString(reference.Name)}@{reference.Version}");
+        }
+        references.Sort(StringComparer.Ordinal);
+
+        return (publicTypes, references);
+    }
+
+    private static (int Exit, string Output) Run(string fileName, string arguments, string workingDirectory)
+    {
+        var psi = new ProcessStartInfo(fileName, arguments)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var process = Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, output);
     }
 
     // Runs a shell script in a sandbox where no .NET is reachable. `projectRoot` is bind-mounted

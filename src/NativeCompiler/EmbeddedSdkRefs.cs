@@ -89,6 +89,13 @@ public static class EmbeddedSdkRefs
     /// <summary>Directory holding the ILLink analyzers, which sharp copies into trimmed output.</summary>
     public static string IllinkAnalyzers => Path.Combine(Root, "sdk", RefPackVersion, "illink-analyzers");
 
+    /// <summary>
+    /// Directory holding the ASP.NET Core targeting-pack generators (minimal-API public Program,
+    /// [LoggerMessage], options/validation/config-binding, RequestDelegateGenerator).
+    /// </summary>
+    public static string AspNetRefPackAnalyzers => Path.Combine(
+        Root, "packs", "Microsoft.AspNetCore.App.Ref", RefPackVersion, "analyzers", "dotnet", "cs");
+
     /// <summary>Directory holding the SDK assemblies sharp loads directly (DependencyModel).</summary>
     public static string SdkDirectory => Path.Combine(Root, "sdk", RefPackVersion);
 

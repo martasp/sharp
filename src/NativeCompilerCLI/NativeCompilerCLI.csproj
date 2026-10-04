@@ -39,10 +39,38 @@
     <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\..\NativeCompiler\AotAnalyzerResources.xml" />
   </ItemGroup>
 
+<ItemGroup>
+    <!-- The ASP.NET Core targeting-pack generators that AnalyzerRegistry statically constructs
+         (LoggerMessage, options, validation, config binding, and - for web projects - the minimal-API
+         public Program).
+
+         Repeated here because MSBuild does not flow HintPath <Reference> items from a referenced
+         project into this app's deps.json, and AnalyzerRegistry binds those types when
+         GetSourceGenerators() is first called. They cannot be hoisted into a shared .props either:
+         sharp parses NativeCompiler.csproj as XML (CollectHintPathReferences) to resolve the same
+         references when it compiles itself, so its copy has to stay inline. Same arrangement as
+         M.E.DependencyModel in NativeCompilerTests.csproj. -->
+    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
+      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
+      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Logging.Generators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
+      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
+      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Configuration.Binder.SourceGeneration" Private="true">
+      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup>
 	  <!--<PackageReference Include="Cocona" Version="2.0.3" />-->
 	  <!--<PackageReference Include="Cocona.Core" Version="2.0.3" />-->
-	  <!--<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="7.0.0-*" />-->
+	  <!--<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="7.0.0-*"/>-->
   </ItemGroup>
 
 

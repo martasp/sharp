@@ -410,6 +410,18 @@ public static class NativeCompilerUtils
         "Microsoft.Interop.JavaScript.JSImportGenerator.dll",
     };
 
+    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in NativeCompiler.csproj.
+    // These live in a *different* payload directory than the NETCore set above.
+    private static readonly string[] AspNetRefPackAnalyzerFileNames =
+    {
+        "Microsoft.AspNetCore.App.SourceGenerators.dll",
+        "Microsoft.Extensions.Logging.Generators.dll",
+        "Microsoft.Extensions.Options.SourceGeneration.dll",
+        "Microsoft.Extensions.Validation.ValidationsGenerator.dll",
+        "Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll",
+        "Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll",
+    };
+
     private static readonly string[] IllinkAnalyzerFileNames =
     {
         "ILLink.RoslynAnalyzer.dll",
@@ -424,10 +436,13 @@ public static class NativeCompilerUtils
     {
         var files = new List<string>();
         var refPackDir = AsemblyExtensions.ResolveRefPackAnalyzersLocation;
+        var aspNetRefPackDir = AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation;
         var illinkDir = IllinkAnalyzersDirectory();
 
         foreach (var name in RefPackAnalyzerFileNames)
             files.Add(Path.Combine(refPackDir, name));
+        foreach (var name in AspNetRefPackAnalyzerFileNames)
+            files.Add(Path.Combine(aspNetRefPackDir, name));
         foreach (var name in IllinkAnalyzerFileNames)
             files.Add(Path.Combine(illinkDir, name));
 
@@ -559,6 +574,7 @@ public static class NativeCompilerUtils
                     .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs",
                         EmbeddedSdkRefs.IllinkAnalyzers)
                     .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
+                    .Replace("$(_NativeCompilerAspRefPackAnalyzersPath)", AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation)
                     .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", EmbeddedSdkRefs.SdkDirectory)
                     .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)

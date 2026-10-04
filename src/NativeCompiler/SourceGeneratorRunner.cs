@@ -204,8 +204,17 @@ public static class SourceGeneratorRunner
     {
         var generators = new List<ISourceGenerator>(AnalyzerRegistry.GetSourceGenerators());
 
+        // Web-only generators. Under JIT the dynamic discovery below finds these anyway; adding them
+        // here is what makes the AOT binary match, since AOT cannot load assemblies at runtime. The
+        // gate matters: applied unconditionally, PublicProgramSourceGenerator also makes Program public
+        // in console apps, which diverges from the SDK.
+        if (project.IsWebSdk)
+        {
+            generators.AddRange(AnalyzerRegistry.GetWebSourceGenerators());
+        }
+
         if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
-            Console.WriteLine($"[gens] {project.ProjectName}: IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
+            Console.WriteLine($"[gens] {project.ProjectName}: IsWebSdk={project.IsWebSdk}, IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
 
         if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
         {

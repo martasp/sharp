@@ -68,6 +68,14 @@
     FilePath: ./Microsoft.ApplicationInsights.dll
   },
   {
+    Display: ./Microsoft.AspNetCore.App.SourceGenerators.dll,
+    FilePath: ./Microsoft.AspNetCore.App.SourceGenerators.dll
+  },
+  {
+    Display: ./Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll,
+    FilePath: ./Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll
+  },
+  {
     Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
     FilePath: ./Microsoft.Bcl.AsyncInterfaces.dll
   },
@@ -84,6 +92,10 @@
     FilePath: ./Microsoft.CodeAnalysis.Workspaces.dll
   },
   {
+    Display: ./Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll,
+    FilePath: ./Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll
+  },
+  {
     Display: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll
   },
@@ -94,6 +106,18 @@
   {
     Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
     FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Logging.Generators.dll,
+    FilePath: ./Microsoft.Extensions.Logging.Generators.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Options.SourceGeneration.dll,
+    FilePath: ./Microsoft.Extensions.Options.SourceGeneration.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Validation.ValidationsGenerator.dll,
+    FilePath: ./Microsoft.Extensions.Validation.ValidationsGenerator.dll
   },
   {
     Display: ./Microsoft.Interop.ComInterfaceGenerator.dll,

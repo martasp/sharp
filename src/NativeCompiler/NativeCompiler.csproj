@@ -27,6 +27,12 @@
          ';' produced one bogus HintPath when several ref packs were installed (CS0234 on CI). -->
     <_NativeCompilerRefPackVersionDir>$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref\$(BundledNETCoreAppPackageVersion)</_NativeCompilerRefPackVersionDir>
     <_NativeCompilerRefPackAnalyzersPath>$(_NativeCompilerRefPackVersionDir)\analyzers\dotnet\cs</_NativeCompilerRefPackAnalyzersPath>
+    <!-- The ASP.NET Core targeting pack carries its own generators (minimal-API public Program,
+         [LoggerMessage], options/validation/config-binding). They target older Roslyn (4.4/4.13)
+         than the 5.9.0 this project references, which is fine: the single Microsoft.CodeAnalysis
+         copy sharp already carries satisfies every one of them, exactly as it does for the
+         System.Text.Json generator. -->
+    <_NativeCompilerAspRefPackAnalyzersPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs</_NativeCompilerAspRefPackAnalyzersPath>
   </PropertyGroup>
 
   <!-- Expose SDK Analyzer DLLs as compile-time references -->
@@ -56,6 +62,30 @@
     </Reference>
     <Reference Include="Microsoft.Interop.JavaScript.JSImportGenerator" Private="true">
       <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.JavaScript.JSImportGenerator.dll</HintPath>
+    </Reference>
+
+    <!-- ASP.NET Core targeting-pack generators. Referenced (not loaded from the embedded payload)
+         for the same reason as the six above: NativeAOT cannot discover types at runtime, so they are
+         rooted into the native image by being statically constructed in AnalyzerRegistry. Without
+         them sharp's web output diverges from `dotnet build` - minimal-API apps lose the
+         `public partial class Program` the SDK emits, and [LoggerMessage] fails with CS8795. -->
+    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Logging.Generators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Configuration.Binder.SourceGeneration" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.Http.RequestDelegateGenerator" Private="true">
+      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll</HintPath>
     </Reference>
 
     <!-- Microsoft.Extensions.DependencyModel ships only in the SDK (not the ref pack or shared

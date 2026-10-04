@@ -17,6 +17,10 @@ public static class AsemblyExtensions
     // assemblies .NET SDK feeds to csc for every project. Used by the GENERATOR_PIPELINE feature.
     public static string ResolveRefPackAnalyzersLocation => EmbeddedSdkRefs.RefPackAnalyzers;
 
+    // The ASP.NET Core targeting pack's own generators sit beside the NETCore ones. sharp links them
+    // too, so the self-host build resolves them out of the embedded payload like the rest.
+    public static string ResolveAspNetRefPackAnalyzersLocation => EmbeddedSdkRefs.AspNetRefPackAnalyzers;
+
     // Resolves the ref folder for a shared-framework <FrameworkReference> item, e.g.
     // "Microsoft.AspNetCore.App" -> <payload>/packs/Microsoft.AspNetCore.App.Ref/<ver>/ref/<tfm>.
     public static string ResolveFrameworkRefLocation(string frameworkName, string? targetTfm)
