@@ -344,10 +344,15 @@ public class OutputParityTests
             // 'System.Runtime'". Running it is not a sufficient check.
             var runtimeConfigPath = Path.Combine(root, "myc", "Debug", "net10.0", "ParityConsole.runtimeconfig.json");
             File.Exists(runtimeConfigPath).ShouldBeTrue();
-            Should.NotThrow(() => JsonDocument.Parse(File.ReadAllText(runtimeConfigPath)).Dispose(),
+            var runtimeConfigText = File.ReadAllText(runtimeConfigPath);
+            Should.NotThrow(() => JsonDocument.Parse(runtimeConfigText).Dispose(),
                 "produced runtimeconfig.json is not valid JSON");
             var run = Run("dotnet", $"\"{dll}\"");
-            run.exit.ShouldBe(0, $"our console dll failed to run:\n{run.output}");
+            run.exit.ShouldBe(0,
+                $"our console dll failed to run:\n{run.output}" +
+                $"\nruntimeconfig.json was:\n{runtimeConfigText}" +
+                $"\ndotnet --list-runtimes:{Run("dotnet", "--list-runtimes").output}" +
+                $"\ndotnet --info:{Run("dotnet", "--info").output}");
             run.output.ShouldContain("PARITY-RUN-OK");
         }
         finally
