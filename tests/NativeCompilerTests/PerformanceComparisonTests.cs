@@ -248,6 +248,11 @@ public class PerformanceComparisonTests
         // - a dated file keeps a per-run history
         // - a stable "latest-<kind>.txt" is overwritten every run so `git diff` shows the
         //   change between consecutive benchmark runs.
+        // The commit under test goes in the second line: these numbers drift with ambient load as
+        // well as with the code, so without it a comparison later cannot attribute a change to a
+        // specific commit. Recorded as `commit:` + short SHA, or `unknown` outside a work tree.
+        lines.Insert(1, $"  commit: {ReadGitCommit()}");
+
         var benchmarksDir = Path.Combine(RepoRoot, "benchmarks");
         Directory.CreateDirectory(benchmarksDir);
 
@@ -257,6 +262,65 @@ public class PerformanceComparisonTests
         var latestPath = Path.Combine(benchmarksDir, $"latest-{kind}.txt");
         File.WriteAllLines(latestPath, lines);
         return latestPath;
+    }
+
+    // Resolved once per test run: both benchmarks describe the same code, and reading it per call
+    // would give them different answers, because the first capture written makes the tree dirty for
+    // the second.
+    private static string? _commit;
+
+    private static string ReadGitCommit() => _commit ??= ReadGitCommitCore();
+
+    private static string ReadGitCommitCore()
+    {
+        try
+        {
+            var start = new DirectoryInfo(RepoRoot);
+            for (var dir = start; dir is not null; dir = dir.Parent)
+            {
+                if (!Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                    continue;
+
+                var sha = RunGit(dir.FullName, "rev-parse", "--short=12", "HEAD");
+                if (string.IsNullOrEmpty(sha))
+                    return "unknown";
+
+                // A bare SHA would misattribute a run made against uncommitted work, which is the
+                // one case where the number cannot be traced back to a commit later. Untracked
+                // files are excluded on purpose: every run writes its own capture into benchmarks/,
+                // so counting those would mark every run dirty and say nothing about the code.
+                var dirty = RunGit(dir.FullName, "status", "--porcelain", "--untracked-files=no");
+                return dirty.Length > 0 ? sha + "-dirty" : sha;
+            }
+        }
+        catch
+        {
+            // A benchmark that cannot name its commit is still worth recording.
+        }
+
+        return "unknown";
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var argument in arguments)
+            psi.ArgumentList.Add(argument);
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return string.Empty;
+
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        return process.ExitCode == 0 ? output : string.Empty;
     }
 
     private static void CopyTree(string sourceRoot, string targetRoot)

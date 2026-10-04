@@ -134,5 +134,5 @@ namespace CustomCompiler
         // (SourceGeneratorRunner), which RDG reads to decide whether to generate at all, and
         // EnableRequestDelegateGenerator on the project model. Until both land, a project that opts
         // in silently gets no RDG output under AOT while JIT still produces it via discovery.
-    }
+}
 }

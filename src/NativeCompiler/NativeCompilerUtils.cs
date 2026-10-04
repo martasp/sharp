@@ -1237,11 +1237,12 @@ public static class NativeCompilerUtils
         return project;
     }
 
-    public static void WriteRuntimeConfig(Project project)
+public static void WriteRuntimeConfig(Project project)
     {
         var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
         var versionParts = runtimeVersion.Split('.');
         var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+        var baselineVersion = BaselineFrameworkVersion(versionParts);
 
         var runtimeConfig =
         $$"""
@@ -1250,11 +1251,13 @@ public static class NativeCompilerUtils
             "tfm": "{{tfm}}",
             "framework": {
               "name": "Microsoft.NETCore.App",
-              "version": "{{runtimeVersion}}"
+              "version": "{{baselineVersion}}",
+              "rollForward": "latestPatch"
             },
             "configProperties": {
-              "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
+              "System.Reflection.MetadataUpdater.IsSupported": false
             }
+          }
           }
         }
         """;
@@ -1271,6 +1274,7 @@ public static class NativeCompilerUtils
         var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
         var versionParts = runtimeVersion.Split('.');
         var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+        var baselineVersion = BaselineFrameworkVersion(versionParts);
 
         var runtimeConfig =
         $$"""
@@ -1280,11 +1284,13 @@ public static class NativeCompilerUtils
             "frameworks": [
               {
                 "name": "Microsoft.NETCore.App",
-                "version": "{{runtimeVersion}}"
+                "version": "{{baselineVersion}}",
+                "rollForward": "latestPatch"
               },
               {
                 "name": "Microsoft.AspNetCore.App",
-                "version": "{{runtimeVersion}}"
+                "version": "{{baselineVersion}}",
+                "rollForward": "latestPatch"
               }
             ],
             "configProperties": {
@@ -1296,6 +1302,16 @@ public static class NativeCompilerUtils
 
         WriteRuntimeConfigFile(project, runtimeConfig);
     }
+
+    // The embedded SDK records the exact runtime it was built against (10.0.11 here), but the app
+    // is compiled and run on some other machine, where that patch need not exist. The host only
+    // ever rolls *forward*, so asking for 10.0.11 on a machine whose newest patch is 10.0.10 dies
+    // with "Could not load file or assembly 'System.Runtime'" - which is how CI went red on this
+    // while every local run passed. The SDK can use the exact version because it writes the one
+    // installed on the machine doing the building; we have no such guarantee, so request the
+    // major.minor baseline and let rollForward pick the newest patch actually present.
+    private static string BaselineFrameworkVersion(string[] versionParts)
+        => versionParts.Length >= 2 ? $"{versionParts[0]}.{versionParts[1]}.0" : "10.0.0";
 
     private static void WriteRuntimeConfigFile(Project project, string runtimeConfig)
     {

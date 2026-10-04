@@ -228,11 +228,23 @@ public static class SourceGeneratorRunner
             {
                 try
                 {
+                    var staticallyLinkedAnalyzers = new HashSet<string>(
+                        NativeCompilerUtils.GetAnalyzerRuntimeFiles().Select(Path.GetFileName).Where(name => name is not null)!,
+                        StringComparer.OrdinalIgnoreCase);
+
                     var loadContext = new GeneratorAssemblyLoadContext();
                     var warnings = new List<string>();
                     foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
                     foreach (var dll in generatorDlls)
                     {
+                        // Skip anything already linked in statically. The targeting-pack generators
+                        // in AnalyzerRegistry come from these same DLLs, so discovering them as well
+                        // runs each one twice and it emits its sources twice - [LoggerMessage] then
+                        // fails with CS0757 "a partial method may not have multiple implementing
+                        // declarations", plus CS0102/CS0229/CS0121. Not re-loading them also keeps
+                        // six assemblies per project out of the dynamic path.
+                        if (staticallyLinkedAnalyzers.Contains(Path.GetFileName(dll))) continue;
+
                         Assembly assembly;
                         try
                         {
