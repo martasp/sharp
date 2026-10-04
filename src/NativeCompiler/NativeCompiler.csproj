@@ -131,16 +131,14 @@
     <_SharpEmbeddedPayloadArguments>--targeting-pack-root &quot;$(NetCoreTargetingPackRoot)&quot; --sdk-root &quot;$(MSBuildSDKsPath)/..&quot; --shared-framework-root &quot;$(NetCoreRoot)shared&quot; --illink-analyzers &quot;$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs&quot; --ref-pack-version &quot;$(_SharpEmbeddedRefPackVersion)&quot; --sdk-version &quot;$(NETCoreSdkVersion)&quot; --target-framework &quot;$(TargetFramework)&quot;</_SharpEmbeddedPayloadArguments>
   </PropertyGroup>
 
-  <!-- Build order only, not a reference: the stager must be built before the Exec below runs, and
-       restoring this project graph restores it too, so the Exec can skip both. -->
-  <ItemGroup>
-    <ProjectReference Include="../../tools/PayloadStager/PayloadStager.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
-  </ItemGroup>
-
   <Target Name="StageEmbeddedRefsPayload"
           BeforeTargets="AssignTargetPaths"
           Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; --no-restore --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) &quot;--out&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs&quot; &quot;--zip&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip&quot;" />
+    <!-- Restores, builds and runs the stager in one shot, so it is built exactly once. A
+         ProjectReference to the stager raced this Exec for the same obj/bin and failed intermittently
+         on a locked PayloadStager.deps.json; restore is a separate phase from build in
+         `dotnet build`, so the nested restore cannot contend with the outer one. -->
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) &quot;--out&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs&quot; &quot;--zip&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip&quot;" />
 
     <ItemGroup>
       <EmbeddedResource Include="$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip" LogicalName="embedded-refs.zip" />

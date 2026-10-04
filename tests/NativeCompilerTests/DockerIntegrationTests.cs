@@ -18,6 +18,11 @@ public class DockerIntegrationTests
     private static readonly string SrcDir = Path.Combine(RepoRoot, "src");
     private static readonly string NugetConfig = Path.Combine(RepoRoot, "nuget.config");
 
+    // The container builds the real NativeCompiler.csproj, which stages its embedded payload with
+    // tools/PayloadStager. A ProjectReference to a path the container cannot see is only a warning
+    // (MSB9008) and then a hard MSB3073 from the Exec, so the tool has to be mounted alongside src.
+    private static readonly string ToolsDir = Path.Combine(RepoRoot, "tools");
+
     private const string HelloCsproj = """
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
@@ -53,14 +58,19 @@ public class DockerIntegrationTests
             .WithEntrypoint("/bin/bash", "-c")
             .WithCommand("while true; do sleep 1000; done")
             .WithResourceMapping(SrcDir, "/src/src")
+            .WithResourceMapping(ToolsDir, "/src/tools")
             .WithResourceMapping(NugetConfig, "/src/nuget.config")
             .WithResourceMapping(CreateHelloProject(), "/app/hello")
             .Build();
 
         await container.StartAsync();
 
+        // Drops the host's obj/bin from the mounted trees: they hold absolute paths (NuGet package
+        // folders, the repo root) that do not exist in the container. The build below regenerates
+        // obj via restore, including for the stager, because NativeCompiler.csproj has a
+        // ProjectReference to it - which is what lets the stager's Exec pass --no-restore.
         await container.ExecAsync(
-            new[] { "bash", "-c", "find /src/src -type d -name obj -exec rm -rf {} + 2>/dev/null; true" });
+            new[] { "bash", "-c", "find /src -type d \\( -name obj -o -name bin \\) -exec rm -rf {} + 2>/dev/null; true" });
 
         var build = await container.ExecAsync(
             new[] { "dotnet", "build", "/src/src/NativeCompilerCLI", "-c", "Release" });
@@ -102,6 +112,7 @@ public class DockerIntegrationTests
             .WithEntrypoint("cmd", "/c")
             .WithCommand("ping -t 127.0.0.1")
             .WithResourceMapping(SrcDir, "C:\\src\\src")
+            .WithResourceMapping(ToolsDir, "C:\\src\\tools")
             .WithResourceMapping(NugetConfig, "C:\\src\\nuget.config")
             .WithResourceMapping(CreateHelloProject(), "C:\\app\\hello")
             .Build();
