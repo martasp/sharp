@@ -1255,9 +1255,8 @@ public static void WriteRuntimeConfig(Project project)
               "rollForward": "latestPatch"
             },
             "configProperties": {
-              "System.Reflection.MetadataUpdater.IsSupported": false
+              "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
             }
-          }
           }
         }
         """;
