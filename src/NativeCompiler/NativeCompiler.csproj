@@ -104,155 +104,46 @@
     <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\AotAnalyzerResources.xml" />
   </ItemGroup>
 
-  <!--
-    Self-contained compiler payload.
+  <!-- Self-contained compiler payload.
 
-    `sharp` needs compile-time metadata (the targeting ref packs), the SDK source generators, the
-    apphost template, and the *names* of the shared-framework assemblies. It read all of that from
-    the installed SDK, so a machine without a .NET SDK could not use the compiler at all. The
-    target below stages exactly those files into an SDK-shaped tree, zips it, and embeds the zip as
-    a manifest resource. EmbeddedSdkRefs.cs extracts it to a version-keyed cache on first use.
+       `sharp` needs compile-time metadata (the targeting ref packs), the SDK source generators, the
+       ILLink analyzers, the apphost template, and the *names* of the shared-framework assemblies. It
+       used to read all of that from the installed SDK, so a machine without a .NET SDK could not use
+       the compiler at all.
 
-    Layout deliberately mirrors $(NetCoreTargetingPackRoot) so AsemblyExtensions keeps resolving
-    paths the same way and only its "where is the root" answer changes.
+       tools/PayloadStager does that work in C# - copying the files into an SDK-shaped tree under
+       obj/, writing the name lists and version stamp, and zipping it - and the zip is embedded as a
+       manifest resource. EmbeddedSdkRefs.cs extracts it to a version-keyed cache on first use.
 
-    The shared frameworks themselves are NOT embedded (106M of DLLs): the compiler reads them only
-    for file NAMES, to decide copy-local suppression, plus the version string for runtimeconfig.
-    The names are shipped as two small text lists instead.
-  -->
+       $(IntermediateOutputPath) is computed by the SDK's targets, i.e. AFTER this project's body is
+       evaluated, so it can only be read from inside a target; resolving it at project scope yields an
+       empty string and stages the payload into the source tree instead of obj/.
+       The target hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a
+       dependency of PrepareResources, so a BeforeTargets="PrepareResources" target runs after
+       resources have been collected and the zip is silently dropped from the assembly. -->
   <PropertyGroup>
     <!-- The pack version/TFM the payload is built from; recorded in the zip root so the runtime can
          key its cache on it and never serve refs from a different SDK. -->
     <_SharpEmbeddedRefPackVersion>$(BundledNETCoreAppPackageVersion)</_SharpEmbeddedRefPackVersion>
+
+    <!-- Where the payload comes from, as stager arguments. Every path is quoted because an SDK
+         install under e.g. C:\Program Files breaks the command line otherwise. -->
+    <_SharpEmbeddedPayloadArguments>--targeting-pack-root &quot;$(NetCoreTargetingPackRoot)&quot; --sdk-root &quot;$(MSBuildSDKsPath)/..&quot; --shared-framework-root &quot;$(NetCoreRoot)shared&quot; --illink-analyzers &quot;$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs&quot; --ref-pack-version &quot;$(_SharpEmbeddedRefPackVersion)&quot; --sdk-version &quot;$(NETCoreSdkVersion)&quot; --target-framework &quot;$(TargetFramework)&quot;</_SharpEmbeddedPayloadArguments>
   </PropertyGroup>
 
-<!-- Hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a *dependency* of
-     PrepareResources, so a BeforeTargets="PrepareResources" target runs after resources have already
-     been collected and the zip is silently dropped from the assembly. -->
-<Target Name="StageEmbeddedRefsPayload"
-        BeforeTargets="AssignTargetPaths"
-        Condition="'$(DesignTimeBuild)' != 'true'">
-    <!-- $(IntermediateOutputPath) is computed by the SDK's targets, i.e. AFTER this project's body
-         is evaluated, so it can only be read from inside a target. Resolving it at project scope
-         yields an empty string and stages the payload into the source tree instead of obj/. -->
-    <PropertyGroup>
-      <_SharpEmbeddedPayloadDir>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs</_SharpEmbeddedPayloadDir>
-      <_SharpEmbeddedZip>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip</_SharpEmbeddedZip>
-      <!-- The layout the extracted payload takes, mirroring the SDK directories the compiler probes. -->
-      <_SharpEmbeddedSdkDir>$(_SharpEmbeddedPayloadDir)/sdk/$(_SharpEmbeddedRefPackVersion)</_SharpEmbeddedSdkDir>
-      <_SharpEmbeddedNetRefDir>$(_SharpEmbeddedPayloadDir)/packs/Microsoft.NETCore.App.Ref/$(_SharpEmbeddedRefPackVersion)/ref/$(TargetFramework)</_SharpEmbeddedNetRefDir>
-      <_SharpEmbeddedNetAnalyzerDir>$(_SharpEmbeddedPayloadDir)/packs/Microsoft.NETCore.App.Ref/$(_SharpEmbeddedRefPackVersion)/analyzers/dotnet/cs</_SharpEmbeddedNetAnalyzerDir>
-      <_SharpEmbeddedAspRefDir>$(_SharpEmbeddedPayloadDir)/packs/Microsoft.AspNetCore.App.Ref/$(_SharpEmbeddedRefPackVersion)/ref/$(TargetFramework)</_SharpEmbeddedAspRefDir>
-      <_SharpEmbeddedAspAnalyzerDir>$(_SharpEmbeddedPayloadDir)/packs/Microsoft.AspNetCore.App.Ref/$(_SharpEmbeddedRefPackVersion)/analyzers/dotnet/cs</_SharpEmbeddedAspAnalyzerDir>
-    </PropertyGroup>
+  <!-- Build order only, not a reference: the stager must be built before the Exec below runs, and
+       restoring this project graph restores it too, so the Exec can skip both. -->
+  <ItemGroup>
+    <ProjectReference Include="../../tools/PayloadStager/PayloadStager.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
 
-    <!-- Each group is copied straight into its final SDK-shaped directory. This deliberately avoids
-         per-item metadata: inside a target's ItemGroup, %(Filename) in nested metadata resolves
-         against items already collected rather than the ones being added, which silently produced a
-         cartesian product of paths. Copying per directory also means no name-collision handling is
-         needed, since the ref packs and the analyzer sets live in separate directories. -->
-    <ItemGroup>
-      <_SharpEmbedNetRef Include="$(_NativeCompilerRefPackVersionDir)\ref\$(TargetFramework)\*.dll" />
-      <_SharpEmbedNetAnalyzer Include="$(_NativeCompilerRefPackVersionDir)\analyzers\dotnet\cs\*.dll" />
-      <_SharpEmbedAspRef Include="$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(_SharpEmbeddedRefPackVersion)\ref\$(TargetFramework)\*.dll" />
-      <!-- The AspNetCore targeting pack ships its own analyzers/generators, and they are load-bearing
-           for output parity: Microsoft.AspNetCore.App.SourceGenerators emits the `public partial class
-           Program {}` that minimal-API apps get from the SDK, and the Microsoft.Extensions.* generators
-           shape the emitted surface. Without them sharp's web output diverges from `dotnet build`. -->
-      <_SharpEmbedAspAnalyzer Include="$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(_SharpEmbeddedRefPackVersion)\analyzers\dotnet\cs\*.dll" />
-      <_SharpEmbedIllink Include="$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\*.dll" />
-    </ItemGroup>
-
-    <Error Condition="'@(_SharpEmbedNetRef)' == ''"
-           Text="Embedded ref payload is empty: no reference assemblies found under $(_NativeCompilerRefPackVersionDir). sharp cannot build projects without the SDK targeting packs." />
-
-    <Copy SourceFiles="@(_SharpEmbedNetRef)" DestinationFolder="$(_SharpEmbeddedNetRefDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_SharpEmbedNetAnalyzer)" DestinationFolder="$(_SharpEmbeddedNetAnalyzerDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_SharpEmbedAspRef)" DestinationFolder="$(_SharpEmbeddedAspRefDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_SharpEmbedAspAnalyzer)" DestinationFolder="$(_SharpEmbeddedAspAnalyzerDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_SharpEmbedIllink)" DestinationFolder="$(_SharpEmbeddedSdkDir)/illink-analyzers" SkipUnchangedFiles="true" />
-
-    <!-- An SDK install ships only the apphost for its own OS, so stage whichever exists. The runtime
-         probes both names per version (FindAppHostTemplate) for the same reason. -->
-    <Copy SourceFiles="$(MSBuildSDKsPath)\..\Microsoft.Extensions.DependencyModel.dll"
-          DestinationFolder="$(_SharpEmbeddedSdkDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(MSBuildSDKsPath)\..\AppHostTemplate\apphost"
-          DestinationFolder="$(_SharpEmbeddedSdkDir)/AppHostTemplate"
-          Condition="Exists('$(MSBuildSDKsPath)\..\AppHostTemplate\apphost')" />
-    <Copy SourceFiles="$(MSBuildSDKsPath)\..\AppHostTemplate\apphost.exe"
-          DestinationFolder="$(_SharpEmbeddedSdkDir)/AppHostTemplate"
-          Condition="Exists('$(MSBuildSDKsPath)\..\AppHostTemplate\apphost.exe')" />
-
-    <!-- Shared-framework assembly NAMES (never their bytes): the compiler uses these only to decide
-         which reference assemblies are part of the framework and must not be copied into bin/, plus
-         the version string written into runtimeconfig.json. Deriving the names from the ref packs is
-         not equivalent - the AspNetCore ref pack omits System.Security.Cryptography.Pkcs.dll, which
-         the shared framework does ship - so the real lists are shipped. -->
-    <PropertyGroup>
-      <_SharpSharedRoot>$(NetCoreRoot)shared</_SharpSharedRoot>
-    </PropertyGroup>
+  <Target Name="StageEmbeddedRefsPayload"
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; --no-restore --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) &quot;--out&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs&quot; &quot;--zip&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip&quot;" />
 
     <ItemGroup>
-      <!-- Pinned to the bundled pack version, not a '*' glob. The runner keeps several shared
-           framework majors side by side (8.x, 9.x, 10.x), so matching any version directory picked
-           whichever came first - a net9.0 framework for a net10.0 build. If the shared framework and
-           the bundled pack ever disagree on version this glob comes back empty and the Error below
-           fails the build, which is the outcome we want. -->
-      <_SharpNetCoreSharedAny Include="$(_SharpSharedRoot)\Microsoft.NETCore.App\$(_SharpEmbeddedRefPackVersion)\*.dll" />
-    </ItemGroup>
-
-    <!-- Must be set inside the target: item metadata (used by the property function below) is not
-         available during property evaluation, so at project scope the version silently stays empty. -->
-    <PropertyGroup>
-      <_SharpEmbeddedRuntimeVersion Condition="'$(_SharpEmbeddedRuntimeVersion)' == '' and '@(_SharpNetCoreSharedAny)' != ''">$(_SharpEmbeddedRefPackVersion)</_SharpEmbeddedRuntimeVersion>
-    </PropertyGroup>
-
-    <Error Condition="'$(_SharpEmbeddedRuntimeVersion)' == ''"
-           Text="Could not determine the shared framework runtime version under $(_SharpSharedRoot). The compiler needs it to stamp runtimeconfig.json." />
-
-    <ItemGroup>
-      <!-- Reuse the matched files as the name list for the resolved version. -->
-      <_SharpNetCoreShared Include="@(_SharpNetCoreSharedAny)" />
-      <_SharpAspNetShared Include="$(_SharpSharedRoot)\Microsoft.AspNetCore.App\$(_SharpEmbeddedRefPackVersion)\*.dll" />
-    </ItemGroup>
-
-    <WriteLinesToFile File="$(_SharpEmbeddedPayloadDir)\frameworks\Microsoft.NETCore.App.txt"
-                      Lines="@(_SharpNetCoreShared->'%(Filename)%(Extension)')"
-                      Overwrite="true"
-                      Condition="'@(_SharpNetCoreShared)' != ''" />
-    <WriteLinesToFile File="$(_SharpEmbeddedPayloadDir)\frameworks\Microsoft.AspNetCore.App.txt"
-                      Lines="@(_SharpAspNetShared->'%(Filename)%(Extension)')"
-                      Overwrite="true"
-                      Condition="'@(_SharpAspNetShared)' != ''" />
-    <!-- Stamp the ref pack and runtime versions as metadata lines the runtime reads after extraction.
-         Written with a plain WriteLinesToFile per value rather than a ';'-joined property: the
-         version is computed by a property function over item metadata, which does not re-expand
-         inside an item transform. -->
-    <PropertyGroup>
-      <_SharpEmbeddedVersionFile>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs/sdk-version.txt</_SharpEmbeddedVersionFile>
-    </PropertyGroup>
-
-    <MakeDir Directories="$(_SharpEmbeddedPayloadDir)" />
-    <WriteLinesToFile File="$(_SharpEmbeddedVersionFile)"
-                      Lines="refpack=$(_SharpEmbeddedRefPackVersion)"
-                      Overwrite="true" />
-    <WriteLinesToFile File="$(_SharpEmbeddedVersionFile)"
-                      Lines="runtime=$(_SharpEmbeddedRuntimeVersion)"
-                      Overwrite="false" />
-    <!-- The SDK version reported by the version command. Recorded here rather than read from the
-         assembly's version so it stays identical to the SDK that built sharp, instead of defaulting
-         to the project's 1.0.0. -->
-    <WriteLinesToFile File="$(_SharpEmbeddedVersionFile)"
-                      Lines="sdk=$(NETCoreSdkVersion)"
-                      Overwrite="false" />
-
-    <Delete Files="$(_SharpEmbeddedZip)" />
-    <ZipDirectory SourceDirectory="$(_SharpEmbeddedPayloadDir)"
-                  DestinationFile="$(_SharpEmbeddedZip)"
-                  Overwrite="true" />
-
-    <ItemGroup>
-      <EmbeddedResource Include="$(_SharpEmbeddedZip)" LogicalName="embedded-refs.zip" />
+      <EmbeddedResource Include="$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip" LogicalName="embedded-refs.zip" />
     </ItemGroup>
   </Target>
 

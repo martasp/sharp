@@ -30,6 +30,12 @@
     FlatPath: {ProjectDirectory}NativeCompilerTests.csproj
   },
   {
+    Name: PayloadStager,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: tools\PayloadStager\PayloadStager.csproj,
+    FlatPath: {SolutionDirectory}tools/PayloadStager/PayloadStager.csproj
+  },
+  {
     Name: SimplePlayground,
     ProjectTypeGuid: Guid_1,
     ProjectRelativePath: SimplePlayground\SimplePlayground.csproj,

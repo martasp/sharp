@@ -33,7 +33,7 @@ public class SolutionTests
     public void Parse_RootSolution_ShouldListOnlyCsprojProjects()
     {
         var solution = SolutionFile.Parse(RootSln);
-        solution.Projects.Count.ShouldBe(6);
+        solution.Projects.Count.ShouldBe(7);
         solution.Projects.ShouldAllBe(project => project.ProjectPath.EndsWith(".csproj"));
         solution.Projects.ShouldContain(project => project.Name == "NativeCompiler");
         solution.Projects.ShouldContain(project => project.Name == "NativeCompilerCLI");
@@ -41,6 +41,7 @@ public class SolutionTests
         solution.Projects.ShouldContain(project => project.Name == "DotnetRuntime10");
         solution.Projects.ShouldContain(project => project.Name == "DotnetRuntimeHostExe");
         solution.Projects.ShouldContain(project => project.Name == "NativeCompilerTests");
+        solution.Projects.ShouldContain(project => project.Name == "PayloadStager");
     }
 
     [Fact]
