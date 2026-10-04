@@ -193,17 +193,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <!-- The runtime version is whatever shared framework this SDK ships; that exact version is
-           what sharp stamps into every produced runtimeconfig.json. A '*/*.dll' glob is used because
-           MSBuild does not match a bare '*/' directory glob; the version is then the directory name
-           of any matched file. -->
-      <_SharpNetCoreSharedAny Include="$(_SharpSharedRoot)\Microsoft.NETCore.App\*\*.dll" />
+      <!-- Pinned to the bundled pack version, not a '*' glob. The runner keeps several shared
+           framework majors side by side (8.x, 9.x, 10.x), so matching any version directory picked
+           whichever came first - a net9.0 framework for a net10.0 build. If the shared framework and
+           the bundled pack ever disagree on version this glob comes back empty and the Error below
+           fails the build, which is the outcome we want. -->
+      <_SharpNetCoreSharedAny Include="$(_SharpSharedRoot)\Microsoft.NETCore.App\$(_SharpEmbeddedRefPackVersion)\*.dll" />
     </ItemGroup>
 
     <!-- Must be set inside the target: item metadata (used by the property function below) is not
          available during property evaluation, so at project scope the version silently stays empty. -->
     <PropertyGroup>
-      <_SharpEmbeddedRuntimeVersion Condition="'$(_SharpEmbeddedRuntimeVersion)' == '' and '@(_SharpNetCoreSharedAny)' != ''">$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(_SharpNetCoreSharedAny.Identity)'))))</_SharpEmbeddedRuntimeVersion>
+      <_SharpEmbeddedRuntimeVersion Condition="'$(_SharpEmbeddedRuntimeVersion)' == '' and '@(_SharpNetCoreSharedAny)' != ''">$(_SharpEmbeddedRefPackVersion)</_SharpEmbeddedRuntimeVersion>
     </PropertyGroup>
 
     <Error Condition="'$(_SharpEmbeddedRuntimeVersion)' == ''"
@@ -212,7 +213,7 @@
     <ItemGroup>
       <!-- Reuse the matched files as the name list for the resolved version. -->
       <_SharpNetCoreShared Include="@(_SharpNetCoreSharedAny)" />
-      <_SharpAspNetShared Include="$(_SharpSharedRoot)\Microsoft.AspNetCore.App\*\*.dll" />
+      <_SharpAspNetShared Include="$(_SharpSharedRoot)\Microsoft.AspNetCore.App\$(_SharpEmbeddedRefPackVersion)\*.dll" />
     </ItemGroup>
 
     <WriteLinesToFile File="$(_SharpEmbeddedPayloadDir)\frameworks\Microsoft.NETCore.App.txt"

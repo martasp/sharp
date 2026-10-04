@@ -1239,10 +1239,7 @@ public static class NativeCompilerUtils
 
 public static void WriteRuntimeConfig(Project project)
     {
-        var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
-        var versionParts = runtimeVersion.Split('.');
-        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
-        var baselineVersion = BaselineFrameworkVersion(versionParts);
+        var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
         var runtimeConfig =
         $$"""
@@ -1270,10 +1267,7 @@ public static void WriteRuntimeConfig(Project project)
     // Microsoft.AspNetCore.App).
     public static void WriteRuntimeConfigWeb(Project project)
     {
-        var runtimeVersion = EmbeddedSdkRefs.RuntimeVersion;
-        var versionParts = runtimeVersion.Split('.');
-        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
-        var baselineVersion = BaselineFrameworkVersion(versionParts);
+        var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
         var runtimeConfig =
         $$"""
@@ -1309,8 +1303,32 @@ public static void WriteRuntimeConfig(Project project)
     // while every local run passed. The SDK can use the exact version because it writes the one
     // installed on the machine doing the building; we have no such guarantee, so request the
     // major.minor baseline and let rollForward pick the newest patch actually present.
-    private static string BaselineFrameworkVersion(string[] versionParts)
-        => versionParts.Length >= 2 ? $"{versionParts[0]}.{versionParts[1]}.0" : "10.0.0";
+    // An app can only run on a framework at least as new as the one it was compiled against, so the
+    // framework named here has to come from the project's own TargetFramework. Taking it from the
+    // SDK instead is wrong twice over: it ignores what the project actually targets, and it names a
+    // patch that need not be installed where the app runs. On CI that handed a net10.0 app a net9.0
+    // framework - the runner keeps 8.x, 9.x and 10.x side by side - and it aborted with "Could not
+    // load file or assembly 'System.Runtime, Version=10.0.0.0'".
+    //
+    // The major.minor baseline plus rollForward lets any installed patch of that major.minor satisfy
+    // the app, which is what makes a published binary portable across machines.
+    private static (string Tfm, string BaselineVersion) RuntimeFrameworkFor(Project project)
+    {
+        var targetFramework = project.TargetFramework?.Trim();
+        if (!string.IsNullOrEmpty(targetFramework) && targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+        {
+            var versionParts = targetFramework[3..].Split('.');
+            if (versionParts.Length >= 2 && int.TryParse(versionParts[0], out _) && int.TryParse(versionParts[1], out _))
+                return (targetFramework, $"{versionParts[0]}.{versionParts[1]}.0");
+        }
+
+        // No usable TargetFramework on the project: fall back to the embedded SDK's runtime, still
+        // reduced to a major.minor baseline rather than a specific patch.
+        var embeddedParts = EmbeddedSdkRefs.RuntimeVersion.Split('.');
+        var tfm = embeddedParts.Length >= 2 ? $"net{embeddedParts[0]}.{embeddedParts[1]}" : "net10.0";
+        var baseline = embeddedParts.Length >= 2 ? $"{embeddedParts[0]}.{embeddedParts[1]}.0" : "10.0.0";
+        return (tfm, baseline);
+    }
 
     private static void WriteRuntimeConfigFile(Project project, string runtimeConfig)
     {
