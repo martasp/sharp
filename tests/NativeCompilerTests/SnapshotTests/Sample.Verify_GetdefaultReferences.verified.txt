@@ -44,6 +44,10 @@
     FilePath: ./Docker.DotNet.X509.dll
   },
   {
+    Display: ./Dotnet10Dependencies.dll,
+    FilePath: ./Dotnet10Dependencies.dll
+  },
+  {
     Display: ./EmptyFiles.dll,
     FilePath: ./EmptyFiles.dll
   },

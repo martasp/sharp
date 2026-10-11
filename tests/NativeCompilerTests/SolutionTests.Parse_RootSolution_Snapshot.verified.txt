@@ -1,5 +1,11 @@
 ﻿[
   {
+    Name: Dotnet10Dependencies,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: src\Dotnet10Dependencies\Dotnet10Dependencies.csproj,
+    FlatPath: {SolutionDirectory}src/Dotnet10Dependencies/Dotnet10Dependencies.csproj
+  },
+  {
     Name: DotnetRuntime10,
     ProjectTypeGuid: Guid_1,
     ProjectRelativePath: DotnetRuntime10\DotnetRuntime10.csproj,

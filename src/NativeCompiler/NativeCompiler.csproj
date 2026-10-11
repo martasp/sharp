@@ -97,6 +97,11 @@
 
   </ItemGroup>
 
+  <!-- The compile-time payload lives in its own assembly; see the note at the end of this file. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Dotnet10Dependencies\Dotnet10Dependencies.csproj" />
+  </ItemGroup>
+
   <!-- Root System.SR::GetResourceString in analyzer assemblies so NativeAOT keeps their
        FxResources.<asm>.SR.resources manifest resources embedded (otherwise the inlineable-strings
        heuristic strips them and Roslyn's ResourceManager lookups throw MissingManifestResourceException). -->
@@ -111,38 +116,11 @@
        used to read all of that from the installed SDK, so a machine without a .NET SDK could not use
        the compiler at all.
 
-       tools/PayloadStager does that work in C# - copying the files into an SDK-shaped tree under
-       obj/, writing the name lists and version stamp, and zipping it - and the zip is embedded as a
-       manifest resource. EmbeddedSdkRefs.cs extracts it to a version-keyed cache on first use.
-
-       $(IntermediateOutputPath) is computed by the SDK's targets, i.e. AFTER this project's body is
-       evaluated, so it can only be read from inside a target; resolving it at project scope yields an
-       empty string and stages the payload into the source tree instead of obj/.
-       The target hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a
-       dependency of PrepareResources, so a BeforeTargets="PrepareResources" target runs after
-       resources have been collected and the zip is silently dropped from the assembly. -->
-  <PropertyGroup>
-    <!-- The pack version/TFM the payload is built from; recorded in the zip root so the runtime can
-         key its cache on it and never serve refs from a different SDK. -->
-    <_SharpEmbeddedRefPackVersion>$(BundledNETCoreAppPackageVersion)</_SharpEmbeddedRefPackVersion>
-
-    <!-- Where the payload comes from, as stager arguments. Every path is quoted because an SDK
-         install under e.g. C:\Program Files breaks the command line otherwise. -->
-    <_SharpEmbeddedPayloadArguments>--targeting-pack-root &quot;$(NetCoreTargetingPackRoot)&quot; --sdk-root &quot;$(MSBuildSDKsPath)/..&quot; --shared-framework-root &quot;$(NetCoreRoot)shared&quot; --illink-analyzers &quot;$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs&quot; --ref-pack-version &quot;$(_SharpEmbeddedRefPackVersion)&quot; --sdk-version &quot;$(NETCoreSdkVersion)&quot; --target-framework &quot;$(TargetFramework)&quot;</_SharpEmbeddedPayloadArguments>
-  </PropertyGroup>
-
-  <Target Name="StageEmbeddedRefsPayload"
-          BeforeTargets="AssignTargetPaths"
-          Condition="'$(DesignTimeBuild)' != 'true'">
-    <!-- Restores, builds and runs the stager in one shot, so it is built exactly once. A
-         ProjectReference to the stager raced this Exec for the same obj/bin and failed intermittently
-         on a locked PayloadStager.deps.json; restore is a separate phase from build in
-         `dotnet build`, so the nested restore cannot contend with the outer one. -->
-    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) &quot;--out&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs&quot; &quot;--zip&quot; &quot;$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip&quot;" />
-
-    <ItemGroup>
-      <EmbeddedResource Include="$(MSBuildProjectDirectory)/$(IntermediateOutputPath)embedded-refs.zip" LogicalName="embedded-refs.zip" />
-    </ItemGroup>
-  </Target>
+       src/Dotnet10Dependencies stages that payload at build time (tools/PayloadStager, in C#) and
+       embeds its zip as a manifest resource of its own assembly. Referencing the project here keeps
+       the whole thing out of this file: the Exec, the EmbeddedResource, and the long list of stager
+       arguments all live next to the code that needs them, and Dotnet10Dependencies.Payloads is the
+       only supported way to read the payload back. EmbeddedSdkRefs.cs extracts it to a version-keyed
+       cache on first use. -->
 
 </Project>

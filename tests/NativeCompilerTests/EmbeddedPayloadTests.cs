@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using Dotnet10Dependencies;
 using Shouldly;
 using Xunit;
 
@@ -158,23 +159,33 @@ public class EmbeddedPayloadTests
 
     private static ZipArchive OpenPayload()
     {
-        // Read the resource from the assembly under test rather than the staged obj/ tree: the
-        // resource is the artifact that ships, and the LogicalName is the contract the runtime looks
+        // Read the resource from the assembly that embeds it rather than the staged obj/ tree: the
+        // resource is the artifact that ships, and its LogicalName is the contract the runtime looks
         // the zip up by, so a rename would break first use on a clean machine.
-        var assembly = typeof(NativeCompiler.EmbeddedSdkRefs).Assembly;
-
-        using var stream = assembly.GetManifestResourceStream("embedded-refs.zip");
-        stream.ShouldNotBeNull(
-            $"{assembly.GetName().Name} embeds no 'embedded-refs.zip' resource: a published sharp " +
-            "cannot compile anything without it");
+        using var stream = Payloads.LoadZip();
 
         // Copied into memory rather than handed to the archive directly: a manifest stream belongs to
         // the caller, and ZipArchive only reads its central directory lazily, so a stream disposed on
         // return fails on the first Entries access instead of here.
         var buffer = new MemoryStream();
-        stream!.CopyTo(buffer);
+        stream.CopyTo(buffer);
         buffer.Position = 0;
 
         return new ZipArchive(buffer, ZipArchiveMode.Read);
+    }
+
+    [Fact]
+    public void Payload_Resource_Name_Carries_The_Ref_Pack_Version_And_Exists()
+    {
+        // Payloads.ZipResourceName and the LogicalName in Dotnet10Dependencies.csproj are two
+        // hand-written strings that must agree; nothing but this test connects them. A mismatch does
+        // not fail the build - it compiles, passes every JIT test, and then throws at runtime on a
+        // clean machine with no SDK, which is the one environment sharp exists to support.
+        Payloads.ZipResourceName.ShouldBe($"embedded-refs.{Payloads.PackVersion}.zip");
+        Payloads.PackVersion.ShouldNotBeNullOrWhiteSpace();
+
+        var assembly = typeof(Payloads).Assembly;
+
+        assembly.GetManifestResourceNames().ShouldContain(Payloads.ZipResourceName);
     }
 }

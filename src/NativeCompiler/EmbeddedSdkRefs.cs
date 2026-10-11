@@ -1,13 +1,15 @@
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using Dotnet10Dependencies;
 
 namespace NativeCompiler;
 
 /// <summary>
-/// The compile-time payload sharp carries inside its own binary so it can build projects on a machine
-/// with no .NET SDK installed. The payload is staged at build time by the <c>StageEmbeddedRefsPayload</c>
-/// MSBuild target and embedded as the <c>embedded-refs.zip</c> manifest resource.
+/// The compile-time payload sharp carries so it can build projects on a machine with no .NET SDK
+/// installed. The payload is staged at build time by tools/PayloadStager and embedded as the
+/// <c>embedded-refs.&lt;refpack&gt;.zip</c> manifest resource of the Dotnet10Dependencies assembly,
+/// which is read here through <see cref="Payloads"/>.
 ///
 /// It contains only what compiling actually needs:
 /// <list type="bullet">
@@ -28,7 +30,9 @@ namespace NativeCompiler;
 /// </summary>
 public static class EmbeddedSdkRefs
 {
-    private const string ResourceName = "embedded-refs.zip";
+    // The payload's name, including the ref pack version, comes from the assembly that owns it so the
+    // embedded resource and the sidecar file can never disagree about what they are called.
+    private const string ResourceName = Payloads.ZipResourceName;
 
     // A completed extraction is marked with a file containing the payload hash. Until that file
     // exists the directory is treated as incomplete, so an interrupted extraction is retried rather
@@ -130,7 +134,10 @@ public static class EmbeddedSdkRefs
 
     private static string? FindSidecarPayloadPath()
     {
-        var directory = Path.GetDirectoryName(typeof(EmbeddedSdkRefs).Assembly.Location);
+        // Look beside the assembly that owns the payload, not beside this one. sharp used to embed the
+        // payload itself; it now lives in Dotnet10Dependencies, so a JIT build - which has no embedded
+        // resource and must find the file on disk - only succeeds if it looks where the file is put.
+        var directory = Path.GetDirectoryName(typeof(Payloads).Assembly.Location);
 
         if (string.IsNullOrEmpty(directory)) return null;
 
@@ -241,19 +248,13 @@ public static class EmbeddedSdkRefs
 
     private static byte[] ReadEmbeddedPayload()
     {
-        var assembly = typeof(EmbeddedSdkRefs).Assembly;
-
-        // A published sharp has the payload embedded. A JIT build of sharp (self-hosting, or the
-        // solution built by the test host) cannot embed it - there is no MSBuild to do so - so the
-        // payload rides along as a file next to the assembly instead.
+        // A published sharp has the payload embedded in Dotnet10Dependencies. A JIT build of sharp
+        // (self-hosting, or the solution built by the test host) cannot embed it - there is no MSBuild
+        // to do so - so the payload rides along as a file next to the assembly instead.
         var sidecar = FindSidecarPayloadPath();
         if (sidecar is not null) return File.ReadAllBytes(sidecar);
 
-        using var stream = assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException(
-                $"Neither the '{ResourceName}' resource nor a '{ResourceName}' file next to " +
-                $"{assembly.GetName().Name} was found. sharp was built without the embedded SDK " +
-                "references and cannot compile projects.");
+        using var stream = Payloads.LoadZip();
 
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);

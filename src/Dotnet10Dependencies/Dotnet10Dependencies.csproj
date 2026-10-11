@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Owns the compile-time payload sharp carries so it can build projects on a machine with no .NET
+       SDK installed. At build time this project runs tools/PayloadStager and embeds its zip as the
+       'embedded-refs.<refpack>.zip' manifest resource; at run time NativeCompiler references the
+       project as a plain library and reads the payload back through Payloads.
+
+       Keeping both roles here means NativeCompiler.csproj carries one ProjectReference instead of an
+       Exec plus an EmbeddedResource, and the lookup that AOT depends on (typeof(...).Assembly) can
+       only be written here, because Payloads is the only thing that reads the resource.
+
+       The stager stays a separate executable rather than becoming a private entry point: it has to
+       run before this project compiles, so it cannot live in the assembly it produces. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Pinned so $(PkgMicrosoft_NET_ILLink_Tasks) resolves the ILLink analyzer directory the stager
+       copies into the payload. The payload has to carry those analyzers or a published sharp cannot
+       trim output projects. The version tracks the one NativeCompiler references. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- The pack version/TFM the payload is built from; recorded in the zip root so the runtime can
+         key its cache on it and never serve refs from a different SDK. Carried in the resource name as
+         well, so zips for several SDK versions can sit side by side and be referenced unambiguously.
+         Payloads.cs declares the same name as a constant, which EmbeddedPayloadTests asserts. -->
+    <_SharpEmbeddedRefPackVersion>$(BundledNETCoreAppPackageVersion)</_SharpEmbeddedRefPackVersion>
+    <_SharpPayloadResourceName>embedded-refs.$(_SharpEmbeddedRefPackVersion).zip</_SharpPayloadResourceName>
+
+    <!-- Where the payload comes from, as stager arguments. Every path is quoted because an SDK
+         install under e.g. C:\Program Files breaks the command line otherwise. -->
+    <_SharpEmbeddedPayloadArguments>--targeting-pack-root "$(NetCoreTargetingPackRoot)" --sdk-root "$(MSBuildSDKsPath)/.." --shared-framework-root "$(NetCoreRoot)shared" --illink-analyzers "$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs" --ref-pack-version "$(_SharpEmbeddedRefPackVersion)" --sdk-version "$(NETCoreSdkVersion)" --target-framework "$(TargetFramework)"</_SharpEmbeddedPayloadArguments>
+  </PropertyGroup>
+
+  <!-- Hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a dependency of
+       PrepareResources, so a BeforeTargets="PrepareResources" target runs after resources have been
+       collected and the zip is silently dropped from the assembly. -->
+  <Target Name="StageEmbeddedRefsPayload"
+          BeforeTargets="AssignTargetPaths"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <!-- $(IntermediateOutputPath) is computed by the SDK's targets, i.e. AFTER this project's body is
+         evaluated, so it can only be read here and not at project scope, where it resolves to an empty
+         string. Do not hoist this into either PropertyGroup above: the payload then lands in the source
+         tree and the build still succeeds, because the misplaced zip satisfies the EmbeddedResource
+         below and the tests find it there. Nothing at build time can catch it - by the time the target
+         runs, $(IntermediateOutputPath) is valid again and only _SharpPayloadDir is already wrong. -->
+    <PropertyGroup>
+      <_SharpPayloadDir>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)</_SharpPayloadDir>
+    </PropertyGroup>
+
+    <!-- Restores, builds and runs the stager in one shot, so it is built exactly once. A
+         ProjectReference to the stager raced this Exec for the same obj/bin and failed intermittently
+         on a locked PayloadStager.deps.json; restore is a separate phase from build in
+         `dotnet build`, so the nested restore cannot contend with the outer one. -->
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) --out &quot;$(_SharpPayloadDir)embedded-refs&quot; --zip &quot;$(_SharpPayloadDir)$(_SharpPayloadResourceName)&quot;" />
+
+    <ItemGroup>
+      <EmbeddedResource Include="$(_SharpPayloadDir)$(_SharpPayloadResourceName)" LogicalName="$(_SharpPayloadResourceName)" />
+    </ItemGroup>
+  </Target>
+
+</Project>
