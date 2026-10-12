@@ -170,7 +170,7 @@ This is the single most important invariant in the design. The failure is invisi
 
 **Option G**, built as: a C# stager (`tools/PayloadStager`) invoked by a dedicated
 `Dotnet10Dependencies` project, embedding a versioned `embedded-refs.<refpack>.zip` manifest resource,
-read at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve the asset with
+read at runtime through `Payloads.LoadZip()`, which resolves the asset with
 `typeof(Payloads).Assembly` and discover the resource name rather than comparing it against a
 hand-written constant.
 

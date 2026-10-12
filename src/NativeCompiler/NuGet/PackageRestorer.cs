@@ -254,7 +254,7 @@ foreach (var configured in sources)
         var queue = new Queue<string>();
         queue.Enqueue(projectDirectory);
 
-        targetFramework = "net10.0";
+        targetFramework = DefaultTargetFramework.Value;
 
         while (queue.Count > 0)
         {
@@ -330,6 +330,6 @@ foreach (var configured in sources)
 
         // The TFM whose <group> is selected from each nuspec. Taken from the project being
         // restored; a package's dependency group is per-framework, so this decides which one wins.
-        public string TargetFramework { get; set; } = "net10.0";
+        public string TargetFramework { get; set; } = DefaultTargetFramework.Value;
     }
 }

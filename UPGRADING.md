@@ -55,10 +55,10 @@ compiler failed its run-time lookup.
 - `DotnetRuntime10/`, `DotnetRuntimeHostExe/`, `SimplePlayground/`
 
 ### 4. Fallback TFM literals
-12 `?? "net10.0"` / `= "net10.0"` defaults in `src/NativeCompiler/` (`Project.cs`,
-`NativeCompiler.cs`, `NativeCompilerUtils.cs`, `NuGet/PackageRestorer.cs`) and
-`src/NativeCompilerCLI/Program.cs`. These are the fragile ones: nothing fails if you miss one, the
-wrong TFM is just silently assumed when the target does not state one.
+None to touch - the ~14 `?? "net10.0"` fallbacks and the restored pack default are all
+`DefaultTargetFramework.Value` in `src/NativeCompiler/DefaultTargetFramework.cs`; bump that one line.
+It is the fragile one: nothing fails if it is missed for a net11 build, the out-of-date TFM is just
+silently assumed when the target does not state one.
 
 ### 5. Names carrying the major
 Only two, and they are cosmetic — rename only if you want the major gone:
@@ -100,6 +100,5 @@ this locally — that path only runs in CI.
 
 ## Make this cheaper
 
-One change would shrink the checklist above:
-
-1. **One TFM constant** for the 12 fallback literals, so a bump is one line instead of a grep.
+Done on this branch: the ~14 hand-written `net10.0` fallbacks are now the single
+`DefaultTargetFramework.Value` constant, so the checklist above no longer has a literal-grep step.

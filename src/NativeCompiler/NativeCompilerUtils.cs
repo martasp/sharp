@@ -22,10 +22,10 @@ public static class NativeCompilerUtils
     public static string GetGeneratedFileRoot(Project project) =>
         Path.Combine(project.ProjectRootPath, "obj",
             BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath)?.Configuration ?? "Debug",
-            project.TargetFramework ?? "net10.0");
+            project.TargetFramework ?? DefaultTargetFramework.Value);
 
     public static string GetGeneratedFileRoot(Project project, string configuration) =>
-        Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? "net10.0");
+        Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? DefaultTargetFramework.Value);
 
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) Parse(ProjectFile projectFile,
         CSharpParseOptions options)
@@ -596,7 +596,7 @@ public static class NativeCompilerUtils
         var results = new List<string>();
         if (!File.Exists(csprojPath)) return results;
 
-        var tfm = targetTfm ?? "net10.0";
+        var tfm = targetTfm ?? DefaultTargetFramework.Value;
         var xml = XML.Project.Parse(csprojPath);
         var packages = xml.ItemGroup.SelectMany(ig => ig.PackageReferences);
 
@@ -625,10 +625,10 @@ public static class NativeCompilerUtils
         {
             if (packagePath is null) continue;
 
-            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? "net10.0"))
+            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
                 referenceFiles.Add(dll);
 
-            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? "net10.0"))
+            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
                 referenceFiles.Add(dll);
         }
 
@@ -932,7 +932,7 @@ public static class NativeCompilerUtils
     {
         var result = new StringBuilder();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var tfm = project.TargetFramework ?? "net10.0";
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
 
         void AddUsing(NuGetPackage.PackageUsingItem item)
         {
@@ -1055,7 +1055,7 @@ public static class NativeCompilerUtils
         var informationalVersion = identity?.InformationalVersion
             ?? version + (string.IsNullOrEmpty(identity?.SourceRevisionId) ? "" : "+" + identity!.SourceRevisionId);
 
-        var targetFramework = project.TargetFramework ?? "net10.0";
+        var targetFramework = project.TargetFramework ?? DefaultTargetFramework.Value;
         var tfmVersion = targetFramework.StartsWith("net", StringComparison.Ordinal) ? targetFramework[3..] : targetFramework;
 
         // The SDK emits the TargetFramework attribute into its own generated file

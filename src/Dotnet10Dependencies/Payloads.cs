@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Reflection;
 
 namespace Dotnet10Dependencies;
@@ -26,8 +25,9 @@ public static class Payloads
 {
     /// <summary>
     /// Logical name of the embedded payload, e.g. <c>embedded-refs.10.0.11.zip</c>. Carries the ref
-    /// pack version so a zip can be told at a glance which SDK it came from, and payloads for several
-    /// SDKs could sit side by side.
+    /// pack version so a zip is self-describing - it can be told at a glance which SDK it came from -
+    /// and several SDK payloads could sit side by side without name collisions. The runtime currently
+    /// ships exactly one and refuses to guess among several (see <see cref="FindZipResourceName"/>).
     ///
     /// The name is <i>discovered</i>, never compared against a constant: MSBuild derives the
     /// resource's <c>LogicalName</c> from the SDK that builds it, so the only name that is ever
@@ -79,10 +79,4 @@ public static class Payloads
         ?? throw new InvalidOperationException(
             $"The '{ZipResourceName}' resource is missing from {Owner.GetName().Name}. The payload was " +
             "either not embedded at build time or was trimmed away.");
-
-    /// <summary>
-    /// Opens the embedded payload as a read-only zip archive. Disposing the archive disposes the
-    /// underlying stream.
-    /// </summary>
-    public static ZipArchive OpenZip() => new(LoadZip(), ZipArchiveMode.Read, leaveOpen: false);
 }

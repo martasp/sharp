@@ -4,8 +4,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Runtime.CompilerServices;
-using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace CustomCompiler
 {

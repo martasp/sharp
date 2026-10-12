@@ -154,7 +154,7 @@ int BuildCommand(string[] args)
         foreach (var project in solutionResult.Projects)
         {
             var result = project.Result;
-            var tfm = result.Project?.TargetFramework ?? "net10.0";
+            var tfm = result.Project?.TargetFramework ?? DefaultTargetFramework.Value;
 
             if (result.Success)
             {
@@ -203,7 +203,7 @@ int BuildCommand(string[] args)
     // it carries the measured seconds and the build path relative to the current directory.
     if (buildResult.Success && buildResult.Project is { } builtProject)
     {
-        var tfm = builtProject.TargetFramework ?? "net10.0";
+        var tfm = builtProject.TargetFramework ?? DefaultTargetFramework.Value;
         var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), builtProject.DllPathName);
         var warnings = SplitLines(buildResult.Warnings);
         if (warnings.Length > 0)
@@ -226,7 +226,7 @@ int BuildCommand(string[] args)
     var errorLines = SplitLines(buildResult.Errors);
     var errorCount = ErrorLineCount(buildResult.Errors);
     var name = buildResult.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target);
-    var failureTfm = buildResult.Project?.TargetFramework ?? "net10.0";
+    var failureTfm = buildResult.Project?.TargetFramework ?? DefaultTargetFramework.Value;
     WriteLine($"  {name} {failureTfm} failed with {errorCount} error(s) ({buildResult.Duration.TotalSeconds:0.0}s)");
     foreach (var line in errorLines) WriteLine($"    {line}");
     WriteLine();

@@ -154,7 +154,7 @@ public static class NativeCompiler
         // are resolved from the installed runtime at run time - never copied by `dotnet build`.
         // HintPath <Reference> assemblies are CopyLocal in MSBuild (the compiler's own graph carries
         // the SDK generator/analyzer DLLs so the self-hosted JIT stays bindable), so those ride along.
-        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? "net10.0");
+        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? DefaultTargetFramework.Value);
         // SDK mirror: restore-derived runtime graph (*.deps.json). Only the NuGet/local runtime set
         // feeds it - HintPath copies are reference/analyzer assemblies, never package assets. They
         // are still registered in deps.json as "reference" libraries (DepsJsonWriter) so a JIT
