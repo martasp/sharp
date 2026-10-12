@@ -8,7 +8,7 @@ namespace NativeCompiler;
 /// <summary>
 /// The compile-time payload sharp carries so it can build projects on a machine with no .NET SDK
 /// installed. The payload is staged at build time by tools/PayloadStager and embedded as the
-/// <c>embedded-refs.zip</c> manifest resource of the Dotnet10Dependencies assembly,
+/// <c>embedded-refs.&lt;refpack&gt;.zip</c> manifest resource of the Dotnet10Dependencies assembly,
 /// which is read here through <see cref="Payloads"/>.
 ///
 /// It contains only what compiling actually needs:
@@ -30,14 +30,19 @@ namespace NativeCompiler;
 /// </summary>
 public static class EmbeddedSdkRefs
 {
-    // The payload's name comes from the assembly that owns it so the embedded resource and the sidecar
-    // file can never disagree about what they are called.
-    private const string ResourceName = Payloads.ZipResourceName;
+    // The payload's name is versioned (embedded-refs.<refpack>.zip) and discovered at run time, never
+    // hardcoded - the assembly that owns it derives the name from what MSBuild actually embedded, so
+    // the embedded resource and the sidecar file cannot disagree about what they are called.
 
     // A completed extraction is marked with a file containing the payload hash. Until that file
     // exists the directory is treated as incomplete, so an interrupted extraction is retried rather
     // than being mistaken for a usable cache.
     private const string ExtractionMarkerName = ".extracted";
+
+    // Payload files ride along as embedded-refs.<refpack>.zip; a plain pattern keeps the sidecar
+    // discoverable even when this assembly carries no embedded resource (a JIT-produced compiler,
+    // which has no MSBuild in the loop to embed one).
+    private const string PayloadFilePattern = "embedded-refs.*.zip";
 
     private static readonly Lock SyncRoot = new();
 
@@ -108,20 +113,22 @@ public static class EmbeddedSdkRefs
 
     /// <summary>
     /// Name of the payload when it travels as a sidecar file rather than an embedded resource.
+    /// Discovered, like the resource name itself.
     /// </summary>
-    public const string PayloadFileName = ResourceName;
+    public static string PayloadFileName => Payloads.ZipResourceName;
 
     /// <summary>
     /// Writes the payload next to an assembly that needs it, so a JIT build of the compiler stays
     /// self-sufficient. MSBuild can only embed the payload into the published binary, but when sharp
     /// compiles *itself* there is no MSBuild in the loop - so the compiler sharp produces inherits the
     /// payload by copying this file into its own output directory, exactly as it already does for the
-    /// SDK generator/analyzer assemblies.
+    /// SDK generator/analyzer assemblies. The copy takes the name the source payload already has.
     /// </summary>
     public static void WritePayloadTo(string destinationDirectory)
     {
         var sidecar = FindSidecarPayloadPath();
-        var destination = Path.Combine(destinationDirectory, PayloadFileName);
+        var destination = Path.Combine(
+            destinationDirectory, sidecar is not null ? Path.GetFileName(sidecar) : PayloadFileName);
 
         if (sidecar is not null)
         {
@@ -137,12 +144,20 @@ public static class EmbeddedSdkRefs
         // Look beside the assembly that owns the payload, not beside this one. sharp used to embed the
         // payload itself; it now lives in Dotnet10Dependencies, so a JIT build - which has no embedded
         // resource and must find the file on disk - only succeeds if it looks where the file is put.
+        // The file is matched by pattern, not by name: a produced compiler has no embedded resource to
+        // discover a name from, so the only reliable way to find its payload is to look for the file.
         var directory = Path.GetDirectoryName(typeof(Payloads).Assembly.Location);
 
-        if (string.IsNullOrEmpty(directory)) return null;
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory)) return null;
 
-        var candidate = Path.Combine(directory, PayloadFileName);
-        return File.Exists(candidate) ? candidate : null;
+        return Directory.EnumerateFiles(directory, PayloadFilePattern).ToArray() switch
+        {
+            [var path] => path,
+            [] => null,
+            var several => throw new InvalidOperationException(
+                $"Found several payload files ({string.Join(", ", several)}) next to {directory}. " +
+                "An interrupted self-build may have left a second one; remove the stale payload."),
+        };
     }
 
     private static string FrameworkName => "net" + Environment.Version.Major + ".0";

@@ -2,7 +2,7 @@
 
   <!-- Owns the compile-time payload sharp carries so it can build projects on a machine with no .NET
        SDK installed. At build time this project runs tools/PayloadStager and embeds its zip as the
-       'embedded-refs.zip' manifest resource; at run time NativeCompiler references the
+       'embedded-refs.<refpack>.zip' manifest resource; at run time NativeCompiler references the
        project as a plain library and reads the payload back through Payloads.
 
        Keeping both roles here means NativeCompiler.csproj carries one ProjectReference instead of an
@@ -28,12 +28,12 @@
 
   <PropertyGroup>
     <!-- The pack version/TFM the payload is built from; recorded in the zip root so the runtime can
-         key its cache on it and never serve refs from a different SDK. Kept out of the resource name
-         on purpose: that name must stay a fixed literal, because deriving it from the SDK's bundled
-         version makes it disagree with the Payloads.ZipResourceName constant the moment CI or a
-         developer builds against a different SDK patch. See Payloads.ZipResourceName. -->
+         key its cache on it and never serve refs from a different SDK. Also carried in the resource
+         name. Payloads never hardcodes this version: it discovers the embedded resource by name at
+         run time, so whatever SDK builds it, the constant-free lookup matches. See
+         Payloads.ZipResourceName. -->
     <_SharpEmbeddedRefPackVersion>$(BundledNETCoreAppPackageVersion)</_SharpEmbeddedRefPackVersion>
-    <_SharpPayloadResourceName>embedded-refs.zip</_SharpPayloadResourceName>
+    <_SharpPayloadResourceName>embedded-refs.$(_SharpEmbeddedRefPackVersion).zip</_SharpPayloadResourceName>
 
     <!-- Where the payload comes from, as stager arguments. Every path is quoted because an SDK
          install under e.g. C:\Program Files breaks the command line otherwise. -->

@@ -20,11 +20,14 @@ runtime major, not the target project's. A `net11.0` compiler therefore looks un
 `packs/Microsoft.NETCore.App.Ref/<refpack>/ref/net11.0`. So a payload built from an SDK 11 ref pack
 but a compiler still on `net10.0` (or vice versa) resolves to a folder that does not exist.
 
-The resource name is deliberately **unversioned** (`embedded-refs.zip`): MSBuild derives it from the
-SDK-only for the stager's *arguments*, not for the name, so the constant in `Payloads.cs` and the
-resource MSBuild embeds always agree. It used to be `embedded-refs.<refpack>.zip`, and that versioned
-name broke CI — `setup-dotnet` installs the newest `10.0.x` patch, so the embedded name drifted from
-the constant and the compiler failed its run-time lookup.
+The resource name is `embedded-refs.<refpack>.zip` and carries the ref pack version MSBuild embedded
+for the SDK in use. Nothing has to keep it in step with the runtime: `Payloads.ZipResourceName`
+*discovers* the matching resource in its own assembly instead of comparing against a constant, and a
+JIT-produced compiler (no embedded resource) finds the same versioned payload as a
+`embedded-refs.*.zip` sidecar file. A first version of the design hardcoded the name, and any machine
+with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`) embedded the resource
+under its own version while the constant asked for the write-in one — the build stayed green and the
+compiler failed its run-time lookup.
 
 ## Checklist
 
@@ -34,10 +37,11 @@ the constant and the compiler failed its run-time lookup.
 - `README.md` → `## Requirements` names the SDK version.
 
 ### 2. Payload pipeline
-- No version constants to touch: `Payloads.ZipResourceName` is the fixed `embedded-refs.zip`, and
-  `Dotnet10Dependencies.csproj` derives the stager's ref-pack/TFM arguments from the SDK. The only
-  thing to verify after installing the new SDK is that the payload builds: check
-  `obj/.../embedded-refs.zip` exists after a build.
+- No version constants to touch: the runtime *discovers* `embedded-refs.<refpack>.zip` by name, so it
+  is indifferent to the ref pack version. `Dotnet10Dependencies.csproj` derives the stager's
+  ref-pack/TFM arguments and the resource name from the SDK. The only thing to verify after
+  installing the new SDK is that the payload builds: check
+  `obj/.../embedded-refs.<refpack>.zip` exists after a build.
 - `tools/PayloadStager` needs no code change; it already takes `--ref-pack-version` and
   `--sdk-version` as arguments.
 

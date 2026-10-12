@@ -175,14 +175,20 @@ public class EmbeddedPayloadTests
     }
 
     [Fact]
-    public void Payload_Resource_Exists_Under_The_Name_Payloads_Declares()
+    public void Payload_Resource_Is_Discovered_From_The_Versioned_Name()
     {
-        // Payloads.ZipResourceName and the LogicalName in Dotnet10Dependencies.csproj are two
-        // hand-written strings that must agree; nothing but this test connects them. A mismatch does
-        // not fail the build - it compiles, passes every JIT test, and then throws at runtime on a
-        // clean machine with no SDK, which is the one environment sharp exists to support.
+        // The payload resource is embedded under the name MSBuild derives for the SDK in use, e.g.
+        // embedded-refs.10.0.11.zip. Payloads discovers that name rather than hardcoding it, so the
+        // lookup can never disagree with what was embedded - a hardcoded second copy broke on CI,
+        // where setup-dotnet installs a newer 10.0.x patch than the developer's SDK, and the build
+        // stayed green while every payload-dependent test failed at run time.
         var assembly = typeof(Payloads).Assembly;
 
-        assembly.GetManifestResourceNames().ShouldContain(Payloads.ZipResourceName);
+        var discovered = Payloads.ZipResourceName;
+
+        discovered.ShouldStartWith("embedded-refs.");
+        discovered.ShouldEndWith(".zip");
+
+        assembly.GetManifestResourceNames().ShouldContain(discovered);
     }
 }

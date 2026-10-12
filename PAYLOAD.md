@@ -29,7 +29,7 @@ The chosen design then splits into sub-decisions, each marked the same way:
 |---|---|---|
 | Producer: **C# stager program** | ✓ | MSBuild `<Copy>` + `<Zip>` tasks |
 | Host assembly: **dedicated `Dotnet10Dependencies`** | ✓ | Embed in `NativeCompiler` itself |
-| Resource name: **unversioned `embedded-refs.zip`** | ✓ | `embedded-refs.<refpack>.zip` |
+| Resource name: **`embedded-refs.<refpack>.zip`, discovered at run time** | ✓ | A second, hand-written copy of the version |
 | Runtime lookup: **`typeof(Payloads).Assembly`** | ✓ | `Assembly.Load("Dotnet10Dependencies")` |
 
 ## Options in detail
@@ -135,17 +135,26 @@ The runtime extracts it once into a keyed cache.
 | Resource lookup | Lives in one place (`Payloads`), cannot be re-implemented elsewhere | Spread through the compiler assembly |
 | Downside | An extra project and a **sidecar-copy path that must track where the payload is hosted** (this broke self-hosting once and was fixed in `EmbeddedSdkRefs.FindSidecarPayloadPath`) | — |
 
-#### G3. Resource name: versioned vs not — **chose unversioned**
+#### G3. Resource name: versioned vs not — **chose versioned, discovered**
 
-| | Unversioned `embedded-refs.zip` (**✓**) | `embedded-refs.<refpack>.zip` |
+| | `embedded-refs.<refpack>.zip` (**✓**) | Unversioned `embedded-refs.zip` |
 |---|---|---|
-| Drift between constant and embedded resource | Impossible — one fixed literal | The version is written twice (`Payloads.cs` + MSBuild) and kept honest only by `EmbeddedPayloadTests` |
-| Different SDK patch than the one baked in | Builds and runs | **Breaks**: MSBuild embeds under the SDK's refpack version while the constant asks for its own, and only the run-time lookup notices |
+| Tells at a glance which SDK the payload came from | Yes | No |
+| Several SDK payloads side by side | No name collision | Collides |
+| Number of places the version is written | **One** — MSBuild's `$(BundledNETCoreAppPackageVersion)`. The runtime *discovers* the embedded name (`Payloads.ZipResourceName`), so there is no second copy to drift | One (a fixed literal) |
 
-Versioning was tried to support a "commit several zips side by side" workflow, and it was dropped:
-the workflow was never implemented, the extraction cache is already keyed on a **content hash** of
-the zip rather than the name, and the versioned name actively broke CI, where `setup-dotnet`
-installs a newer `10.0.x` patch than the developer's. A fixed name has none of that coupling.
+A first attempt hardcoded `embedded-refs.<refpack>.zip` in `Payloads.cs` **and** derived the MSBuild
+`LogicalName` from the SDK, and broke CI: `setup-dotnet` installs a newer `10.0.x` patch than the
+developer's SDK, so MSBuild embedded the resource under its own refpack version while the constant
+asked for the write-in one. The build stayed green; every payload-dependent test failed at run time
+with "resource is missing".
+
+The fix is **not** to drop the version - it is to drop the *second copy*. `Payloads` looks up the one
+resource matching `embedded-refs.*.zip` in its own assembly, so whatever version the building SDK
+embedded is, by construction, the version the runtime asks for. A JIT-produced compiler (no embedded
+resource; no MSBuild in the loop) finds the same versioned payload as a `embedded-refs.*.zip` sidecar
+file beside its assembly. The production sidecar keeps the version; only the hand-written constant is
+gone.
 
 #### G4. Runtime lookup: `typeof` vs `Assembly.Load` — **chose `typeof`**
 
@@ -160,9 +169,10 @@ This is the single most important invariant in the design. The failure is invisi
 ## What we chose
 
 **Option G**, built as: a C# stager (`tools/PayloadStager`) invoked by a dedicated
-`Dotnet10Dependencies` project, embedding an unversioned `embedded-refs.zip` manifest resource, read
-at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve the asset with
-`typeof(Payloads).Assembly`.
+`Dotnet10Dependencies` project, embedding a versioned `embedded-refs.<refpack>.zip` manifest resource,
+read at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve the asset with
+`typeof(Payloads).Assembly` and discover the resource name rather than comparing it against a
+hand-written constant.
 
 ## Where it lives
 
@@ -170,7 +180,7 @@ at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve th
 |---|---|
 | `tools/PayloadStager/Program.cs` | Builds the SDK-shaped tree, writes version stamps, zips it |
 | `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | Runs the stager, embeds the zip |
-| `src/Dotnet10Dependencies/Payloads.cs` | The fixed resource name; the AOT-safe resource API |
+| `src/Dotnet10Dependencies/Payloads.cs` | Resource-name discovery; the AOT-safe resource API |
 | `src/NativeCompiler/EmbeddedSdkRefs.cs` | Extracts to the cache; version + sidecar resolution |
 
 ## Invariants and traps
@@ -179,10 +189,15 @@ at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve th
 2. **`$(IntermediateOutputPath)` is empty at project scope.** The staging target must resolve it
    inside the target, or the payload lands in the source tree — and still builds, because the
    misplaced zip satisfies the `EmbeddedResource`.
-3. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
+3. **Never write the resource name by hand — discover it.** The embedded name carries the ref pack
+   version that came from whoever built the assembly; the runtime looks up `embedded-refs.*.zip` in
+   its own resources instead of comparing against a constant. A hand-written copy is the drift that
+   broke CI (G3).
+4. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
    `dotnet build` and only fails at runtime. See `UPGRADING.md`.
-4. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
-   host assembly matters (G2).
+5. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
+   host assembly matters (G2). A JIT-produced compiler finds its payload as a `embedded-refs.*.zip`
+   file beside its assembly; the glob, not the name, is what makes that work.
 
 > Prototype figures above (Base64 source size, chunk counts, binary sizes) were measured in throwaway
 > experiments, not reproduced in this repository; they are directional. The design itself is enforced
