@@ -4,24 +4,27 @@
 SDK that builds it, so the compiler rebuilds its payload from whatever SDK you install. Upgrading is
 version literals and names, not a redesign of the mechanism.
 
-## The one real coupling
+## The coupling
 
-Three things must move together, or the build stays green and the compiler fails at run time:
+Two things determine what the payload holds, and both come straight from the building SDK — there is
+no hand-written version: the staged ref pack is `$(BundledNETCoreAppPackageVersion)` and the compiler
+TFM is the project files' `net10.0`.
 
 | Thing | Where | Example |
 |---|---|---|
 | Compiler's own TFM | every `.csproj` | `net10.0` |
 | Ref pack the payload is staged from | `$(BundledNETCoreAppPackageVersion)` | `10.0.11` |
-| Ref pack the runtime asks for | `Payloads.PackVersion` | `10.0.11` |
 
 `EmbeddedSdkRefs.FrameworkName` is `"net" + Environment.Version.Major + ".0"` — the compiler's *own*
 runtime major, not the target project's. A `net11.0` compiler therefore looks under
 `packs/Microsoft.NETCore.App.Ref/<refpack>/ref/net11.0`. So a payload built from an SDK 11 ref pack
 but a compiler still on `net10.0` (or vice versa) resolves to a folder that does not exist.
 
-`dotnet build` does **not** catch a `PackVersion` / MSBuild mismatch — the payload is embedded under
-the MSBuild-derived name regardless. `EmbeddedPayloadTests` catches it by looking up
-`Payloads.ZipResourceName` in the built assembly.
+The resource name is deliberately **unversioned** (`embedded-refs.zip`): MSBuild derives it from the
+SDK-only for the stager's *arguments*, not for the name, so the constant in `Payloads.cs` and the
+resource MSBuild embeds always agree. It used to be `embedded-refs.<refpack>.zip`, and that versioned
+name broke CI — `setup-dotnet` installs the newest `10.0.x` patch, so the embedded name drifted from
+the constant and the compiler failed its run-time lookup.
 
 ## Checklist
 
@@ -30,11 +33,13 @@ the MSBuild-derived name regardless. `EmbeddedPayloadTests` catches it by lookin
   .NET 11 directly. Only .NET 10 is present today.
 - `README.md` → `## Requirements` names the SDK version.
 
-### 2. Payload version constant
-- `src/Dotnet10Dependencies/Payloads.cs` → `PackVersion` → the new
-  `$(BundledNETCoreAppPackageVersion)` (e.g. `11.0.0`).
-- `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` needs no change: it derives the resource
-  name and stager arguments from the SDK.
+### 2. Payload pipeline
+- No version constants to touch: `Payloads.ZipResourceName` is the fixed `embedded-refs.zip`, and
+  `Dotnet10Dependencies.csproj` derives the stager's ref-pack/TFM arguments from the SDK. The only
+  thing to verify after installing the new SDK is that the payload builds: check
+  `obj/.../embedded-refs.zip` exists after a build.
+- `tools/PayloadStager` needs no code change; it already takes `--ref-pack-version` and
+  `--sdk-version` as arguments.
 
 ### 3. Compiler + first-party TFMs
 `<TargetFramework>net10.0</TargetFramework>` → `net11.0` in:
@@ -91,10 +96,6 @@ this locally — that path only runs in CI.
 
 ## Make this cheaper
 
-Two changes would shrink the checklist above:
+One change would shrink the checklist above:
 
-1. **Single source of truth for the version.** Either generate `Payloads.PackVersion` from MSBuild
-   (a `WriteLinesToFile` target before compile) or drop the version from the resource name until the
-   "commit several zips side by side" feature actually exists. Today the version is written twice
-   (`Payloads.cs` and MSBuild) and kept honest only by a test.
-2. **One TFM constant** for the 12 fallback literals, so a bump is one line instead of a grep.
+1. **One TFM constant** for the 12 fallback literals, so a bump is one line instead of a grep.

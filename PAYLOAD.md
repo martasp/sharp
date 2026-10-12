@@ -29,7 +29,7 @@ The chosen design then splits into sub-decisions, each marked the same way:
 |---|---|---|
 | Producer: **C# stager program** | ✓ | MSBuild `<Copy>` + `<Zip>` tasks |
 | Host assembly: **dedicated `Dotnet10Dependencies`** | ✓ | Embed in `NativeCompiler` itself |
-| Resource name: **`embedded-refs.<refpack>.zip`** | ✓ | Unversioned `embedded-refs.zip` |
+| Resource name: **unversioned `embedded-refs.zip`** | ✓ | `embedded-refs.<refpack>.zip` |
 | Runtime lookup: **`typeof(Payloads).Assembly`** | ✓ | `Assembly.Load("Dotnet10Dependencies")` |
 
 ## Options in detail
@@ -135,16 +135,17 @@ The runtime extracts it once into a keyed cache.
 | Resource lookup | Lives in one place (`Payloads`), cannot be re-implemented elsewhere | Spread through the compiler assembly |
 | Downside | An extra project and a **sidecar-copy path that must track where the payload is hosted** (this broke self-hosting once and was fixed in `EmbeddedSdkRefs.FindSidecarPayloadPath`) | — |
 
-#### G3. Resource name: versioned vs not — **chose versioned**
+#### G3. Resource name: versioned vs not — **chose unversioned**
 
-| | `embedded-refs.<refpack>.zip` (**✓**) | `embedded-refs.zip` |
+| | Unversioned `embedded-refs.zip` (**✓**) | `embedded-refs.<refpack>.zip` |
 |---|---|---|
-| Several SDK payloads side by side | Supported | Name collides |
-| Cost | The version is written twice (`Payloads.cs` + MSBuild) and kept honest only by `EmbeddedPayloadTests` | One name, no drift possible |
+| Drift between constant and embedded resource | Impossible — one fixed literal | The version is written twice (`Payloads.cs` + MSBuild) and kept honest only by `EmbeddedPayloadTests` |
+| Different SDK patch than the one baked in | Builds and runs | **Breaks**: MSBuild embeds under the SDK's refpack version while the constant asks for its own, and only the run-time lookup notices |
 
-Chosen for the planned "commit several zips side by side" workflow. Note the feature is **not
-implemented yet**; until it is, this is a forward-looking choice with a real sync cost — see
-`UPGRADING.md`.
+Versioning was tried to support a "commit several zips side by side" workflow, and it was dropped:
+the workflow was never implemented, the extraction cache is already keyed on a **content hash** of
+the zip rather than the name, and the versioned name actively broke CI, where `setup-dotnet`
+installs a newer `10.0.x` patch than the developer's. A fixed name has none of that coupling.
 
 #### G4. Runtime lookup: `typeof` vs `Assembly.Load` — **chose `typeof`**
 
@@ -159,8 +160,8 @@ This is the single most important invariant in the design. The failure is invisi
 ## What we chose
 
 **Option G**, built as: a C# stager (`tools/PayloadStager`) invoked by a dedicated
-`Dotnet10Dependencies` project, embedding a versioned `embedded-refs.<refpack>.zip` manifest resource,
-read at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve the asset with
+`Dotnet10Dependencies` project, embedding an unversioned `embedded-refs.zip` manifest resource, read
+at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resolve the asset with
 `typeof(Payloads).Assembly`.
 
 ## Where it lives
@@ -169,7 +170,7 @@ read at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resol
 |---|---|
 | `tools/PayloadStager/Program.cs` | Builds the SDK-shaped tree, writes version stamps, zips it |
 | `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | Runs the stager, embeds the zip |
-| `src/Dotnet10Dependencies/Payloads.cs` | Version constants; the AOT-safe resource API |
+| `src/Dotnet10Dependencies/Payloads.cs` | The fixed resource name; the AOT-safe resource API |
 | `src/NativeCompiler/EmbeddedSdkRefs.cs` | Extracts to the cache; version + sidecar resolution |
 
 ## Invariants and traps
@@ -178,8 +179,8 @@ read at runtime through `Payloads.LoadZip()` / `Payloads.OpenZip()`, which resol
 2. **`$(IntermediateOutputPath)` is empty at project scope.** The staging target must resolve it
    inside the target, or the payload lands in the source tree — and still builds, because the
    misplaced zip satisfies the `EmbeddedResource`.
-3. **The compiler TFM, the staged ref pack and `Payloads.PackVersion` must move together.** A
-   mismatch is invisible to `dotnet build` and only fails at runtime. See `UPGRADING.md`.
+3. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
+   `dotnet build` and only fails at runtime. See `UPGRADING.md`.
 4. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
    host assembly matters (G2).
 

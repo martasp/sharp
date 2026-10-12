@@ -175,15 +175,12 @@ public class EmbeddedPayloadTests
     }
 
     [Fact]
-    public void Payload_Resource_Name_Carries_The_Ref_Pack_Version_And_Exists()
+    public void Payload_Resource_Exists_Under_The_Name_Payloads_Declares()
     {
         // Payloads.ZipResourceName and the LogicalName in Dotnet10Dependencies.csproj are two
         // hand-written strings that must agree; nothing but this test connects them. A mismatch does
         // not fail the build - it compiles, passes every JIT test, and then throws at runtime on a
         // clean machine with no SDK, which is the one environment sharp exists to support.
-        Payloads.ZipResourceName.ShouldBe($"embedded-refs.{Payloads.PackVersion}.zip");
-        Payloads.PackVersion.ShouldNotBeNullOrWhiteSpace();
-
         var assembly = typeof(Payloads).Assembly;
 
         assembly.GetManifestResourceNames().ShouldContain(Payloads.ZipResourceName);

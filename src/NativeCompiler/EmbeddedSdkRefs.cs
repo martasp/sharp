@@ -8,7 +8,7 @@ namespace NativeCompiler;
 /// <summary>
 /// The compile-time payload sharp carries so it can build projects on a machine with no .NET SDK
 /// installed. The payload is staged at build time by tools/PayloadStager and embedded as the
-/// <c>embedded-refs.&lt;refpack&gt;.zip</c> manifest resource of the Dotnet10Dependencies assembly,
+/// <c>embedded-refs.zip</c> manifest resource of the Dotnet10Dependencies assembly,
 /// which is read here through <see cref="Payloads"/>.
 ///
 /// It contains only what compiling actually needs:
@@ -30,8 +30,8 @@ namespace NativeCompiler;
 /// </summary>
 public static class EmbeddedSdkRefs
 {
-    // The payload's name, including the ref pack version, comes from the assembly that owns it so the
-    // embedded resource and the sidecar file can never disagree about what they are called.
+    // The payload's name comes from the assembly that owns it so the embedded resource and the sidecar
+    // file can never disagree about what they are called.
     private const string ResourceName = Payloads.ZipResourceName;
 
     // A completed extraction is marked with a file containing the payload hash. Until that file
