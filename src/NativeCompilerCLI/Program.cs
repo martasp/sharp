@@ -154,7 +154,7 @@ int BuildCommand(string[] args)
         foreach (var project in solutionResult.Projects)
         {
             var result = project.Result;
-            var tfm = result.Project?.TargetFramework ?? "net10.0";
+            var tfm = result.Project?.TargetFramework ?? DefaultTargetFramework.Value;
 
             if (result.Success)
             {
@@ -203,7 +203,7 @@ int BuildCommand(string[] args)
     // it carries the measured seconds and the build path relative to the current directory.
     if (buildResult.Success && buildResult.Project is { } builtProject)
     {
-        var tfm = builtProject.TargetFramework ?? "net10.0";
+        var tfm = builtProject.TargetFramework ?? DefaultTargetFramework.Value;
         var relativePath = Path.GetRelativePath(Directory.GetCurrentDirectory(), builtProject.DllPathName);
         var warnings = SplitLines(buildResult.Warnings);
         if (warnings.Length > 0)
@@ -226,7 +226,7 @@ int BuildCommand(string[] args)
     var errorLines = SplitLines(buildResult.Errors);
     var errorCount = ErrorLineCount(buildResult.Errors);
     var name = buildResult.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target);
-    var failureTfm = buildResult.Project?.TargetFramework ?? "net10.0";
+    var failureTfm = buildResult.Project?.TargetFramework ?? DefaultTargetFramework.Value;
     WriteLine($"  {name} {failureTfm} failed with {errorCount} error(s) ({buildResult.Duration.TotalSeconds:0.0}s)");
     foreach (var line in errorLines) WriteLine($"    {line}");
     WriteLine();
@@ -447,10 +447,9 @@ static string[] DirectChildProjectFiles(string dir) =>
         .ToArray();
 
 // Mirrors `dotnet build`/`dotnet run` project resolution: an explicit path wins, otherwise the
-// current directory is searched. Missing targets get the SDK-style messages; ambiguous folders
-// (more than one .sln/.slnx/.csproj) get MSB1011. A solution is fine to *build* but is not
-// runnable. A .csproj FILE is unwrapped to its directory (Build() takes a folder). Returns null
-// after printing the failure message.
+// current directory is searched. A directory is resolved to the single project or solution file it
+// contains, for both the explicit-path and working-directory cases. Returns null after printing the
+// failure message.
 static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
 {
     if (pathArg is not null)
@@ -465,15 +464,32 @@ static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
         {
             return Path.GetDirectoryName(fullPath)!;
         }
-        return fullPath;
+
+        // An explicit directory is resolved the same way the working directory is. Handing the folder
+        // straight through used to make the compiler glob every .cs beneath it, so `build .` in a
+        // repository root compiled sibling projects' sources - under whichever project's properties
+        // happened to be picked - instead of building the solution it holds. A path that is a file
+        // (a .sln/.slnx, or any other) is already the target and is passed straight on.
+        if (!Directory.Exists(fullPath))
+            return fullPath;
+
+        return ResolveDirectory(fullPath, pathArg, checkRunnable, explicitPath: true);
     }
 
-    var cwd = Directory.GetCurrentDirectory();
-    var candidates = DirectChildProjectFiles(cwd);
+    return ResolveDirectory(Directory.GetCurrentDirectory(), null, checkRunnable, explicitPath: false);
+}
+
+// Picks the one project/solution file in `dir`, mirroring MSBuild: a single candidate wins, several
+// is ambiguous, none is MSB1003. The two ambiguity diagnostics are deliberately not unified -
+// MSBuild emits MSB1011 for the working directory and MSB1050 when the directory is named on the
+// command line, and `asGiven` is echoed verbatim in the latter.
+static string? ResolveDirectory(string dir, string? asGiven, bool checkRunnable, bool explicitPath)
+{
+    var candidates = DirectChildProjectFiles(dir);
     if (candidates.Length == 0)
     {
         if (checkRunnable)
-            WriteLine($"Couldn't find a project to run. Ensure a project exists in {cwd}, or pass the path to the project using --project.");
+            WriteLine($"Couldn't find a project to run. Ensure a project exists in {dir}, or pass the path to the project using --project.");
         else
             WriteLine("MSBUILD : error MSB1003: Specify a project or solution file. The current working directory does not contain a project or solution file.");
         return null;
@@ -481,7 +497,9 @@ static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
     if (candidates.Length > 1)
     {
         if (checkRunnable)
-            WriteLine($"Specify which project file to use because {cwd} contains more than one project file.");
+            WriteLine($"Specify which project file to use because {dir} contains more than one project file.");
+        else if (explicitPath)
+            WriteLine($"MSBUILD : error MSB1050: Specify which project or solution file to use because the folder \"{asGiven}\" contains more than one project or solution file.");
         else
             WriteLine("MSBUILD : error MSB1011: Specify which project or solution file to use because this folder contains more than one project or solution file.");
         return null;
@@ -492,8 +510,8 @@ static string? ResolveTargetOrFail(string? pathArg, bool checkRunnable)
         (resolved.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
          resolved.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)))
     {
-        var dir = Path.GetDirectoryName(resolved) ?? ".";
-        WriteLine($"Couldn't find a project to run. Ensure a project exists in {dir}, or pass the path to the project using --project.");
+        var parent = Path.GetDirectoryName(resolved) ?? ".";
+        WriteLine($"Couldn't find a project to run. Ensure a project exists in {parent}, or pass the path to the project using --project.");
         return null;
     }
     if (resolved.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
@@ -548,18 +566,10 @@ static string WithProjectSuffix(string errors, string? projectFile)
         .Select(line => line + $" [{projectFile}]"));
 }
 
-// The version of the SDK hosting this compiler, byte-identical to `dotnet --version`.
-static string SdkVersion()
-{
-    using var process = Process.Start(new ProcessStartInfo("dotnet", "--version")
-    {
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-    }) ?? throw new InvalidOperationException("Unable to start `dotnet --version`.");
-    var version = process.StandardOutput.ReadToEnd().Trim();
-    process.WaitForExit();
-    return version;
-}
+// The version of the SDK this compiler was built against, matching `dotnet --version` for that SDK.
+// It comes from the payload embedded in the binary rather than by running `dotnet --version`, so it
+// still works on a machine with no .NET SDK installed.
+static string SdkVersion() => EmbeddedSdkRefs.SdkVersion;
 
 void PrintHelp()
 {

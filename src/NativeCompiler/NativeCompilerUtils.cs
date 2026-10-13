@@ -22,10 +22,10 @@ public static class NativeCompilerUtils
     public static string GetGeneratedFileRoot(Project project) =>
         Path.Combine(project.ProjectRootPath, "obj",
             BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath)?.Configuration ?? "Debug",
-            project.TargetFramework ?? "net10.0");
+            project.TargetFramework ?? DefaultTargetFramework.Value);
 
     public static string GetGeneratedFileRoot(Project project, string configuration) =>
-        Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? "net10.0");
+        Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? DefaultTargetFramework.Value);
 
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) Parse(ProjectFile projectFile,
         CSharpParseOptions options)
@@ -231,88 +231,6 @@ public static class NativeCompilerUtils
         return LanguageVersion.Latest;
     }
 
-    public static MetadataReference[] GetdefaultReferencesForRunning(string dotNetAssemblyPath)
-    {
-        var exclude = new List<string>
-        {
-            @"ucrtbase.dll",
-            @"System.IO.Compression.Native.dll",
-            @"msquic.dll",
-            @"mscorrc.dll",
-            @"mscordbi.dll",
-            @"mscordaccore_amd64_amd64_6.0.121.56705.dll",
-            @"mscordaccore_amd64_amd64_6.0.1823.26907.dll",
-            @"mscordaccore.dll",
-            @"Microsoft.DiaSymReader.Native.amd64.dll",
-            @"hostpolicy.dll",
-            @"dbgshim.dll",
-            @"coreclr.dll",
-            @"clrjit.dll",
-            @"clretwrc.dll",
-            @"api-ms-win-crt-utility-l1-1-0.dll",
-            @"api-ms-win-crt-time-l1-1-0.dll",
-            @"api-ms-win-crt-string-l1-1-0.dll",
-            @"api-ms-win-crt-stdio-l1-1-0.dll",
-            @"api-ms-win-crt-runtime-l1-1-0.dll",
-            @"api-ms-win-crt-process-l1-1-0.dll",
-            @"api-ms-win-crt-private -l1 - 1 - 0.dll",
-            @"api-ms-win-crt-multibyte-l1-1-0.dll",
-            @"api-ms-win-crt-math-l1-1-0.dll",
-            @"api-ms-win-crt-locale-l1-1-0.dll",
-            @"api-ms-win-crt-heap-l1-1-0.dll",
-            @"api-ms-win-crt-filesystem-l1-1-0.dll",
-            @"api-ms-win-crt-environment-l1-1-0.dll",
-            @"api-ms-win-crt-convert-l1-1-0.dll",
-            @"api-ms-win-crt-conio-l1-1-0.dll",
-            @"api-ms-win-core-util-l1-1-0.dll",
-            @"api-ms-win-core-timezone-l1-1-0.dll",
-            @"api-ms-win-core-sysinfo-l1-1-0.dll",
-            @"api-ms-win-core-synch-l1-2-0.dll",
-            @"api-ms-win-core-synch-l1-1-0.dll",
-            @"api-ms-win-core-string-l1-1-0.dll",
-            @"api-ms-win-core-rtlsupport-l1-1-0.dll",
-            @"api-ms-win-core-profile-l1-1-0.dll",
-            @"api-ms-win-core-processthreads-l1-1-1.dll",
-            @"api-ms-win-core-processthreads-l1-1-0.dll",
-            @"api-ms-win-core-processenvironment-l1-1-0.dll",
-            @"api-ms-win-core-namedpipe-l1-1-0.dll",
-            @"api-ms-win-core-memory-l1-1-0.dll",
-            @"api-ms-win-core-localization-l1-2-0.dll",
-            @"api-ms-win-core-libraryloader-l1-1-0.dll",
-            @"api-ms-win-core-interlocked-l1-1-0.dll",
-            @"api-ms-win-core-heap-l1-1-0.dll",
-            @"api-ms-win-core-handle-l1-1-0.dll",
-            @"api-ms-win-core-file-l2-1-0.dll",
-            @"api-ms-win-core-file-l1-2-0.dll",
-            @"api-ms-win-core-file-l1-1-0.dll",
-            @"api-ms-win-core-errorhandling-l1-1-0.dll",
-            @"api-ms-win-core-debug-l1-1-0.dll",
-            @"api-ms-win-core-datetime-l1-1-0.dll",
-            @"api-ms-win-core-console-l1-2-0.dll",
-            @"api-ms-win-core-console-l1-1-0.dll",
-            @"api-ms-win-crt-private-l1-1-0.dll",
-            @"hostfxr.dll",
-            @"api-ms-win-core-fibers-l1-1-0.dll",
-            @"mscordaccore_amd64_amd64_8.0.724.31311.dll",
-            @"clrgc.dll",
-            //@"System.Private.CoreLib.dll"
-        };
-
-        var directory = new DirectoryInfo(dotNetAssemblyPath);
-        var files = directory
-            .GetFiles("*.dll", SearchOption.TopDirectoryOnly)
-            .Where(f => exclude.Contains(f.Name) == false)
-            // Deterministic reference order: Directory.GetFiles order follows the filesystem, and
-            // the compile (and hence the emitted metadata ref table) must not depend on it.
-            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var defaultReferences = files.Select(f =>
-            (MetadataReference)MetadataReference.CreateFromFile(Path.Combine(dotNetAssemblyPath, f.Name))).ToArray();
-
-        return defaultReferences.ToArray();
-    }
-
     public static MetadataReference[] GetdefaultReferencesForCompiling(string dotNetAssemblyRefPath)
     {
         var directory = new DirectoryInfo(dotNetAssemblyRefPath);
@@ -481,7 +399,7 @@ public static class NativeCompilerUtils
         }
 
     // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
-    // NativeCompiler.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
+    // Dotnet10Dependencies.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
     private static readonly string[] RefPackAnalyzerFileNames =
     {
         "System.Text.RegularExpressions.Generator.dll",
@@ -492,22 +410,25 @@ public static class NativeCompilerUtils
         "Microsoft.Interop.JavaScript.JSImportGenerator.dll",
     };
 
+    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in Dotnet10Dependencies.csproj.
+    // These live in a *different* payload directory than the NETCore set above.
+    private static readonly string[] AspNetRefPackAnalyzerFileNames =
+    {
+        "Microsoft.AspNetCore.App.SourceGenerators.dll",
+        "Microsoft.Extensions.Logging.Generators.dll",
+        "Microsoft.Extensions.Options.SourceGeneration.dll",
+        "Microsoft.Extensions.Validation.ValidationsGenerator.dll",
+        "Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll",
+        "Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll",
+    };
+
     private static readonly string[] IllinkAnalyzerFileNames =
     {
         "ILLink.RoslynAnalyzer.dll",
         "ILLink.CodeFixProvider.dll",
     };
 
-    private static string IllinkTasksPackagePath() =>
-        NuGetPackage.FindHighestPackagePath("Microsoft.NET.ILLink.Tasks") ?? string.Empty;
-
-    private static string IllinkAnalyzersDirectory()
-    {
-        var packagePath = IllinkTasksPackagePath();
-        return string.IsNullOrEmpty(packagePath)
-            ? string.Empty
-            : Path.Combine(packagePath, "analyzers", "dotnet", "cs");
-    }
+    private static string IllinkAnalyzersDirectory() => EmbeddedSdkRefs.IllinkAnalyzers;
 
     // Produced app folders must carry the analyzer assemblies so a runnable JIT build of the compiler
     // can resolve the statically registered AnalyzerRegistry types at runtime.
@@ -515,10 +436,13 @@ public static class NativeCompilerUtils
     {
         var files = new List<string>();
         var refPackDir = AsemblyExtensions.ResolveRefPackAnalyzersLocation;
+        var aspNetRefPackDir = AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation;
         var illinkDir = IllinkAnalyzersDirectory();
 
         foreach (var name in RefPackAnalyzerFileNames)
             files.Add(Path.Combine(refPackDir, name));
+        foreach (var name in AspNetRefPackAnalyzerFileNames)
+            files.Add(Path.Combine(aspNetRefPackDir, name));
         foreach (var name in IllinkAnalyzerFileNames)
             files.Add(Path.Combine(illinkDir, name));
 
@@ -584,34 +508,24 @@ public static class NativeCompilerUtils
             if (frameworkNames.Count == 0)
                 frameworkNames.Add("Microsoft.NETCore.App");
 
-            var sharedRoot = Path.GetDirectoryName(
-                Path.GetDirectoryName(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath));
-            if (string.IsNullOrEmpty(sharedRoot) || !Directory.Exists(sharedRoot))
-                return names;
-
+            // The shared framework assemblies themselves are not embedded (~106 MB); only their names
+            // are, which is all this method needs in order to decide copy-local suppression.
             foreach (var frameworkName in frameworkNames)
             {
-                var frameworkDir = Directory.EnumerateDirectories(
-                        Path.Combine(sharedRoot, frameworkName))
-                    .Where(dir => FrameworkFolderMatches(dir, targetFramework))
-                    .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                if (frameworkDir is null)
-                    frameworkDir = Directory.EnumerateDirectories(Path.Combine(sharedRoot, frameworkName))
-                        .OrderByDescending(dir => dir, StringComparer.OrdinalIgnoreCase)
-                        .FirstOrDefault();
-                if (frameworkDir is null) continue;
-
-                foreach (var file in Directory.EnumerateFiles(frameworkDir, "*.dll"))
-                    names.Add(Path.GetFileName(file));
+                try
+                {
+                    names.UnionWith(EmbeddedSdkRefs.GetSharedFrameworkAssemblyNames(frameworkName));
+                }
+                catch (FileNotFoundException)
+                {
+                    // A framework with no embedded name list (e.g. an SDK workload) contributes nothing.
+                }
             }
         }
         catch
         {
-            // Fall back to only the base runtime pack if the shared root cannot be enumerated.
-            var runtimeDir = AsemblyExtensions.ResolveSdkRuntimeAssemblyPath;
-            foreach (var file in Directory.EnumerateFiles(runtimeDir, "*.dll"))
-                names.Add(Path.GetFileName(file));
+            // Fall back to only the base runtime pack if the assets file cannot be read.
+            names.UnionWith(EmbeddedSdkRefs.GetSharedFrameworkAssemblyNames("Microsoft.NETCore.App"));
         }
         return names;
     }
@@ -638,7 +552,7 @@ public static class NativeCompilerUtils
     // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
     // e.g. `$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\...`); the native compiler previously only
     // handled ProjectReference/PackageReference items, so projects referencing DLLs by HintPath (like
-    // NativeCompiler.csproj itself, via the ILLink/Roslyn generator analyzers) failed to compile under
+    // Dotnet10Dependencies.csproj, via the ILLink/Roslyn generator analyzers) failed to compile under
     // self-hosting. Only the analyzer/SDK property tokens this codebase actually uses are expanded;
     // anything else is skipped rather than emulating MSBuild property evaluation.
     private static void CollectHintPathReferences(XML.Project xml, string projectRootPath,
@@ -651,9 +565,17 @@ public static class NativeCompilerUtils
                 var hintPath = reference.HintPath;
                 if (string.IsNullOrEmpty(hintPath)) continue;
 
+                // The ILLink analyzers come from the embedded payload rather than the NuGet cache, and they are not
+    // laid out as a package, so the package-relative path is rewritten to the payload directory before
+    // the generic property tokens are expanded.
                 var expanded = hintPath
-                    .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
-                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", IllinkTasksPackagePath())
+                    .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs",
+                        EmbeddedSdkRefs.IllinkAnalyzers)
+                    .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs",
+                        EmbeddedSdkRefs.IllinkAnalyzers)
+                    .Replace("$(_PayloadNetCoreAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
+                    .Replace("$(_PayloadAspNetAnalyzersPath)", AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation)
+                    .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", EmbeddedSdkRefs.SdkDirectory)
                     .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
@@ -674,7 +596,7 @@ public static class NativeCompilerUtils
         var results = new List<string>();
         if (!File.Exists(csprojPath)) return results;
 
-        var tfm = targetTfm ?? "net10.0";
+        var tfm = targetTfm ?? DefaultTargetFramework.Value;
         var xml = XML.Project.Parse(csprojPath);
         var packages = xml.ItemGroup.SelectMany(ig => ig.PackageReferences);
 
@@ -703,10 +625,10 @@ public static class NativeCompilerUtils
         {
             if (packagePath is null) continue;
 
-            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? "net10.0"))
+            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
                 referenceFiles.Add(dll);
 
-            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? "net10.0"))
+            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
                 referenceFiles.Add(dll);
         }
 
@@ -858,10 +780,15 @@ public static class NativeCompilerUtils
         // with explicit <Compile Include>/<Compile Remove> items. Without this, template projects
         // (e.g. OrchardCore.ProjectTemplates, which disables default items and packs its *.cs
         // under content/ as None) accidentally compile files that must not be compiled.
-        var allFiles = EnumerateProjectSourceFiles(projectPath).ToList();
+        // Without a project file in this directory there is no project here to compile, and globbing
+        // anyway silently swept in every .cs beneath it: building a repository root compiled sibling
+        // projects' sources under whichever project's properties were picked, which surfaced as
+        // unrelated diagnostics such as SYSLIB1062. Returning nothing keeps the failure local.
         var csprojFile = Directory.EnumerateFiles(projectPath, "*.csproj", SearchOption.TopDirectoryOnly)
             .FirstOrDefault();
-        if (csprojFile is null) return allFiles.ToArray();
+        if (csprojFile is null) return Array.Empty<string>();
+
+        var allFiles = EnumerateProjectSourceFiles(projectPath).ToList();
 
         XML.Project xml;
         try { xml = XML.Project.Parse(csprojFile); }
@@ -1005,7 +932,7 @@ public static class NativeCompilerUtils
     {
         var result = new StringBuilder();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var tfm = project.TargetFramework ?? "net10.0";
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
 
         void AddUsing(NuGetPackage.PackageUsingItem item)
         {
@@ -1128,7 +1055,7 @@ public static class NativeCompilerUtils
         var informationalVersion = identity?.InformationalVersion
             ?? version + (string.IsNullOrEmpty(identity?.SourceRevisionId) ? "" : "+" + identity!.SourceRevisionId);
 
-        var targetFramework = project.TargetFramework ?? "net10.0";
+        var targetFramework = project.TargetFramework ?? DefaultTargetFramework.Value;
         var tfmVersion = targetFramework.StartsWith("net", StringComparison.Ordinal) ? targetFramework[3..] : targetFramework;
 
         // The SDK emits the TargetFramework attribute into its own generated file
@@ -1310,11 +1237,9 @@ public static class NativeCompilerUtils
         return project;
     }
 
-    public static void WriteRuntimeConfig(Project project)
+public static void WriteRuntimeConfig(Project project)
     {
-        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
-        var versionParts = runtimeVersion.Split('.');
-        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+        var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
         var runtimeConfig =
         $$"""
@@ -1323,7 +1248,8 @@ public static class NativeCompilerUtils
             "tfm": "{{tfm}}",
             "framework": {
               "name": "Microsoft.NETCore.App",
-              "version": "{{runtimeVersion}}"
+              "version": "{{baselineVersion}}",
+              "rollForward": "latestPatch"
             },
             "configProperties": {
               "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
@@ -1341,9 +1267,7 @@ public static class NativeCompilerUtils
     // Microsoft.AspNetCore.App).
     public static void WriteRuntimeConfigWeb(Project project)
     {
-        var runtimeVersion = new DirectoryInfo(AsemblyExtensions.ResolveSdkRuntimeAssemblyPath).Name;
-        var versionParts = runtimeVersion.Split('.');
-        var tfm = $"net{versionParts[0]}.{versionParts[1]}";
+        var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
         var runtimeConfig =
         $$"""
@@ -1353,11 +1277,13 @@ public static class NativeCompilerUtils
             "frameworks": [
               {
                 "name": "Microsoft.NETCore.App",
-                "version": "{{runtimeVersion}}"
+                "version": "{{baselineVersion}}",
+                "rollForward": "latestPatch"
               },
               {
                 "name": "Microsoft.AspNetCore.App",
-                "version": "{{runtimeVersion}}"
+                "version": "{{baselineVersion}}",
+                "rollForward": "latestPatch"
               }
             ],
             "configProperties": {
@@ -1368,6 +1294,40 @@ public static class NativeCompilerUtils
         """;
 
         WriteRuntimeConfigFile(project, runtimeConfig);
+    }
+
+    // The embedded SDK records the exact runtime it was built against (10.0.11 here), but the app
+    // is compiled and run on some other machine, where that patch need not exist. The host only
+    // ever rolls *forward*, so asking for 10.0.11 on a machine whose newest patch is 10.0.10 dies
+    // with "Could not load file or assembly 'System.Runtime'" - which is how CI went red on this
+    // while every local run passed. The SDK can use the exact version because it writes the one
+    // installed on the machine doing the building; we have no such guarantee, so request the
+    // major.minor baseline and let rollForward pick the newest patch actually present.
+    // An app can only run on a framework at least as new as the one it was compiled against, so the
+    // framework named here has to come from the project's own TargetFramework. Taking it from the
+    // SDK instead is wrong twice over: it ignores what the project actually targets, and it names a
+    // patch that need not be installed where the app runs. On CI that handed a net10.0 app a net9.0
+    // framework - the runner keeps 8.x, 9.x and 10.x side by side - and it aborted with "Could not
+    // load file or assembly 'System.Runtime, Version=10.0.0.0'".
+    //
+    // The major.minor baseline plus rollForward lets any installed patch of that major.minor satisfy
+    // the app, which is what makes a published binary portable across machines.
+    private static (string Tfm, string BaselineVersion) RuntimeFrameworkFor(Project project)
+    {
+        var targetFramework = project.TargetFramework?.Trim();
+        if (!string.IsNullOrEmpty(targetFramework) && targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+        {
+            var versionParts = targetFramework[3..].Split('.');
+            if (versionParts.Length >= 2 && int.TryParse(versionParts[0], out _) && int.TryParse(versionParts[1], out _))
+                return (targetFramework, $"{versionParts[0]}.{versionParts[1]}.0");
+        }
+
+        // No usable TargetFramework on the project: fall back to the embedded SDK's runtime, still
+        // reduced to a major.minor baseline rather than a specific patch.
+        var embeddedParts = EmbeddedSdkRefs.RuntimeVersion.Split('.');
+        var tfm = embeddedParts.Length >= 2 ? $"net{embeddedParts[0]}.{embeddedParts[1]}" : "net10.0";
+        var baseline = embeddedParts.Length >= 2 ? $"{embeddedParts[0]}.{embeddedParts[1]}.0" : "10.0.0";
+        return (tfm, baseline);
     }
 
     private static void WriteRuntimeConfigFile(Project project, string runtimeConfig)

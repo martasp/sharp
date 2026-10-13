@@ -1,5 +1,11 @@
 ﻿[
   {
+    Name: Dotnet10Dependencies,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: src\Dotnet10Dependencies\Dotnet10Dependencies.csproj,
+    FlatPath: {SolutionDirectory}src/Dotnet10Dependencies/Dotnet10Dependencies.csproj
+  },
+  {
     Name: DotnetRuntime10,
     ProjectTypeGuid: Guid_1,
     ProjectRelativePath: DotnetRuntime10\DotnetRuntime10.csproj,
@@ -28,6 +34,12 @@
     ProjectTypeGuid: Guid_2,
     ProjectRelativePath: tests\NativeCompilerTests\NativeCompilerTests.csproj,
     FlatPath: {ProjectDirectory}NativeCompilerTests.csproj
+  },
+  {
+    Name: PayloadStager,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: tools\PayloadStager\PayloadStager.csproj,
+    FlatPath: {SolutionDirectory}tools/PayloadStager/PayloadStager.csproj
   },
   {
     Name: SimplePlayground,

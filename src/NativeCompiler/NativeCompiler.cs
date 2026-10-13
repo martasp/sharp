@@ -78,12 +78,10 @@ public static class NativeCompiler
         var project = GetProjectDetails(files, projectPath);
 
         var dotNetAssemblyRefPath = AsemblyExtensions.ResolveSdkRefLocation;
-        var dotNetAssemblyRuntimePath = AsemblyExtensions.ResolveSdkRuntimeAssemblyPath;
 
         var compilationOptions = GetCompilationOptions(project);
 
         var defaultReferencesForCompiling = GetdefaultReferencesForCompiling(dotNetAssemblyRefPath);
-        var defaultReferencesForRunning   = GetdefaultReferencesForRunning(dotNetAssemblyRuntimePath);
 
         var parsedData = ParseProject(project);
         var syntaxTrees = parsedData.Select(item => item.syntaxTree);
@@ -97,8 +95,11 @@ public static class NativeCompiler
             defaultNugetReferences.Concat(defaultLocalReferences),
             defaultReferencesForCompiling.Concat(frameworkReferenceRefs));
 
+// The shared framework's own assemblies are never copied next to the output app - they come from the
+        // runtime at execution time - and they are no longer even available as files, since only their
+        // names are embedded. So the copy-local candidates are just the project's own dependencies.
         var mergedDefaultReferencesForRunning = MergeFrameworkSuppression(
-            defaultNugetReferences.Concat(defaultLocalReferences), defaultReferencesForRunning);
+            defaultNugetReferences.Concat(defaultLocalReferences), Array.Empty<MetadataReference>());
 
         outputs.Add($"Merged default references count: {mergedDefaultReferences.Length}");
 
@@ -153,7 +154,7 @@ public static class NativeCompiler
         // are resolved from the installed runtime at run time - never copied by `dotnet build`.
         // HintPath <Reference> assemblies are CopyLocal in MSBuild (the compiler's own graph carries
         // the SDK generator/analyzer DLLs so the self-hosted JIT stays bindable), so those ride along.
-        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? "net10.0");
+        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? DefaultTargetFramework.Value);
         // SDK mirror: restore-derived runtime graph (*.deps.json). Only the NuGet/local runtime set
         // feeds it - HintPath copies are reference/analyzer assemblies, never package assets. They
         // are still registered in deps.json as "reference" libraries (DepsJsonWriter) so a JIT
@@ -162,6 +163,16 @@ public static class NativeCompiler
         DepsJsonWriter.Write(project, paths, hintPathCopies);
         paths.AddRange(hintPathCopies);
         WriteFiles(project.SharpBinFolderPath, paths);
+
+        // Self-hosting: when the project being compiled consumes sharp itself (NativeCompilerCLI via
+        // its ProjectReference), the emitted assembly needs the embedded SDK payload. MSBuild embeds
+        // it when it publishes sharp, but there is no MSBuild in this loop, so sharp hands its own
+        // payload to the compiler it is producing - the same mechanism the generator/analyzer
+        // assemblies use via HintPath copy-local.
+        if (mergedDefaultReferences.Any(IsCompilerReference))
+        {
+            EmbeddedSdkRefs.WritePayloadTo(project.SharpBinFolderPath);
+        }
 
         if (produceDll.success)
             outputs.Add($"Compiled {project.ProjectName} successfully");
@@ -175,6 +186,16 @@ public static class NativeCompiler
             project,
             embeddedTexts,
             analyzerWarnings);
+    }
+
+    // True when a merged reference is sharp's own compiler library, i.e. the project being built
+    // consumes the compiler and therefore needs the embedded SDK payload propagated to its output.
+    private static bool IsCompilerReference(MetadataReference reference)
+    {
+        var display = reference.Display;
+        return !string.IsNullOrEmpty(display)
+               && Path.GetFileNameWithoutExtension(display)
+                   .Equals("NativeCompiler", StringComparison.OrdinalIgnoreCase);
     }
 
     public static BuildSolutionResult BuildSolution(string solutionPath)

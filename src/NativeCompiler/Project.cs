@@ -213,7 +213,7 @@ public class Project : IProject
         // the DLLs match. `NATIVECOMPILER_OUTPUT_ROOT` overrides the root (e.g. "bin") for exact
         // path-parity runs.
         var root = Environment.GetEnvironmentVariable("NATIVECOMPILER_OUTPUT_ROOT") ?? "myc";
-        var path = Path.Combine(projectRootPath, root, "Debug", targetFramework ?? "net10.0");
+        var path = Path.Combine(projectRootPath, root, "Debug", targetFramework ?? DefaultTargetFramework.Value);
         CreateFolderIfNotExists(path);
         return path;
     }

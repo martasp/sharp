@@ -204,8 +204,17 @@ public static class SourceGeneratorRunner
     {
         var generators = new List<ISourceGenerator>(AnalyzerRegistry.GetSourceGenerators());
 
+        // Web-only generators. Under JIT the dynamic discovery below finds these anyway; adding them
+        // here is what makes the AOT binary match, since AOT cannot load assemblies at runtime. The
+        // gate matters: applied unconditionally, PublicProgramSourceGenerator also makes Program public
+        // in console apps, which diverges from the SDK.
+        if (project.IsWebSdk)
+        {
+            generators.AddRange(AnalyzerRegistry.GetWebSourceGenerators());
+        }
+
         if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
-            Console.WriteLine($"[gens] {project.ProjectName}: IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
+            Console.WriteLine($"[gens] {project.ProjectName}: IsWebSdk={project.IsWebSdk}, IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
 
         if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
         {
@@ -219,11 +228,23 @@ public static class SourceGeneratorRunner
             {
                 try
                 {
+                    var staticallyLinkedAnalyzers = new HashSet<string>(
+                        NativeCompilerUtils.GetAnalyzerRuntimeFiles().Select(Path.GetFileName).Where(name => name is not null)!,
+                        StringComparer.OrdinalIgnoreCase);
+
                     var loadContext = new GeneratorAssemblyLoadContext();
                     var warnings = new List<string>();
                     foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
                     foreach (var dll in generatorDlls)
                     {
+                        // Skip anything already linked in statically. The targeting-pack generators
+                        // in AnalyzerRegistry come from these same DLLs, so discovering them as well
+                        // runs each one twice and it emits its sources twice - [LoggerMessage] then
+                        // fails with CS0757 "a partial method may not have multiple implementing
+                        // declarations", plus CS0102/CS0229/CS0121. Not re-loading them also keeps
+                        // six assemblies per project out of the dynamic path.
+                        if (staticallyLinkedAnalyzers.Contains(Path.GetFileName(dll))) continue;
+
                         Assembly assembly;
                         try
                         {

@@ -4,8 +4,6 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Runtime.CompilerServices;
-using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace CustomCompiler
 {
@@ -68,7 +66,11 @@ namespace CustomCompiler
                 new System.Text.RegularExpressions.Generator.UpgradeToGeneratedRegexCodeFixer());
 
 
-        public static ImmutableArray<ISourceGenerator> GetSourceGenerators()
+        // Returns the generator set for EVERY project. Generators that the SDK applies conditionally
+    // (minimal-API public Program, RequestDelegateGenerator) therefore cannot be listed here without
+    // diverging from `dotnet build`; this takes no project context, so it can only hold generators
+    // that are no-ops when their attributes are absent.
+    public static ImmutableArray<ISourceGenerator> GetSourceGenerators()
             => ImmutableArray.Create<ISourceGenerator>(
                 // Converts [LibraryImport] methods into Native P/Invoke implementations
                 new Microsoft.Interop.LibraryImportGenerator().AsSourceGenerator(),
@@ -83,7 +85,52 @@ namespace CustomCompiler
                 new System.Text.Json.SourceGeneration.JsonSourceGenerator().AsSourceGenerator(),
 
                 // Generates optimized regex matchers ([GeneratedRegex])
-                new System.Text.RegularExpressions.Generator.RegexGenerator().AsSourceGenerator()
+                new System.Text.RegularExpressions.Generator.RegexGenerator().AsSourceGenerator(),
+
+                // --- ASP.NET Core targeting-pack generators ---
+                // Linked from the embedded payload like the six above. The ones registered here are
+                // attribute-driven, so they no-op on a project that uses none of their attributes and
+                // leave output identical to the SDK.
+
+                // Implements [LoggerMessage] partial methods. Missing this, every one of them is
+                // CS8795 "method must have a body because it is partially defined".
+                new Microsoft.Extensions.Logging.Generators.LoggerMessageGenerator().AsSourceGenerator(),
+
+                new Microsoft.Extensions.Options.Generators.OptionsValidatorGenerator().AsSourceGenerator(),
+                new Microsoft.Extensions.Validation.ValidationsGenerator().AsSourceGenerator(),
+                new Microsoft.Extensions.Configuration.Binder.SourceGeneration.ConfigurationBindingGenerator().AsSourceGenerator()
+
                 );
-    }
+
+        // Generators the SDK applies only to web projects. Kept out of GetSourceGenerators() because
+        // that set is unconditional, and running these for every project changes console output:
+        // PublicProgramSourceGenerator makes `Program` public in a plain console app, which
+        // OutputParityTests reports as a public-surface difference.
+        //
+        // Under JIT these generators are picked up regardless, by the runtime discovery in
+        // SourceGeneratorRunner. These entries exist so the NativeAOT binary - which can neither
+        // discover nor load assemblies - produces the same output as the SDK.
+        public static ImmutableArray<ISourceGenerator> GetWebSourceGenerators()
+            => ImmutableArray.Create<ISourceGenerator>(
+                // Emits the `public partial class Program` the SDK gives top-level-statement
+                // minimal-API apps. Without it a sharp-built web app exposes an internal Program, so
+                // anything referencing the entry point (WebApplicationFactory<Program>, and most
+                // integration tests) fails to compile against the produced assembly.
+                new Microsoft.AspNetCore.SourceGenerators.PublicProgramSourceGenerator().AsSourceGenerator()
+                );
+
+        // RequestDelegateGenerator is deliberately absent from both sets.
+        //
+        // The SDK keeps it OFF unless a project opts in with <EnableRequestDelegateGenerator>true</...>,
+        // so not registering it is correct for every default project - verified by building a
+        // net10.0 Microsoft.NET.Sdk.Web project with the SDK, which emits no RDG output. Registering it
+        // unconditionally instead made sharp emit route-handler glue the SDK does not, adding twelve
+        // assemblies to the produced app's reference set.
+        //
+        // Supporting the opt-in path needs two things that do not exist yet: the
+        // `build_property.EnableRequestDelegateGenerator` key in ProjectAnalyzerConfigOptions
+        // (SourceGeneratorRunner), which RDG reads to decide whether to generate at all, and
+        // EnableRequestDelegateGenerator on the project model. Until both land, a project that opts
+        // in silently gets no RDG output under AOT while JIT still produces it via discovery.
+}
 }

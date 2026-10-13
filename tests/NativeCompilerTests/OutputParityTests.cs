@@ -12,6 +12,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Shouldly;
 using Xunit;
+using System.Text.Json;
 
 namespace NativeCompilerTests;
 
@@ -336,8 +337,22 @@ public class OutputParityTests
 
             var dll = Path.Combine(root, "myc", "Debug", "net10.0", "ParityConsole.dll");
             File.Exists(dll).ShouldBeTrue();
+
+            // Parse the runtimeconfig before running it. A malformed one still ran on the machine
+            // that produced it - the host recovered - but on CI the same file left the app with no
+            // resolvable framework and it aborted with "Could not load file or assembly
+            // 'System.Runtime'". Running it is not a sufficient check.
+            var runtimeConfigPath = Path.Combine(root, "myc", "Debug", "net10.0", "ParityConsole.runtimeconfig.json");
+            File.Exists(runtimeConfigPath).ShouldBeTrue();
+            var runtimeConfigText = File.ReadAllText(runtimeConfigPath);
+            Should.NotThrow(() => JsonDocument.Parse(runtimeConfigText).Dispose(),
+                "produced runtimeconfig.json is not valid JSON");
             var run = Run("dotnet", $"\"{dll}\"");
-            run.exit.ShouldBe(0, $"our console dll failed to run:\n{run.output}");
+            run.exit.ShouldBe(0,
+                $"our console dll failed to run:\n{run.output}" +
+                $"\nruntimeconfig.json was:\n{runtimeConfigText}" +
+                $"\ndotnet --list-runtimes:{Run("dotnet", "--list-runtimes").output}" +
+                $"\ndotnet --info:{Run("dotnet", "--info").output}");
             run.output.ShouldContain("PARITY-RUN-OK");
         }
         finally

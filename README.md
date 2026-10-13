@@ -148,4 +148,5 @@ hardcoded. The parity is enforced by `CliCommandParityTests` and `CliComparisonT
 `.sln` / `.slnx` / `.csproj`, with and without a path).
 
 See **`main.md`** for the feature/limitation matrix, the deps.json output-parity work, and the
-OrchardCore stress-test results.
+OrchardCore stress-test results. See **`PAYLOAD.md`** for how the embedded SDK payload is packaged
+and the options that were considered, and **`UPGRADING.md`** for moving to a new .NET major.
