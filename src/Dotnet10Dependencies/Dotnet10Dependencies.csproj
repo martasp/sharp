@@ -5,9 +5,11 @@
        'embedded-refs.<refpack>.zip' manifest resource; at run time NativeCompiler references the
        project as a plain library and reads the payload back through Payloads.
 
-       Keeping both roles here means NativeCompiler.csproj carries one ProjectReference instead of an
-       Exec plus an EmbeddedResource, and the lookup that AOT depends on (typeof(...).Assembly) can
-       only be written here, because Payloads is the only thing that reads the resource.
+       Everything the payload and the SDK analyzers need lives here and nowhere else: the pinned
+       package versions, the PackageReference/PackageDownload items, the analyzer <Reference>
+       HintPaths, and the AnalyzerRegistry that statically binds those analyzer types. Consumers
+       (NativeCompiler, NativeCompilerCLI, the tests) just reference this project and carry none of
+       it.
 
        The stager stays a separate executable rather than becoming a private entry point: it has to
        run before this project compiles, so it cannot live in the assembly it produces. -->
@@ -19,51 +21,131 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
-  <!-- Pinned so $(PkgMicrosoft_NET_ILLink_Tasks) resolves the ILLink analyzer directory the stager
-       copies into the payload. The payload has to carry those analyzers or a published sharp cannot
-       trim output projects. The version tracks the one NativeCompiler references. -->
+  <!-- Roslyn, needed to compile AnalyzerRegistry (the static binding of every SDK analyzer). -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
+  </ItemGroup>
+
+  <!-- The Microsoft-published packages the payload is sourced from. DependencyModel is an ordinary
+       library used by DepsJsonWriter, so it flows to NativeCompiler as a normal transitive package.
+       ILLink is consumed only for its analyzer folder, so it stays private, and GeneratePathProperty
+       exposes its root as $(Pkg...) for the analyzer <Reference> HintPaths below. The stager reads
+       both package folders from the restore output, not from here. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <!-- The pack version/TFM the payload is built from; recorded in the zip root so the runtime can
-         key its cache on it and never serve refs from a different SDK. Also carried in the resource
-         name. Payloads never hardcodes this version: it discovers the embedded resource by name at
-         run time, so whatever SDK builds it, the constant-free lookup matches. See
-         Payloads.ZipResourceName. -->
-    <_SharpEmbeddedRefPackVersion>$(BundledNETCoreAppPackageVersion)</_SharpEmbeddedRefPackVersion>
-    <_SharpPayloadResourceName>embedded-refs.$(_SharpEmbeddedRefPackVersion).zip</_SharpPayloadResourceName>
+  <!-- The targeting, host and runtime packs cannot be PackageReference: they are packageType
+       DotnetPlatform, whose nuspec says "internal implementation package... not meant for direct
+       consumption", and NuGet rejects a direct reference with NU1213. PackageDownload is the mechanism
+       the .NET SDK itself uses to fetch packs during restore (Microsoft.NET.Sdk.FrameworkReference
+       Resolution.targets), so it is the supported way to obtain them without their assets flowing. -->
+  <ItemGroup>
+    <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[10.0.11]" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[10.0.11]" />
+    <PackageDownload Include="Microsoft.NETCore.App.Host.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
+    <PackageDownload Include="Microsoft.NETCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
+  </ItemGroup>
 
-    <!-- Where the payload comes from, as stager arguments. Every path is quoted because an SDK
-         install under e.g. C:\Program Files breaks the command line otherwise. -->
-    <_SharpEmbeddedPayloadArguments>--targeting-pack-root "$(NetCoreTargetingPackRoot)" --sdk-root "$(MSBuildSDKsPath)/.." --shared-framework-root "$(NetCoreRoot)shared" --illink-analyzers "$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs" --ref-pack-version "$(_SharpEmbeddedRefPackVersion)" --sdk-version "$(NETCoreSdkVersion)" --target-framework "$(TargetFramework)"</_SharpEmbeddedPayloadArguments>
+  <!-- Analyzer file locations, used both as compile-time <Reference> HintPaths here and rewritten to
+       the embedded payload by sharp when it compiles this project during self-hosting
+       (NativeCompilerUtils.CollectHintPathReferences). The $(_Payload*) token names are the contract
+       with that rewriter. -->
+  <PropertyGroup>
+    <_PayloadNetCoreAnalyzersPath>$(NuGetPackageRoot)microsoft.netcore.app.ref/10.0.11/analyzers/dotnet/cs</_PayloadNetCoreAnalyzersPath>
+    <_PayloadAspNetAnalyzersPath>$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/10.0.11/analyzers/dotnet/cs</_PayloadAspNetAnalyzersPath>
   </PropertyGroup>
 
-  <!-- Hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a dependency of
+  <!-- Analyzer DLLs referenced at compile time so AnalyzerRegistry can statically construct their
+       types. Under NativeAOT there is no runtime assembly loading, so every type has to be a direct
+       reference rooted into the native image. Listed one by one on purpose: sharp reads <Reference>
+       items straight out of the csproj and does not expand wildcards, so a glob breaks self-hosting. -->
+  <ItemGroup>
+    <Reference Include="ILLink.RoslynAnalyzer" Private="true">
+      <HintPath>$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\ILLink.RoslynAnalyzer.dll</HintPath>
+    </Reference>
+    <Reference Include="ILLink.CodeFixProvider" Private="true">
+      <HintPath>$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\ILLink.CodeFixProvider.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.RegularExpressions.Generator" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\System.Text.RegularExpressions.Generator.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Json.SourceGeneration" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\System.Text.Json.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Interop.SourceGeneration" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Interop.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Interop.LibraryImportGenerator" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Interop.LibraryImportGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Interop.ComInterfaceGenerator" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Interop.ComInterfaceGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Interop.JavaScript.JSImportGenerator" Private="true">
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Interop.JavaScript.JSImportGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Logging.Generators.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Configuration.Binder.SourceGeneration" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.Http.RequestDelegateGenerator" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- The stager takes no arguments: it reads this project's restore output (obj/project.assets.json)
+       to find the packages and writes obj/payload, so this target only runs it from this project's
+       directory and embeds what it produced. The payload path is deliberately configuration- and
+       TFM-independent (obj/payload, not $(IntermediateOutputPath)), so the stager needs nothing but
+       its working directory to locate both its input and its output.
+
+       Hooks AssignTargetPaths rather than PrepareResources: PrepareResourceNames is a dependency of
        PrepareResources, so a BeforeTargets="PrepareResources" target runs after resources have been
        collected and the zip is silently dropped from the assembly. -->
   <Target Name="StageEmbeddedRefsPayload"
           BeforeTargets="AssignTargetPaths"
           Condition="'$(DesignTimeBuild)' != 'true'">
-    <!-- $(IntermediateOutputPath) is computed by the SDK's targets, i.e. AFTER this project's body is
-         evaluated, so it can only be read here and not at project scope, where it resolves to an empty
-         string. Do not hoist this into either PropertyGroup above: the payload then lands in the source
-         tree and the build still succeeds, because the misplaced zip satisfies the EmbeddedResource
-         below and the tests find it there. Nothing at build time can catch it - by the time the target
-         runs, $(IntermediateOutputPath) is valid again and only _SharpPayloadDir is already wrong. -->
-    <PropertyGroup>
-      <_SharpPayloadDir>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)</_SharpPayloadDir>
-    </PropertyGroup>
-
     <!-- Restores, builds and runs the stager in one shot, so it is built exactly once. A
          ProjectReference to the stager raced this Exec for the same obj/bin and failed intermittently
          on a locked PayloadStager.deps.json; restore is a separate phase from build in
-         `dotnet build`, so the nested restore cannot contend with the outer one. -->
-    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile -- $(_SharpEmbeddedPayloadArguments) --out &quot;$(_SharpPayloadDir)embedded-refs&quot; --zip &quot;$(_SharpPayloadDir)$(_SharpPayloadResourceName)&quot;" />
+         `dotnet build`, so the nested restore cannot contend with the outer one.
+
+         WorkingDirectory is load-bearing: it is what lets the stager open obj/project.assets.json
+         without being told where it is. The child inherits the directory `dotnet build` was invoked
+         from otherwise, which is the repo root, not this project. -->
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile" />
+
+    <!-- The stager names the zip embedded-refs.<refpack>.zip; derive the embedded resource's logical
+         name from the file, so this project never has to know the ref pack version. The name has to
+         come through a property: a bare %(Filename) on a target-created item does not bind to that
+         item and silently falls back to the SDK's path-derived default. -->
+    <ItemGroup>
+      <_PayloadZip Include="$(MSBuildProjectDirectory)/obj/payload/embedded-refs.*.zip" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <_PayloadZipName>@(_PayloadZip->'%(Filename)%(Extension)')</_PayloadZipName>
+    </PropertyGroup>
 
     <ItemGroup>
-      <EmbeddedResource Include="$(_SharpPayloadDir)$(_SharpPayloadResourceName)" LogicalName="$(_SharpPayloadResourceName)" />
+      <EmbeddedResource Include="@(_PayloadZip)" LogicalName="$(_PayloadZipName)" />
     </ItemGroup>
   </Target>
 

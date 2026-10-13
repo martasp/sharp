@@ -1,33 +1,33 @@
 # Upgrading to a new .NET major
 
-**How hard: mechanical, not architectural.** The embedded-payload pipeline is driven entirely by the
-SDK that builds it, so the compiler rebuilds its payload from whatever SDK you install. Upgrading is
+**How hard: mechanical, not architectural.** The embedded payload is sourced from pinned
+Microsoft-published NuGet packages, so it no longer follows the SDK that builds it. Upgrading is
 version literals and names, not a redesign of the mechanism.
 
 ## The coupling
 
-Two things determine what the payload holds, and both come straight from the building SDK — there is
-no hand-written version: the staged ref pack is `$(BundledNETCoreAppPackageVersion)` and the compiler
-TFM is the project files' `net10.0`.
+Two things determine what the payload holds: the pinned version literals in
+`src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`, and the compiler TFM in the project files.
 
 | Thing | Where | Example |
 |---|---|---|
 | Compiler's own TFM | every `.csproj` | `net10.0` |
-| Ref pack the payload is staged from | `$(BundledNETCoreAppPackageVersion)` | `10.0.11` |
+| Ref pack, runtime, host pack and DependencyModel the payload is staged from | pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | `10.0.11` |
+| ILLink analyzers | pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | `10.0.12` |
 
 `EmbeddedSdkRefs.FrameworkName` is `"net" + Environment.Version.Major + ".0"` — the compiler's *own*
 runtime major, not the target project's. A `net11.0` compiler therefore looks under
-`packs/Microsoft.NETCore.App.Ref/<refpack>/ref/net11.0`. So a payload built from an SDK 11 ref pack
-but a compiler still on `net10.0` (or vice versa) resolves to a folder that does not exist.
+`packs/Microsoft.NETCore.App.Ref/<refpack>/ref/net11.0`. So a payload pinned to an 11 ref pack but a
+compiler still on `net10.0` (or vice versa) resolves to a folder that does not exist.
 
-The resource name is `embedded-refs.<refpack>.zip` and carries the ref pack version MSBuild embedded
-for the SDK in use. Nothing has to keep it in step with the runtime: `Payloads.ZipResourceName`
-*discovers* the matching resource in its own assembly instead of comparing against a constant, and a
-JIT-produced compiler (no embedded resource) finds the same versioned payload as a
-`embedded-refs.*.zip` sidecar file. A first version of the design hardcoded the name, and any machine
-with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`) embedded the resource
-under its own version while the constant asked for the write-in one — the build stayed green and the
-compiler failed its run-time lookup.
+The resource name is `embedded-refs.<refpack>.zip` and carries the pinned ref pack version. Nothing has
+to keep it in step with the runtime: `Payloads.ZipResourceName` *discovers* the matching resource in
+its own assembly instead of comparing against a constant, and a JIT-produced compiler (no embedded
+resource) finds the same versioned payload as a `embedded-refs.*.zip` sidecar file. A first version of
+the design hardcoded the name and derived the embedded name from whatever SDK happened to build it, so
+any machine with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`) embedded the
+resource under its own version while the constant asked for the write-in one — the build stayed green
+and the compiler failed its run-time lookup.
 
 ## Checklist
 
@@ -37,13 +37,15 @@ compiler failed its run-time lookup.
 - `README.md` → `## Requirements` names the SDK version.
 
 ### 2. Payload pipeline
-- No version constants to touch: the runtime *discovers* `embedded-refs.<refpack>.zip` by name, so it
-  is indifferent to the ref pack version. `Dotnet10Dependencies.csproj` derives the stager's
-  ref-pack/TFM arguments and the resource name from the SDK. The only thing to verify after
-  installing the new SDK is that the payload builds: check
-  `obj/.../embedded-refs.<refpack>.zip` exists after a build.
-- `tools/PayloadStager` needs no code change; it already takes `--ref-pack-version` and
-  `--sdk-version` as arguments.
+- Bump the pinned version literals in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` — the
+  ref pack, runtime, host pack and DependencyModel `10.0.11` and the ILLink `10.0.12` — plus the
+  compiler TFM in the step below. The runtime *discovers* `embedded-refs.<refpack>.zip` by name, so it
+  needs no change of its own.
+- `tools/PayloadStager` needs no code change: it takes no arguments, reads the ref-pack version and
+  every pack folder back from `src/Dotnet10Dependencies/obj/project.assets.json`, and stamps
+  `$(NETCoreSdkVersion)` from the SDK it runs under.
+- After a build, verify `src/Dotnet10Dependencies/obj/payload/embedded-refs.<refpack>.zip` exists and
+  carries the new version.
 
 ### 3. Compiler + first-party TFMs
 `<TargetFramework>net10.0</TargetFramework>` → `net11.0` in:
@@ -71,8 +73,9 @@ Note `Dotnet10Dependencies` now also appears in `SolutionTests.Parse_RootSolutio
 and `SnapshotTests/Sample.Verify_GetdefaultReferences.verified.txt`, so a rename regenerates those.
 
 ### 6. Package versions
-- `Microsoft.NET.ILLink.Tasks` `10.0.12` — in **both** `src/Dotnet10Dependencies/` and
-  `src/NativeCompiler/` (must stay the same version).
+- `Microsoft.NET.ILLink.Tasks` — the pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
+  (the only reference; `NativeCompiler` gets ILLink through `Dotnet10Dependencies` and the SDK's own
+  `PublishAot` bring-up).
 - `System.Reflection.MetadataLoadContext` `10.0.1`.
 - Roslyn `Microsoft.CodeAnalysis*` `5.9.0` — bump to whatever SDK 11 bundles (Roslyn's major is
   independent of the SDK major; verify against the installed SDK, do not assume `+1`).

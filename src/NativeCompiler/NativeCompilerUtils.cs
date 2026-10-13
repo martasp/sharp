@@ -399,7 +399,7 @@ public static class NativeCompilerUtils
         }
 
     // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
-    // NativeCompiler.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
+    // Dotnet10Dependencies.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
     private static readonly string[] RefPackAnalyzerFileNames =
     {
         "System.Text.RegularExpressions.Generator.dll",
@@ -410,7 +410,7 @@ public static class NativeCompilerUtils
         "Microsoft.Interop.JavaScript.JSImportGenerator.dll",
     };
 
-    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in NativeCompiler.csproj.
+    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in Dotnet10Dependencies.csproj.
     // These live in a *different* payload directory than the NETCore set above.
     private static readonly string[] AspNetRefPackAnalyzerFileNames =
     {
@@ -552,7 +552,7 @@ public static class NativeCompilerUtils
     // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
     // e.g. `$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\...`); the native compiler previously only
     // handled ProjectReference/PackageReference items, so projects referencing DLLs by HintPath (like
-    // NativeCompiler.csproj itself, via the ILLink/Roslyn generator analyzers) failed to compile under
+    // Dotnet10Dependencies.csproj, via the ILLink/Roslyn generator analyzers) failed to compile under
     // self-hosting. Only the analyzer/SDK property tokens this codebase actually uses are expanded;
     // anything else is skipped rather than emulating MSBuild property evaluation.
     private static void CollectHintPathReferences(XML.Project xml, string projectRootPath,
@@ -573,8 +573,8 @@ public static class NativeCompilerUtils
                         EmbeddedSdkRefs.IllinkAnalyzers)
                     .Replace(@"$(PkgMicrosoft_NET_ILLink_Tasks)/analyzers/dotnet/cs",
                         EmbeddedSdkRefs.IllinkAnalyzers)
-                    .Replace("$(_NativeCompilerRefPackAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
-                    .Replace("$(_NativeCompilerAspRefPackAnalyzersPath)", AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation)
+                    .Replace("$(_PayloadNetCoreAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
+                    .Replace("$(_PayloadAspNetAnalyzersPath)", AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation)
                     .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", EmbeddedSdkRefs.SdkDirectory)
                     .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)

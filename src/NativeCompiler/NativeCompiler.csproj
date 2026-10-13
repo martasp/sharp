@@ -16,88 +16,12 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
-
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" />
-
   </ItemGroup>
 
-  <!-- Locate SDK Analyzers Path -->
-  <PropertyGroup>
-    <!-- Pin the ref pack of the SDK running the build. Globbing '<tfm>.*' and joining matches with
-         ';' produced one bogus HintPath when several ref packs were installed (CS0234 on CI). -->
-    <_NativeCompilerRefPackVersionDir>$(NetCoreTargetingPackRoot)\Microsoft.NETCore.App.Ref\$(BundledNETCoreAppPackageVersion)</_NativeCompilerRefPackVersionDir>
-    <_NativeCompilerRefPackAnalyzersPath>$(_NativeCompilerRefPackVersionDir)\analyzers\dotnet\cs</_NativeCompilerRefPackAnalyzersPath>
-    <!-- The ASP.NET Core targeting pack carries its own generators (minimal-API public Program,
-         [LoggerMessage], options/validation/config-binding). They target older Roslyn (4.4/4.13)
-         than the 5.9.0 this project references, which is fine: the single Microsoft.CodeAnalysis
-         copy sharp already carries satisfies every one of them, exactly as it does for the
-         System.Text.Json generator. -->
-    <_NativeCompilerAspRefPackAnalyzersPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs</_NativeCompilerAspRefPackAnalyzersPath>
-  </PropertyGroup>
-
-  <!-- Expose SDK Analyzer DLLs as compile-time references -->
-  <ItemGroup>
-    <Reference Include="ILLink.RoslynAnalyzer" Private="true">
-      <HintPath>$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\ILLink.RoslynAnalyzer.dll</HintPath>
-    </Reference>
-    <Reference Include="ILLink.CodeFixProvider" Private="true">
-      <HintPath>$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\dotnet\cs\ILLink.CodeFixProvider.dll</HintPath>
-    </Reference>
-    <!-- Listed one by one on purpose: our own compiler reads <Reference> items straight out of
-         the csproj and does not expand wildcards, so a glob here breaks self-hosting. -->
-    <Reference Include="System.Text.RegularExpressions.Generator" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\System.Text.RegularExpressions.Generator.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Text.Json.SourceGeneration" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\System.Text.Json.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Interop.SourceGeneration" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Interop.LibraryImportGenerator" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.LibraryImportGenerator.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Interop.ComInterfaceGenerator" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.ComInterfaceGenerator.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Interop.JavaScript.JSImportGenerator" Private="true">
-      <HintPath>$(_NativeCompilerRefPackAnalyzersPath)\Microsoft.Interop.JavaScript.JSImportGenerator.dll</HintPath>
-    </Reference>
-
-    <!-- ASP.NET Core targeting-pack generators. Referenced (not loaded from the embedded payload)
-         for the same reason as the six above: NativeAOT cannot discover types at runtime, so they are
-         rooted into the native image by being statically constructed in AnalyzerRegistry. Without
-         them sharp's web output diverges from `dotnet build` - minimal-API apps lose the
-         `public partial class Program` the SDK emits, and [LoggerMessage] fails with CS8795. -->
-    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Logging.Generators.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Configuration.Binder.SourceGeneration" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.AspNetCore.Http.RequestDelegateGenerator" Private="true">
-      <HintPath>$(_NativeCompilerAspRefPackAnalyzersPath)\Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll</HintPath>
-    </Reference>
-
-    <!-- Microsoft.Extensions.DependencyModel ships only in the SDK (not the ref pack or shared
-         framework). HintPath-copied like the analyzers above so the JIT self-host stays bindable,
-         and so a `dotnet build` of this project copies it to bin/ exactly like the compiler does. -->
-    <Reference Include="Microsoft.Extensions.DependencyModel" Private="true">
-      <HintPath>$(MSBuildSDKsPath)\..\Microsoft.Extensions.DependencyModel.dll</HintPath>
-    </Reference>
-
-  </ItemGroup>
-
-  <!-- The compile-time payload lives in its own assembly; see the note at the end of this file. -->
+  <!-- Every SDK dependency the compiler binds - the targeting packs, the source generators, the
+       ILLink analyzers, the apphost template, Microsoft.Extensions.DependencyModel, and the
+       AnalyzerRegistry that statically constructs them - is owned by Dotnet10Dependencies. This
+       project carries a single reference and no payload configuration of its own. -->
   <ItemGroup>
     <ProjectReference Include="..\Dotnet10Dependencies\Dotnet10Dependencies.csproj" />
   </ItemGroup>
@@ -109,18 +33,12 @@
     <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\AotAnalyzerResources.xml" />
   </ItemGroup>
 
-  <!-- Self-contained compiler payload.
-
+  <!-- The compile-time payload lives in its own assembly; see the note in Dotnet10Dependencies.
        `sharp` needs compile-time metadata (the targeting ref packs), the SDK source generators, the
        ILLink analyzers, the apphost template, and the *names* of the shared-framework assemblies. It
        used to read all of that from the installed SDK, so a machine without a .NET SDK could not use
-       the compiler at all.
-
-       src/Dotnet10Dependencies stages that payload at build time (tools/PayloadStager, in C#) and
-       embeds its zip as a manifest resource of its own assembly. Referencing the project here keeps
-       the whole thing out of this file: the Exec, the EmbeddedResource, and the long list of stager
-       arguments all live next to the code that needs them, and Dotnet10Dependencies.Payloads is the
-       only supported way to read the payload back. EmbeddedSdkRefs.cs extracts it to a version-keyed
-       cache on first use. -->
+       the compiler at all. Dotnet10Dependencies stages that payload at build time (tools/PayloadStager)
+       and embeds its zip as a manifest resource of its own assembly; EmbeddedSdkRefs.cs extracts it to
+       a version-keyed cache on first use. -->
 
 </Project>

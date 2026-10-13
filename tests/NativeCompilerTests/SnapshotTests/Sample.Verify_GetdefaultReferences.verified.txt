@@ -76,10 +76,6 @@
     FilePath: ./Microsoft.AspNetCore.App.SourceGenerators.dll
   },
   {
-    Display: ./Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll,
-    FilePath: ./Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll
-  },
-  {
     Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
     FilePath: ./Microsoft.Bcl.AsyncInterfaces.dll
   },

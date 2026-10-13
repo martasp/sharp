@@ -23,35 +23,4 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NativeCompiler\NativeCompiler.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- NativeCompiler embeds deps.json generation via the SDK-shipped M.E.DependencyModel (a
-         HintPath reference), so hosts must carry the assembly too or in-proc builds fail to JIT
-         DepsJsonWriter.Write. -->
-    <Reference Include="Microsoft.Extensions.DependencyModel" Private="true">
-      <HintPath>$(MSBuildSDKsPath)\..\Microsoft.Extensions.DependencyModel.dll</HintPath>
-    </Reference>
-
-    <!-- The ASP.NET Core targeting-pack generators that AnalyzerRegistry statically constructs.
-         Repeated here for the same reason as M.E.DependencyModel above: MSBuild does not flow
-         HintPath <Reference> items from a referenced project into this host's deps.json, so without
-         them the first registry entry throws FileNotFoundException at JIT time. -->
-    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Logging.Generators.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Configuration.Binder.SourceGeneration" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.AspNetCore.Http.RequestDelegateGenerator" Private="true">
-      <HintPath>$(NetCoreTargetingPackRoot)\Microsoft.AspNetCore.App.Ref\$(BundledNETCoreAppPackageVersion)\analyzers\dotnet\cs\Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 </Project>

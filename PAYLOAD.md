@@ -141,7 +141,7 @@ The runtime extracts it once into a keyed cache.
 |---|---|---|
 | Tells at a glance which SDK the payload came from | Yes | No |
 | Several SDK payloads side by side | No name collision | Collides |
-| Number of places the version is written | **One** — MSBuild's `$(BundledNETCoreAppPackageVersion)`. The runtime *discovers* the embedded name (`Payloads.ZipResourceName`), so there is no second copy to drift | One (a fixed literal) |
+| Number of places the version is written | **One file** — the pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`. The runtime *discovers* the embedded name (`Payloads.ZipResourceName`), so there is no second copy to drift | One (a fixed literal) |
 
 A first attempt hardcoded `embedded-refs.<refpack>.zip` in `Payloads.cs` **and** derived the MSBuild
 `LogicalName` from the SDK, and broke CI: `setup-dotnet` installs a newer `10.0.x` patch than the
@@ -174,6 +174,16 @@ read at runtime through `Payloads.LoadZip()`, which resolves the asset with
 `typeof(Payloads).Assembly` and discover the resource name rather than comparing it against a
 hand-written constant.
 
+### Where the data comes from
+
+The payload *contents* are copied from pinned Microsoft-published NuGet packages
+(`src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`), never from the installed SDK. The targeting,
+runtime and host packs are obtained with `PackageDownload` — they are packageType `DotnetPlatform`,
+which NuGet refuses as a `PackageReference` with `NU1213` — and DependencyModel / ILLink with
+`PackageReference`. The stager reads them out of the NuGet global packages folder and lays them out in
+the SDK shape. Only the reported SDK version is still taken from the building SDK, because
+`sharp --version` must match that machine's `dotnet` (see `UPGRADING.md`).
+
 ## Where it lives
 
 | File | Role |
@@ -186,16 +196,21 @@ hand-written constant.
 ## Invariants and traps
 
 1. **Read the resource via `typeof`, never by name.** Otherwise the AOT trimmer drops it (G4).
-2. **`$(IntermediateOutputPath)` is empty at project scope.** The staging target must resolve it
-   inside the target, or the payload lands in the source tree — and still builds, because the
-   misplaced zip satisfies the `EmbeddedResource`.
-3. **Never write the resource name by hand — discover it.** The embedded name carries the ref pack
+2. **The stager locates its inputs and output by working directory alone.** The staging target sets
+   `WorkingDirectory="$(MSBuildProjectDirectory)"` and the stager reads `obj/project.assets.json` and
+   writes `obj/payload` relative to it — a fixed path, not `$(IntermediateOutputPath)`, which is empty
+   at project scope and configuration-dependent. Without the working directory the child inherits the
+   invocation directory (the repo root), finds no assets file, and stages nothing.
+3. **The zip must sit beside the tree it archives, never inside it.** `ZipFile.CreateFromDirectory`
+   would otherwise try to read the archive it is writing. The tree goes in `obj/payload/embedded-refs/`
+   with the zip at `obj/payload/embedded-refs.<refpack>.zip`.
+4. **Never write the resource name by hand — discover it.** The embedded name carries the ref pack
    version that came from whoever built the assembly; the runtime looks up `embedded-refs.*.zip` in
    its own resources instead of comparing against a constant. A hand-written copy is the drift that
    broke CI (G3).
-4. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
+5. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
    `dotnet build` and only fails at runtime. See `UPGRADING.md`.
-5. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
+6. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
    host assembly matters (G2). A JIT-produced compiler finds its payload as a `embedded-refs.*.zip`
    file beside its assembly; the glob, not the name, is what makes that work.
 
