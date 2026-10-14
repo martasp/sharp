@@ -223,8 +223,15 @@ public class AssemblyAttributeItem
     [XmlAttribute(AttributeName = "Include")]
     public string? Include { get; set; }
 
-    [XmlElement(ElementName = "_Parameter1")]
-    public string? Parameter1 { get; set; }
+    // Positional constructor arguments in declaration order (_Parameter1, _Parameter2, ...), which is
+    // how MSBuild's WriteCodeFragment receives them.
+    public List<string> PositionalParameters { get; set; } = new();
+
+    // Named property assignments: any child element that is not a positional "_ParameterN".
+    public Dictionary<string, string> NamedParameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // First positional argument (used by InternalsVisibleTo items and the module-name manifest).
+    public string? Parameter1 => PositionalParameters.Count > 0 ? PositionalParameters[0] : null;
 }
 
 [XmlRoot(ElementName = "InternalsVisibleTo")]
@@ -371,11 +378,7 @@ public class Project
         {
             Include = AttributeValue(reference, "Include"),
         }).ToList(),
-        AssemblyAttributes = Children(element, "AssemblyAttribute").Select(item => new AssemblyAttributeItem
-        {
-            Include = AttributeValue(item, "Include"),
-            Parameter1 = ElementValue(item, "_Parameter1"),
-        }).ToList(),
+        AssemblyAttributes = Children(element, "AssemblyAttribute").Select(ParseAssemblyAttribute).ToList(),
         InternalsVisibleTo = Children(element, "InternalsVisibleTo").Select(item => new InternalsVisibleToItem
         {
             Include = AttributeValue(item, "Include"),
@@ -384,6 +387,29 @@ public class Project
             .Select(item => new BuildOutputInPackage { Include = AttributeValue(item, "Include") })
             .FirstOrDefault(),
     };
+
+    private static AssemblyAttributeItem ParseAssemblyAttribute(XElement element)
+    {
+        var attribute = new AssemblyAttributeItem { Include = AttributeValue(element, "Include") };
+        var positional = new List<(int Index, string Value)>();
+
+        foreach (var child in element.Elements())
+        {
+            var name = child.Name.LocalName;
+            if (name.StartsWith("_Parameter", StringComparison.Ordinal)
+                && int.TryParse(name.AsSpan("_Parameter".Length), out var index))
+            {
+                positional.Add((index, child.Value));
+            }
+            else
+            {
+                attribute.NamedParameters[name] = child.Value;
+            }
+        }
+
+        attribute.PositionalParameters = positional.OrderBy(item => item.Index).Select(item => item.Value).ToList();
+        return attribute;
+    }
 
     private static Target ParseTarget(XElement element) => new()
     {
