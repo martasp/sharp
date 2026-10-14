@@ -204,6 +204,12 @@ public static class SourceGeneratorRunner
     {
         var generators = new List<ISourceGenerator>(AnalyzerRegistry.GetSourceGenerators());
 
+        // Off-by-default targeting-pack generator: the SDK enables it only for PublishTrimmed/AOT
+        // or an explicit opt-in. Running it for a normal build emits binder interceptors the SDK
+        // does not, which can collide with project-defined option extensions (a CS0433 duplicate).
+        if (project.EnableConfigurationBindingGenerator)
+            generators.Add(AnalyzerRegistry.GetConfigurationBindingGenerator());
+
         // Web-only generators. Under JIT the dynamic discovery below finds these anyway; adding them
         // here is what makes the AOT binary match, since AOT cannot load assemblies at runtime. The
         // gate matters: applied unconditionally, PublicProgramSourceGenerator also makes Program public
@@ -515,6 +521,7 @@ public static class SourceGeneratorRunner
                 "build_property.Nullable" => _project.Nullable,
                 "build_property.TargetFramework" => _project.TargetFramework,
                 "build_property.AllowUnsafeBlocks" => _project.AllowUnsafeBlocks ? "true" : "false",
+                "build_property.EnableConfigurationBindingGenerator" => _project.EnableConfigurationBindingGenerator ? "true" : "false",
                 _ => null
             };
             return value is not null;

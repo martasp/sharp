@@ -92,6 +92,9 @@ public class PropertyGroup
     [XmlElement(ElementName = "EnableRequestDelegateGenerator")]
     public string? EnableRequestDelegateGenerator { get; set; }
 
+    [XmlElement(ElementName = "EnableConfigurationBindingGenerator")]
+    public string? EnableConfigurationBindingGenerator { get; set; }
+
     [XmlElement(ElementName = "LangVersion")]
     public string? LangVersion { get; set; }
 
@@ -322,6 +325,7 @@ public class Project
         AllowUnsafeBlocks = ElementValue(element, "AllowUnsafeBlocks"),
         UseAppHost = ElementValue(element, "UseAppHost"),
         EnableRequestDelegateGenerator = ElementValue(element, "EnableRequestDelegateGenerator"),
+        EnableConfigurationBindingGenerator = ElementValue(element, "EnableConfigurationBindingGenerator"),
         LangVersion = ElementValue(element, "LangVersion"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),

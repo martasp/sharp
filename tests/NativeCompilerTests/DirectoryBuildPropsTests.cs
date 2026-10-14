@@ -62,6 +62,39 @@ public class DirectoryBuildPropsTests
         }
     }
 
+    [Theory]
+    [InlineData("", false)]
+    [InlineData("<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>", true)]
+    [InlineData("<EnableConfigurationBindingGenerator>false</EnableConfigurationBindingGenerator>", false)]
+    [InlineData("<PublishTrimmed>true</PublishTrimmed>", true)]
+    [InlineData("<PublishAot>true</PublishAot>", true)]
+    public void Evaluate_ConfigurationBindingGeneratorGate(string propertyXml, bool expected)
+    {
+        var root = TempRoot("opencode-dbp-binder");
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Directory.Build.props"), $"""
+                <Project>
+                  <PropertyGroup>
+                    {propertyXml}
+                  </PropertyGroup>
+                </Project>
+                """);
+
+            var projectDir = Path.Combine(root, "A");
+            Directory.CreateDirectory(projectDir);
+
+            var result = BuildPropsEvaluator.Evaluate(projectDir);
+
+            result.EnableConfigurationBindingGenerator.ShouldBe(expected);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Build_PropsOnlyImplicitUsings_Compiles()
     {

@@ -56,6 +56,18 @@ public class Project : IProject
             .Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
         || BuildProps.EnableRequestDelegateGenerator;
 
+    // SDK gate for the Configuration Binding Generator. Like the Request Delegate Generator it is
+    // off-by-default (the SDK flips it on only for PublishTrimmed/PublishAot, handled by
+    // BuildProps) and, unlike the other targeting-pack generators, it is interceptor-based rather
+    // than attribute-driven: it emits glue for every `services.Configure<T>(config)` /
+    // `configuration.Get<T>()` call site. Running it for a plain build emits code the SDK never
+    // produces, which can collide with a project that defines its own
+    // Microsoft.Extensions.DependencyInjection.OptionsServiceCollectionExtensions.
+    public bool EnableConfigurationBindingGenerator =>
+        (XMLProject.PropertyGroup?.FirstOrDefault()?.EnableConfigurationBindingGenerator?.Trim()
+            .Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
+        || BuildProps.EnableConfigurationBindingGenerator;
+
     public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion ?? BuildProps.LangVersion;
 
     public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
