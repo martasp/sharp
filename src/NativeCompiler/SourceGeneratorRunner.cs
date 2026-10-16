@@ -430,52 +430,52 @@ public static class SourceGeneratorRunner
             Console.WriteLine(warning);
     }
 
-    // Assembly.LoadFrom keeps the file mapped for the lifetime of the default ALC, which would
+    // Per-target single-flight guards. Parallel projects in one host each load their own generator
+    // set, and those sets overlap heavily (framework-pack analyzers, the Razor generator, package
+    // analyzers), so without this two builds compute the same destination for a shared generator and
+    // race the copy. Serializing per destination makes the first build publish the copy and every
+    // later build reuse it - the work runs exactly once.
+    private static readonly ConcurrentDictionary<string, object> ShadowCopyLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Shadow copies live in a directory private to this process: no other sharp process can be
+    // writing the same destination, and the copies are only ever read here, so a plain copy needs
+    // no staging dance. Keyed by source last-write so a rebuilt generator still yields a fresh copy.
+    private static readonly string ShadowCopyRoot =
+        Path.Combine(Path.GetTempPath(), "NativeCompilerGenerators", Environment.ProcessId.ToString());
+
+    static SourceGeneratorRunner()
+    {
+        // The copies are process-private scratch; drop them on exit so a shared temp directory does
+        // not accumulate one tree per run.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => TryDeleteDirectory(ShadowCopyRoot);
+    }
+
+    // Assembly.LoadFrom keeps the file mapped for the lifetime of the load context, which would
     // prevent a later rebuild from overwriting the analyzer dll (SDK projects are recompiled into
     // the same sharpbin path). Load a private copy keyed by last-write so the original stays free.
     private static string ShadowCopy(string source)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "NativeCompilerGenerators");
-        Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(ShadowCopyRoot);
 
         var ticks = File.GetLastWriteTimeUtc(source).Ticks;
-        var target = Path.Combine(dir,
+        var target = Path.Combine(ShadowCopyRoot,
             $"{Path.GetFileNameWithoutExtension(source)}.{ticks}.{source.GetHashCode():x}.dll");
 
-        if (!File.Exists(target))
+        lock (ShadowCopyLocks.GetOrAdd(target, _ => new object()))
         {
-            // Several builds run at once in one host (parallel projects, or parallel test
-            // collections) and compute the same target name for a shared generator, so a bare
-            // File.Copy races on the destination and one of them fails with an IOException. Copy
-            // to a private temp name and move it into place instead; the content is identical, so
-            // losing the race just means another build already wrote the same file.
-            var temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            try
-            {
-                File.Copy(source, temp);
-                try
-                {
-                    File.Move(temp, target, overwrite: true);
-                }
-                catch (IOException)
-                {
-                    // Another build created the same (identical) shadow copy; use theirs.
-                }
-            }
-            finally
-            {
-                TryDeleteFile(temp);
-            }
+            if (!File.Exists(target))
+                File.Copy(source, target);
         }
 
         return target;
     }
 
-    private static void TryDeleteFile(string path)
+    private static void TryDeleteDirectory(string path)
     {
         try
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
