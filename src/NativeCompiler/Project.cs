@@ -274,20 +274,6 @@ public class Project : IProject
         return path;
     }
 
-    // Reads the TargetFramework from an arbitrary csproj (used when a build output must be located
-    // for a referenced/analyzer project without constructing a full Project).
-    public static string? ResolveTargetFramework(string csprojPath)
-    {
-        try
-        {
-            return XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     public static void CreateFolderIfNotExists(string folderPath)
     {
         if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);

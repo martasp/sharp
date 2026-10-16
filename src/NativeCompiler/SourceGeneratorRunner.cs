@@ -152,36 +152,18 @@ public static class SourceGeneratorRunner
         string.Equals(project.ProjectName, Path.GetFileNameWithoutExtension(csprojPath),
             StringComparison.OrdinalIgnoreCase);
 
-    // Build-on-demand for analyzer projects (OutputItemType="Analyzer"). GetSharpBinDirectory creates
-    // the target folder as a side effect, so the directory existing says nothing about the output;
-    // probe the DLL itself. Serial builds reach this once per analyzed project, and parallel solution
-    // waves can reach it concurrently, so serialize a single build per project behind a lock.
-    private static readonly ConcurrentDictionary<string, object> AnalyzerBuildLocks =
-        new(StringComparer.OrdinalIgnoreCase);
-
+    // Build-on-demand for analyzer projects (OutputItemType="Analyzer"). Build owns the single-flight
+    // and the authoritative output location (Project.DllPathName resolves the target framework exactly
+    // the way compilation does, including Directory.Build.props), so there is no per-caller lock and
+    // no separately-computed path to drift from the one the build actually writes.
     private static string ResolveAnalyzerProjectDll(string csprojPath)
     {
         var projectDir = Path.GetDirectoryName(csprojPath) ?? "";
-        var sharpBinDir = Project.GetSharpBinDirectory(projectDir, Project.ResolveTargetFramework(csprojPath));
-        var dll = Path.Combine(sharpBinDir, Path.GetFileNameWithoutExtension(csprojPath) + ".dll");
-
-        if (!File.Exists(dll))
-        {
-            lock (AnalyzerBuildLocks.GetOrAdd(Path.GetFullPath(csprojPath), _ => new object()))
-            {
-                if (!File.Exists(dll))
-                {
-                    var result = NativeCompiler.Build(projectDir);
-                    if (result.Project?.DllPathName is { } reportedPath && File.Exists(reportedPath))
-                        return reportedPath;
-                    if (!result.Success)
-                        throw new Exception($"Cant build analyzer project '{Path.GetFileName(csprojPath)}': {result.Errors}");
-                }
-            }
-        }
-
-        if (!File.Exists(dll)) throw new Exception($"Cant find dll path {dll}");
-        return dll;
+        var result = NativeCompiler.Build(projectDir);
+        if (!result.Success)
+            throw new Exception($"Cant build analyzer project '{Path.GetFileName(csprojPath)}': {result.Errors}");
+        return result.Project?.DllPathName
+            ?? throw new Exception($"Cant find dll path for analyzer project '{Path.GetFileName(csprojPath)}'");
     }
 
     private static void AddAnalyzerDlls(HashSet<string> dlls, string packagePath)
