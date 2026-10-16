@@ -152,13 +152,17 @@ public static class SourceGeneratorRunner
         string.Equals(project.ProjectName, Path.GetFileNameWithoutExtension(csprojPath),
             StringComparison.OrdinalIgnoreCase);
 
-    // Build-on-demand for analyzer projects (OutputItemType="Analyzer"). Build owns the single-flight
-    // and the authoritative output location (Project.DllPathName resolves the target framework exactly
-    // the way compilation does, including Directory.Build.props), so there is no per-caller lock and
-    // no separately-computed path to drift from the one the build actually writes.
+    // Build-on-demand for analyzer projects (OutputItemType="Analyzer"). The wave plan already builds
+    // every analyzer project (including props-injected ones) before its consumers, so in a solution
+    // build the output is present and we just locate it; only a standalone build reaches the missing
+    // case. The path comes from Project.GetOutputDllPath, which resolves TargetFramework the same way
+    // compilation does, so the probe cannot drift from the emitted path.
     private static string ResolveAnalyzerProjectDll(string csprojPath)
     {
         var projectDir = Path.GetDirectoryName(csprojPath) ?? "";
+        var dll = Project.GetOutputDllPath(projectDir, csprojPath);
+        if (File.Exists(dll)) return dll;
+
         var result = NativeCompiler.Build(projectDir);
         if (!result.Success)
             throw new Exception($"Cant build analyzer project '{Path.GetFileName(csprojPath)}': {result.Errors}");

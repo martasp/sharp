@@ -48,65 +48,14 @@ public static class NativeCompiler
     {
         var fullPath = Path.GetFullPath(projectPath);
 
-        // The same project can be requested concurrently: BuildSolution fans a wave out over
-        // Parallel.ForEach, and a project resolves its (transitive) project references on demand while
-        // it builds, so two projects in one wave can both pull the same analyzer/reference project.
-        // Make the first request build and every overlapping one reuse that single result instead of
-        // racing or failing. A successful result is kept for the process (a repeated request is then a
-        // cheap cache hit); a failed one is dropped so a later attempt can still succeed.
-        var stack = _threadBuildStack ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        // The same thread re-entering a project already on its build stack is a real reference cycle
-        // (a project reaching itself through its own references), which must stay an error, not a wait.
-        if (!stack.Add(fullPath))
+        // Cycle guard. A project that reaches itself through its own (transitive) references must be
+        // reported, not built forever. BuildSolution schedules a complete, acyclic wave plan first, so
+        // within a solution build this only ever trips on a genuine cycle; a single-project build
+        // resolves its references on one thread, so re-entry here is always that same cycle.
+        if (!BuildsInProgress.TryAdd(fullPath, 0))
             throw new InvalidOperationException(
                 $"Circular project reference detected: '{projectPath}' is already being built.");
 
-        try
-        {
-            var entry = BuildsInProgress.GetOrAdd(fullPath, static _ => new BuildEntry());
-
-            if (Interlocked.CompareExchange(ref entry.OwnerThreadId, Environment.CurrentManagedThreadId, 0) != 0)
-            {
-                // Another thread owns this build: wait for it and reuse its result. Completed is set
-                // after Result is published, so the wait also publishes the result to this thread.
-                entry.Completed.Wait();
-                return entry.Result!;
-            }
-
-            try
-            {
-                entry.Result = BuildCoreSafe(projectPath);
-                return entry.Result;
-            }
-            finally
-            {
-                if (entry.Result?.Success != true)
-                    BuildsInProgress.TryRemove(new KeyValuePair<string, BuildEntry>(fullPath, entry));
-                entry.Completed.Set();
-            }
-        }
-        finally
-        {
-            stack.Remove(fullPath);
-        }
-    }
-
-    private sealed class BuildEntry
-    {
-        public readonly ManualResetEventSlim Completed = new(false);
-        public BuildResult? Result;
-        public int OwnerThreadId;
-    }
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, BuildEntry> BuildsInProgress =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    // Projects currently on this thread's build stack, so a genuine cycle is still detected without
-    // mistaking an unrelated concurrent request for one.
-    [ThreadStatic] private static HashSet<string>? _threadBuildStack;
-
-    private static BuildResult BuildCoreSafe(string projectPath)
-    {
         try
         {
             return BuildCore(projectPath);
@@ -126,7 +75,14 @@ public static class NativeCompiler
                 null,
                 string.Empty);
         }
+        finally
+        {
+            BuildsInProgress.TryRemove(fullPath, out _);
+        }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> BuildsInProgress =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static BuildResult BuildCore(string projectPath)
     {
@@ -370,10 +326,36 @@ public static class NativeCompiler
                 errors.Add($"{csproj}: {ex.Message}");
             }
 
+            // Analyzer project references injected through Directory.Build.props (e.g. OrchardCore's
+            // Commons.props adds OrchardCore.SourceGenerators to every project) are build dependencies
+            // too, but they live in the evaluated props chain rather than the csproj, so the
+            // ProjectReference items above never see them. Left out of the plan, a shared generator
+            // lands in the same wave as its consumers, and each consumer builds it on demand -
+            // concurrently and redundantly. Adding the edge puts it in its own earlier wave instead.
+            AddAnalyzerProjectReferences(csproj, directory, refs, projects, queue);
+
             references[csproj] = refs;
         }
 
         return TopologicalSort(projects, references, errors);
+    }
+
+    private static void AddAnalyzerProjectReferences(
+        string csproj, string directory, HashSet<string> refs, SortedSet<string> projects, Queue<string> queue)
+    {
+        var self = Path.GetFullPath(csproj);
+        foreach (var analyzerRef in BuildPropsEvaluator.Evaluate(directory).AnalyzerProjectReferences)
+        {
+            // The props evaluator does not honor MSBuild conditions, so a reference carrying
+            // Condition="$(MSBuildProjectName) != 'ThisProject'" is read as a self-reference. Those
+            // generator projects skip themselves at run time (SourceGeneratorRunner.SkippedSelf), so
+            // drop the self-edge here - otherwise it is an unorderable cycle and the whole solution
+            // falls back to a serial build.
+            if (string.Equals(analyzerRef, self, StringComparison.OrdinalIgnoreCase)) continue;
+
+            refs.Add(analyzerRef);
+            if (projects.Add(analyzerRef)) queue.Enqueue(analyzerRef);
+        }
     }
 
     // Dependencies build first; anything that cannot be ordered (a cycle) is still built, in stable

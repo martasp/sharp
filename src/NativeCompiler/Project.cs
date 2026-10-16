@@ -274,6 +274,21 @@ public class Project : IProject
         return path;
     }
 
+    // Locates a project's output DLL without building it, resolving TargetFramework exactly the way
+    // compilation does (csproj <TargetFramework>, then Directory.Build.props) so callers can skip a
+    // build when the output is already present without risking a path that drifts from the one the
+    // build actually writes.
+    public static string GetOutputDllPath(string projectRootPath, string csprojPath)
+    {
+        string? targetFramework = null;
+        try { targetFramework = XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework; }
+        catch { /* fall through to Directory.Build.props */ }
+        targetFramework ??= BuildPropsEvaluator.Evaluate(projectRootPath).TargetFramework;
+
+        return Path.Combine(GetSharpBinDirectory(projectRootPath, targetFramework),
+            Path.GetFileNameWithoutExtension(csprojPath) + ".dll");
+    }
+
     public static void CreateFolderIfNotExists(string folderPath)
     {
         if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);

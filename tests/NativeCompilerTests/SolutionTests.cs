@@ -29,6 +29,26 @@ public class SolutionTests
 
     public static string SlnxFixturesSln = Path.Combine(RepoRoot, "tests", "TestExampleProjects", "SlnxFixtures.slnx");
 
+    public static string PropsAnalyzerSln =
+        Path.Combine(RepoRoot, "tests", "TestExampleProjects", "PropsAnalyzerFixtures", "PropsAnalyzerFixtures.slnx");
+
+    [Fact]
+    public void BuildSolution_SchedulesPropsInjectedAnalyzerProject()
+    {
+        var result = NativeCompiler.NativeCompiler.BuildSolution(PropsAnalyzerSln);
+
+        result.Errors.ShouldBeEmpty();
+        result.Success.ShouldBeTrue(string.Join("\n", result.Errors));
+
+        // Gen is not listed in the .slnx; it appears in the plan only because the sort follows the
+        // analyzer ProjectReference that Directory.Build.props injects. Without that edge, Gen would
+        // not be scheduled - each consumer would pull it in, and potentially rebuild it, on demand.
+        var names = result.Projects.Select(project => project.ProjectName).ToList();
+        names.ShouldContain("Gen");
+        names.ShouldContain("Consumer");
+        names.IndexOf("Gen").ShouldBeLessThan(names.IndexOf("Consumer"));
+    }
+
     [Fact]
     public void Parse_RootSolution_ShouldListOnlyCsprojProjects()
     {

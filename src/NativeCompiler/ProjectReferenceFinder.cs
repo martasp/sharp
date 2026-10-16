@@ -18,9 +18,13 @@ public class ProjectReferenceFinder
         if (!File.Exists(referencedProjectCsproj))
             throw new Exception($"Cant find csproj {referencedProjectCsproj}");
 
-        // Build owns the single-flight and the authoritative output location: the build result reports
-        // exactly where it emitted (Project.DllPathName), so there is no retry loop and no separately
-        // computed path that could miss a freshly emitted file.
+        // The wave plan builds every referenced project before its dependents, so in a solution build
+        // the output is present and we just locate it; only a standalone build reaches the missing
+        // case. GetOutputDllPath resolves TargetFramework the same way compilation does, so the probe
+        // cannot drift from the emitted path.
+        var dllPath = Project.GetOutputDllPath(Path.GetFullPath(referencedProjectDir), referencedProjectCsproj);
+        if (File.Exists(dllPath)) return dllPath;
+
         var buildResult = NativeCompiler.Build(referencedProjectDir);
         if (!buildResult.Success)
             throw new Exception($"Cant build {referencedProjectDir}: {buildResult.Errors}");
