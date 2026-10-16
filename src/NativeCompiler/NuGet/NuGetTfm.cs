@@ -10,7 +10,7 @@ public static class NuGetTfm
         Core,
     }
 
-    private readonly record struct Tfm(Kind Kind, int Major, int Minor, int Build)
+    private readonly record struct Tfm(Kind Kind, int Major, int Minor, int Build, string Platform)
     {
         public int Magnitude => Major * 1000 + Minor * 10 + Build;
     }
@@ -24,6 +24,13 @@ public static class NuGetTfm
 
         var candidate = Parse(candidateTfm);
         if (candidate.Kind == Kind.Unknown) return 0;
+
+        // A candidate that targets a specific platform (e.g. net10.0-ios26.0) is only usable by a
+        // target declaring the same platform. Without this a plain `net10.0` target would pick the
+        // iOS/tvOS lib folder (whose platform suffix it otherwise ignores) over the compatible net8.0.
+        if (candidate.Platform.Length > 0 &&
+            !string.Equals(candidate.Platform, target.Platform, StringComparison.OrdinalIgnoreCase))
+            return 0;
 
         if (candidate.Kind == target.Kind && candidate.Major == target.Major && candidate.Minor == target.Minor)
             return 1_000_000;
@@ -61,18 +68,28 @@ public static class NuGetTfm
         return older.Build <= newer.Build;
     }
 
+    // The platform name in a TFM suffix, ignoring its version: "ios26.0" -> "ios", "windows7.0" -> "windows".
+    private static string PlatformName(string suffix)
+    {
+        var end = 0;
+        while (end < suffix.Length && char.IsLetter(suffix[end])) end++;
+        return suffix[..end].ToLowerInvariant();
+    }
+
     private static Tfm Parse(string tfm)
     {
         if (string.IsNullOrWhiteSpace(tfm)) return default;
 
-        // Drop platform suffixes: "net10.0-windows7.0" -> "net10.0".
-        var value = tfm.Split('-', 2)[0].Trim().ToLowerInvariant();
+        // Split "net10.0-windows7.0" into framework "net10.0" and platform "windows7.0".
+        var separator = tfm.IndexOf('-');
+        var value = (separator < 0 ? tfm : tfm[..separator]).Trim().ToLowerInvariant();
+        var platform = separator < 0 ? "" : PlatformName(tfm[(separator + 1)..]);
 
         if (value.StartsWith("netstandard", StringComparison.Ordinal))
-            return ParseVersion(value, "netstandard", Kind.Standard);
+            return ParseVersion(value, "netstandard", Kind.Standard, platform);
 
         if (value.StartsWith("netcoreapp", StringComparison.Ordinal))
-            return ParseVersion(value, "netcoreapp", Kind.Core);
+            return ParseVersion(value, "netcoreapp", Kind.Core, platform);
 
         if (value.StartsWith("net", StringComparison.Ordinal))
         {
@@ -80,28 +97,28 @@ public static class NuGetTfm
 
             // "net6.0"/"net10.0" (.NET Core+, first segment >= 5) vs "net472"/"net48" (legacy .NET Framework).
             if (rest.Contains('.') && ParseFirstSegment(rest) >= 5)
-                return ParseVersion(rest, "", Kind.Core);
+                return ParseVersion(rest, "", Kind.Core, platform);
 
-            return ParseFramework(rest);
+            return ParseFramework(rest, platform);
         }
 
         return default;
     }
 
-    private static Tfm ParseVersion(string value, string prefix, Kind kind)
+    private static Tfm ParseVersion(string value, string prefix, Kind kind, string platform)
     {
         var rest = value.Substring(prefix.Length).TrimStart('.');
         var (major, minor, build) = ParseSegments(rest);
-        return new Tfm(kind, major, minor, build);
+        return new Tfm(kind, major, minor, build, platform);
     }
 
-    private static Tfm ParseFramework(string digits)
+    private static Tfm ParseFramework(string digits, string platform)
     {
         // "35" -> 3.5   "45" -> 4.5   "472" -> 4.7.2   "48" -> 4.8   "481" -> 4.8.1
         var major = digits.Length > 0 && int.TryParse(digits[0].ToString(), out var m) ? m : 0;
         var minor = digits.Length > 1 && int.TryParse(digits[1].ToString(), out var mi) ? mi : 0;
         var build = digits.Length > 2 && int.TryParse(digits.Substring(2), out var b) ? b : 0;
-        return new Tfm(Kind.Framework, major, minor, build);
+        return new Tfm(Kind.Framework, major, minor, build, platform);
     }
 
     private static int ParseFirstSegment(string value)

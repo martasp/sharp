@@ -15,6 +15,11 @@ namespace NativeCompilerTests;
 // the matching `dotnet` invocation after shared normalization (path tokens + restore/time noise).
 // The captured outputs are also rendered side-by-side into a Verify snapshot, so any drift is visible
 // in review. This is the contract: where our CLI says it behaves like `dotnet`, it must match.
+//
+// These build the checked-in HelloParityFixture/FailingFixture/SlnFixtures directories through the SDK
+// and the CLI - the same fixtures CliComparisonTests and SolutionTests build. The sequential collection
+// keeps them serialized so concurrent builders cannot race on the fixtures' obj/bin.
+[Collection("Sequential Tests 4")]
 public class CliCommandParityTests
 {
     public static string RepoRoot =

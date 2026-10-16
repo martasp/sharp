@@ -58,6 +58,8 @@ public class BootstrapPipelineTests
             throw new InvalidOperationException(
                 "Missing AOT seed - run `publish.bat` (builds + signs NativeCompilerCLI.exe) before this test.");
 
+        PruneStaleSandboxes();
+
         var sandbox = Path.Combine(Path.GetTempPath(), "nc-bootstrap-" + Guid.NewGuid().ToString("N"));
         CopyTree(RepoRoot, sandbox);
         var sln = Path.Combine(sandbox, SolutionFile);
@@ -97,6 +99,22 @@ public class BootstrapPipelineTests
 
         // The sandbox and per-generation compiler copies are intentionally kept (paths are
         // printed above) so each stage can be inspected or re-run manually after the test.
+    }
+
+    // The sandbox (a full repo copy, ~300 MB) and the per-generation compiler copies are left in
+    // place after a run for manual inspection, but each run leaks a fresh set. On a tmpfs that fills
+    // the volume after a few runs and then fails unrelated tests for lack of space. Drop artifacts
+    // from previous runs at the start of each run; the tree this run produces stays inspectable.
+    private static void PruneStaleSandboxes()
+    {
+        foreach (var pattern in new[] { "nc-bootstrap-*", "nc-gen-*" })
+        {
+            foreach (var directory in Directory.EnumerateDirectories(Path.GetTempPath(), pattern))
+            {
+                try { Directory.Delete(directory, recursive: true); }
+                catch { /* best effort: a concurrent run may hold a file */ }
+            }
+        }
     }
 
     private readonly record struct CompilationResult(int ExitCode, string Output);

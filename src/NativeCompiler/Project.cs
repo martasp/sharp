@@ -36,6 +36,8 @@ public class Project : IProject
     public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework
                                       ?? BuildProps.TargetFramework;
 
+    public string? RuntimeIdentifier => XMLProject.PropertyGroup?.FirstOrDefault()?.RuntimeIdentifier;
+
     public bool AllowUnsafeBlocks =>
         (XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
         || BuildProps.AllowUnsafeBlocks;
@@ -159,6 +161,48 @@ public class Project : IProject
     public bool IsWebSdk => (XMLProject.Sdk ?? "").Split(';')
         .Select(sdk => sdk.Trim())
         .Contains("Microsoft.NET.Sdk.Web", StringComparer.OrdinalIgnoreCase);
+
+    // Razor SDK projects (Microsoft.NET.Sdk.Razor / Microsoft.NET.Sdk.Web). Drives Razor view/component
+    // compilation via the Razor source generator (see RazorSupport).
+    public bool UsesRazorSdk => RazorSupport.UsesRazorSdk(XMLProject.Sdk);
+
+    // <AddRazorSupportForMvc> (set by MVC view projects, e.g. OrchardCore modules). Determines whether
+    // .cshtml files compile into MVC views.
+    public bool AddRazorSupportForMvc =>
+        XMLProject.PropertyGroup?.FirstOrDefault()?.AddRazorSupportForMvc
+            ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+
+    // The Razor language version the generator targets. Defaults to the TFM's version (e.g. net10.0 ->
+    // "10.0"); a project may override it with <RazorLangVersion>.
+    public string RazorLangVersion
+    {
+        get
+        {
+            var declared = XMLProject.PropertyGroup?.FirstOrDefault()?.RazorLangVersion;
+            if (!string.IsNullOrWhiteSpace(declared)) return declared.Trim();
+
+            var tfm = TargetFramework ?? "";
+            var trimmed = tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase) ? tfm[3..] : tfm;
+            var dash = trimmed.IndexOf('-');
+            if (dash >= 0) trimmed = trimmed[..dash];
+            return string.IsNullOrEmpty(trimmed) ? "10.0" : trimmed;
+        }
+    }
+
+    // The Razor inputs (.cshtml -> MVC views, .razor -> components) the source generator compiles.
+    // Empty for projects that do not use the Razor SDK or have no Razor files.
+    private IReadOnlyList<RazorInput>? _razorInputs;
+    public IReadOnlyList<RazorInput> RazorInputs => _razorInputs ??= UsesRazorSdk
+        ? RazorSupport.Collect(
+            ProjectRootPath,
+            IsWebSdk,
+            defaultItemsEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultItems),
+            generateEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorGenerateItems),
+            componentEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorComponentItems))
+        : Array.Empty<RazorInput>();
+
+    private static bool IsPropertyFalse(string? value) =>
+        value?.Trim().Equals("false", StringComparison.OrdinalIgnoreCase) ?? false;
 
     // Aspire AppHost projects (Sdk="Aspire.AppHost.Sdk"). The SDK's build targets synthesize
     // "Projects.<ClassName>" metadata classes for every project resource reference (and the host

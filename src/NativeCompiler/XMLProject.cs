@@ -109,6 +109,21 @@ public class PropertyGroup
 
     [XmlElement(ElementName = "InterceptorsPreviewNamespaces")]
     public string? InterceptorsPreviewNamespaces { get; set; }
+
+    // Razor SDK (Microsoft.NET.Sdk.Razor / Microsoft.NET.Sdk.Web). AddRazorSupportForMvc opts .cshtml
+    // files into the MVC view pipeline; RazorLangVersion overrides the language version the Razor
+    // source generator targets (defaults to the TFM's version, e.g. "10.0" for net10.0).
+    [XmlElement(ElementName = "AddRazorSupportForMvc")]
+    public string? AddRazorSupportForMvc { get; set; }
+
+    [XmlElement(ElementName = "RazorLangVersion")]
+    public string? RazorLangVersion { get; set; }
+
+    [XmlElement(ElementName = "EnableDefaultRazorGenerateItems")]
+    public string? EnableDefaultRazorGenerateItems { get; set; }
+
+    [XmlElement(ElementName = "EnableDefaultRazorComponentItems")]
+    public string? EnableDefaultRazorComponentItems { get; set; }
 }
 
 [XmlRoot(ElementName = "Content")]
@@ -338,6 +353,10 @@ public class Project
         DefineConstants = ElementValue(element, "DefineConstants"),
         InterceptorsNamespaces = ElementValue(element, "InterceptorsNamespaces"),
         InterceptorsPreviewNamespaces = ElementValue(element, "InterceptorsPreviewNamespaces"),
+        AddRazorSupportForMvc = ElementValue(element, "AddRazorSupportForMvc"),
+        RazorLangVersion = ElementValue(element, "RazorLangVersion"),
+        EnableDefaultRazorGenerateItems = ElementValue(element, "EnableDefaultRazorGenerateItems"),
+        EnableDefaultRazorComponentItems = ElementValue(element, "EnableDefaultRazorComponentItems"),
     };
 
     private static ItemGroup ParseItemGroup(XElement element) => new()

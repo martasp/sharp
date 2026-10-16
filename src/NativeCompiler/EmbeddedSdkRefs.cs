@@ -112,6 +112,14 @@ public static class EmbeddedSdkRefs
     public static string AppHostTemplate => Path.Combine(SdkDirectory, "AppHostTemplate");
 
     /// <summary>
+    /// Directory holding the Razor source generators (the MVC view / component compiler). Empty on a
+    /// payload staged without a .NET SDK present, in which case Razor projects fall back to no view
+    /// compilation. Staged from the installed SDK because the Razor compiler ships only as part of the
+    /// Microsoft.NET.Sdk.Razor SDK component, not in any reference pack.
+    /// </summary>
+    public static string RazorSourceGenerators => Path.Combine(SdkDirectory, "razor-source-generators");
+
+    /// <summary>
     /// Name of the payload when it travels as a sidecar file rather than an embedded resource.
     /// Discovered, like the resource name itself.
     /// </summary>

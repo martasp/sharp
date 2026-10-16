@@ -176,4 +176,85 @@ public class AssemblyAttributeTests
         lines.Count.ShouldBe(1);
         lines[0].ShouldBe("[assembly: System.Reflection.AssemblyMetadataAttribute(\"Path\", \"C:\\\\temp\\\\x\")]");
     }
+
+    // End-to-end for the module-asset style target: a Directory.Build.props globs ** into
+    // EmbeddedResource, a Directory.Build.targets batches it into a manifest + LogicalName update,
+    // and the emitted attribute type/name are read from the targets (no product strings in source).
+    private const string AssetProps = @"<Project>
+  <PropertyGroup>
+    <DefaultLanguageSourceExtension>.cs</DefaultLanguageSourceExtension>
+    <ModuleDefaultAssetExcludes>Properties\**;**\*$(DefaultLanguageSourceExtension);**\*.resx</ModuleDefaultAssetExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include=""**\*"" Exclude=""$(ModuleDefaultAssetExcludes);$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)"" />
+  </ItemGroup>
+</Project>";
+
+    private const string AssetTargets = @"<Project>
+  <Target Name=""EmbedAssets"">
+    <RemoveDuplicates Inputs=""@(EmbeddedResource)"">
+      <Output TaskParameter=""Filtered"" ItemName=""AssetFiles"" />
+    </RemoveDuplicates>
+    <ItemGroup>
+      <AssetManifest Include=""Areas\$(AssemblyName)\%(AssetFiles.RelativeDir)%(Filename)%(Extension)|%(AssetFiles.FullPath)""
+                     Condition=""'%(AssetFiles.Link)' == '' and '%(AssetFiles.Filename)' != ''"" />
+    </ItemGroup>
+    <ItemGroup>
+      <EmbeddedResource Remove=""@(EmbeddedResource)"" />
+      <EmbeddedResource Include=""@(AssetFiles)"" />
+      <EmbeddedResource Update=""@(EmbeddedResource)"" Condition=""'%(EmbeddedResource.Link)' == '' and '%(Extension)' != '.resx'"">
+        <LogicalName>$([System.String]::new('$(AssemblyName).%(RelativeDir)%(FileName)%(Extension)').Replace('\', '>').Replace('/', '>'))</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Update=""@(EmbeddedResource)"" Condition=""!('%(EmbeddedResource.Link)' == '' or '%(Extension)' == '.resx')"">
+        <LogicalName>$([System.String]::new('$(AssemblyName).%(EmbeddedResource.Link)').Replace('\', '>').Replace('/', '>'))</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+    <ItemGroup>
+      <AssemblyAttribute Include=""Vendor.Manifest.AssetAttribute"">
+        <_Parameter1>%(AssetManifest.Identity)</_Parameter1>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
+</Project>";
+
+    [Fact]
+    public void GetEmbeddedResources_ModuleAssetTarget_UsesLogicalNameAndExcludesNonAssetFiles()
+    {
+        var root = NewFixtureRoot();
+        Write(Path.Combine(root, "Directory.Build.props"), AssetProps);
+        Write(Path.Combine(root, "Directory.Build.targets"), AssetTargets);
+        var csproj = Path.Combine(root, "App", "App.csproj");
+        WriteProject(csproj, "");
+        Write(Path.Combine(root, "App", "wwwroot", "css", "app.css"), "body{}");
+        Write(Path.Combine(root, "App", "Views", "Index.cshtml"), "<h1>hi</h1>");
+        Write(Path.Combine(root, "App", "Services.cs"), "class Services {}");
+        Write(Path.Combine(root, "App", "data.resx"), "<root/>");
+
+        var resources = AssemblyAttributeEvaluator.GetEmbeddedResources(Load(csproj));
+
+        resources.Select(resource => resource.Name).OrderBy(name => name, StringComparer.Ordinal)
+            .ShouldBe(new[] { "App.Views>Index.cshtml", "App.wwwroot>css>app.css" });
+        resources.ShouldContain(resource => resource.FilePath.EndsWith(Path.Combine("wwwroot", "css", "app.css"), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetAttributeSources_ModuleAssetTarget_BatchesAndSkipsExcludedFiles()
+    {
+        var root = NewFixtureRoot();
+        Write(Path.Combine(root, "Directory.Build.props"), AssetProps);
+        Write(Path.Combine(root, "Directory.Build.targets"), AssetTargets);
+        var csproj = Path.Combine(root, "App", "App.csproj");
+        WriteProject(csproj, "");
+        Write(Path.Combine(root, "App", "wwwroot", "css", "app.css"), "body{}");
+        Write(Path.Combine(root, "App", "Views", "Index.cshtml"), "<h1>hi</h1>");
+        Write(Path.Combine(root, "App", "Services.cs"), "class Services {}");
+        Write(Path.Combine(root, "App", "data.resx"), "<root/>");
+
+        var lines = AssemblyAttributeEvaluator.GetAttributeSources(Load(csproj));
+
+        lines.Count(line => line.StartsWith("[assembly: Vendor.Manifest.AssetAttribute(", StringComparison.Ordinal)).ShouldBe(2);
+        lines.ShouldContain(line => line.Contains("wwwroot/css/app.css", StringComparison.Ordinal));
+        lines.ShouldContain(line => line.Contains("Views/Index.cshtml", StringComparison.Ordinal));
+        lines.ShouldNotContain(line => line.Contains(".csproj", StringComparison.Ordinal) || line.Contains(".resx", StringComparison.Ordinal) || line.Contains("Services", StringComparison.Ordinal));
+    }
 }

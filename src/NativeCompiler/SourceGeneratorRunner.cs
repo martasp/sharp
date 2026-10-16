@@ -105,6 +105,9 @@ public static class SourceGeneratorRunner
             }
         }
 
+        // Razor projects pull their generator from the SDK's Microsoft.NET.Sdk.Razor component.
+        RazorSupport.AddGeneratorDlls(project, dlls);
+
         // Analyzer project references (OutputItemType="Analyzer") ship generators from source
         // projects, e.g. OrchardCore.SourceGenerators (referenced from csproj XML by test
         // projects and injected into every project via the evaluated Commons.props import).
@@ -149,14 +152,34 @@ public static class SourceGeneratorRunner
         string.Equals(project.ProjectName, Path.GetFileNameWithoutExtension(csprojPath),
             StringComparison.OrdinalIgnoreCase);
 
+    // Build-on-demand for analyzer projects (OutputItemType="Analyzer"). GetSharpBinDirectory creates
+    // the target folder as a side effect, so the directory existing says nothing about the output;
+    // probe the DLL itself. Serial builds reach this once per analyzed project, and parallel solution
+    // waves can reach it concurrently, so serialize a single build per project behind a lock.
+    private static readonly ConcurrentDictionary<string, object> AnalyzerBuildLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static string ResolveAnalyzerProjectDll(string csprojPath)
     {
         var projectDir = Path.GetDirectoryName(csprojPath) ?? "";
         var sharpBinDir = Project.GetSharpBinDirectory(projectDir, Project.ResolveTargetFramework(csprojPath));
-
-        if (!Directory.Exists(sharpBinDir)) NativeCompiler.Build(projectDir);
-
         var dll = Path.Combine(sharpBinDir, Path.GetFileNameWithoutExtension(csprojPath) + ".dll");
+
+        if (!File.Exists(dll))
+        {
+            lock (AnalyzerBuildLocks.GetOrAdd(Path.GetFullPath(csprojPath), _ => new object()))
+            {
+                if (!File.Exists(dll))
+                {
+                    var result = NativeCompiler.Build(projectDir);
+                    if (result.Project?.DllPathName is { } reportedPath && File.Exists(reportedPath))
+                        return reportedPath;
+                    if (!result.Success)
+                        throw new Exception($"Cant build analyzer project '{Path.GetFileName(csprojPath)}': {result.Errors}");
+                }
+            }
+        }
+
         if (!File.Exists(dll)) throw new Exception($"Cant find dll path {dll}");
         return dll;
     }
@@ -301,7 +324,7 @@ public static class SourceGeneratorRunner
             }
         }
 
-        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray());
+        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray(), RazorSupport.BuildAdditionalTexts(project));
     }
 
     // Shared driver: builds CSharpGeneratorDriver with the project's parse options (implicit TFM
@@ -311,12 +334,17 @@ public static class SourceGeneratorRunner
     // AOT pipeline (AnalyzerRunner feeds it AnalyzerRegistry.GetSourceGenerators()).
     internal static (CSharpCompilation compilation, string errors) RunGeneratorDriver(
         CSharpCompilation compilation, Project project, ImmutableArray<ISourceGenerator> generators)
+        => RunGeneratorDriver(compilation, project, generators, ImmutableArray<AdditionalText>.Empty);
+
+    internal static (CSharpCompilation compilation, string errors) RunGeneratorDriver(
+        CSharpCompilation compilation, Project project, ImmutableArray<ISourceGenerator> generators,
+        ImmutableArray<AdditionalText> additionalTexts)
     {
         if (generators.IsEmpty)
             return (compilation, "");
 
         if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
-            Console.WriteLine($"[gens] running {generators.Length} generators for {project.ProjectName}");
+            Console.WriteLine($"[gens] running {generators.Length} generators for {project.ProjectName} ({additionalTexts.Length} additional files)");
 
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
@@ -326,10 +354,10 @@ public static class SourceGeneratorRunner
         if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
             Console.WriteLine($"[gens] {project.ProjectName}: interceptors after seed='{NativeCompilerUtils.GetInterceptorsNamespacesOrEmpty(parseOptions)}'");
 
-        var optionsProvider = new ProjectConfigOptionsProvider(project);
+        var optionsProvider = new ProjectConfigOptionsProvider(project, RazorSupport.BuildFileOptions(project));
         var driver = CSharpGeneratorDriver.Create(
             generators,
-            additionalTexts: ImmutableArray<AdditionalText>.Empty,
+            additionalTexts: additionalTexts,
             parseOptions: parseOptions,
             optionsProvider: optionsProvider);
 
@@ -391,7 +419,10 @@ public static class SourceGeneratorRunner
 
     // Build-property AnalyzerConfigOptions for both the generator driver and CompilationWithAnalyzers.
     internal static AnalyzerConfigOptionsProvider CreateOptionsProvider(Project project)
-        => new ProjectConfigOptionsProvider(project);
+        => new ProjectConfigOptionsProvider(project, RazorSupport.BuildFileOptions(project));
+
+    private static readonly IReadOnlyDictionary<string, AnalyzerConfigOptions> EmptyFileOptions =
+        new Dictionary<string, AnalyzerConfigOptions>(StringComparer.Ordinal);
 
     private static void PrintWarnings(List<string> warnings)
     {
@@ -412,9 +443,42 @@ public static class SourceGeneratorRunner
             $"{Path.GetFileNameWithoutExtension(source)}.{ticks}.{source.GetHashCode():x}.dll");
 
         if (!File.Exists(target))
-            File.Copy(source, target);
+        {
+            // Several builds run at once in one host (parallel projects, or parallel test
+            // collections) and compute the same target name for a shared generator, so a bare
+            // File.Copy races on the destination and one of them fails with an IOException. Copy
+            // to a private temp name and move it into place instead; the content is identical, so
+            // losing the race just means another build already wrote the same file.
+            var temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.Copy(source, temp);
+                try
+                {
+                    File.Move(temp, target, overwrite: true);
+                }
+                catch (IOException)
+                {
+                    // Another build created the same (identical) shadow copy; use theirs.
+                }
+            }
+            finally
+            {
+                TryDeleteFile(temp);
+            }
+        }
 
         return target;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     // ---------------------------------------------------------------------------
@@ -488,18 +552,22 @@ public static class SourceGeneratorRunner
     {
         private readonly Project _project;
         private readonly AnalyzerConfigOptions _options;
+        private readonly IReadOnlyDictionary<string, AnalyzerConfigOptions> _perFile;
 
-        public ProjectConfigOptionsProvider(Project project)
+        public ProjectConfigOptionsProvider(
+            Project project, IReadOnlyDictionary<string, AnalyzerConfigOptions>? perFile = null)
         {
             _project = project;
             _options = new ProjectAnalyzerConfigOptions(project);
+            _perFile = perFile ?? EmptyFileOptions;
         }
 
         public override AnalyzerConfigOptions GlobalOptions => _options;
 
         public override AnalyzerConfigOptions GetOptions(SyntaxTree? tree) => _options;
 
-        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => _options;
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) =>
+            _perFile.TryGetValue(textFile.Path, out var options) ? options : _options;
     }
 
     private sealed class ProjectAnalyzerConfigOptions : AnalyzerConfigOptions
@@ -524,6 +592,9 @@ public static class SourceGeneratorRunner
                 "build_property.EnableConfigurationBindingGenerator" => _project.EnableConfigurationBindingGenerator ? "true" : "false",
                 _ => null
             };
+            // Razor's CompilerVisibleProperties live with the rest of the Razor wiring.
+            if (value is null && RazorSupport.TryGetBuildProperty(_project, key, out var razorValue))
+                value = razorValue;
             return value is not null;
         }
     }

@@ -55,6 +55,21 @@ public static class NativeCompiler
         {
             return BuildCore(projectPath);
         }
+        catch (Exception ex)
+        {
+            // A referenced project that cannot be produced (or any other resolution failure) must be
+            // reported like a compile error instead of escaping as an unhandled exception that aborts
+            // the process (SIGABRT). BuildSolution's per-project catch then sees a normal failed result.
+            return new BuildResult(
+                false,
+                ex.Message,
+                new[] { $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(projectPath))} failed: {ex.Message}" },
+                TimeSpan.Zero,
+                null,
+                null,
+                null,
+                string.Empty);
+        }
         finally
         {
             BuildsInProgress.TryRemove(fullPath, out _);
@@ -163,6 +178,12 @@ public static class NativeCompiler
         DepsJsonWriter.Write(project, paths, hintPathCopies);
         paths.AddRange(hintPathCopies);
         WriteFiles(project.SharpBinFolderPath, paths);
+
+        // Runtime-native assets (e.g. libe_sqlite3.so) for the package graph. Copied next to the app
+        // because sharp emits no deps.json, so the host cannot probe runtimes/<rid>/native itself.
+        var nativePaths = GetOutputNativeFiles(project);
+        if (nativePaths.Count > 0)
+            WriteFiles(project.SharpBinFolderPath, nativePaths);
 
         // Self-hosting: when the project being compiled consumes sharp itself (NativeCompilerCLI via
         // its ProjectReference), the emitted assembly needs the embedded SDK payload. MSBuild embeds
@@ -395,11 +416,21 @@ public static class NativeCompiler
                 pdbFilePath: project.PDBPathName,
                 highEntropyVirtualAddressSpace: true);
 
+            // Embedded resources (e.g. OrchardCore module assets) are embedded verbatim under the
+            // name a build target computed, mirroring `dotnet build`'s manifest resources.
+            var manifestResources = AssemblyAttributeEvaluator.GetEmbeddedResources(project)
+                .Select(resource => new ResourceDescription(
+                    resource.Name,
+                    () => File.OpenRead(resource.FilePath),
+                    isPublic: true))
+                .ToList();
+
             (bool success, string errors) result;
             using (var dllStream = File.Create(project.DllPathName))
             using (var pdbStream = File.Create(project.PDBPathName))
             {
-                var emitResult = compilation.Emit(dllStream, pdbStream, options: emitOptions);
+                var emitResult = compilation.Emit(dllStream, pdbStream,
+                    manifestResources: manifestResources, options: emitOptions);
                 result = (emitResult.Success, emitResult.PrintErrors());
             }
 

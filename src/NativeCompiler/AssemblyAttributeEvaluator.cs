@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using XML;
@@ -55,7 +56,7 @@ public static class AssemblyAttributeEvaluator
             foreach (var target in app.Targets.Values)
             {
                 if (!ContainsAssemblyAttribute(target)) continue;
-                foreach (var (type, positional, named) in app.EvaluateTarget(target, projectReferences, cache))
+                foreach (var (type, positional, named) in app.EvaluateTarget(target, projectReferences, cache).Attributes)
                 {
                     var line = Format(type, positional, named);
                     if (line is not null) lines.Add(line);
@@ -68,6 +69,64 @@ public static class AssemblyAttributeEvaluator
         }
 
         return lines.Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    // The same bounded MSBuild evaluation also produces the final `@(EmbeddedResource)` item set for
+    // the module-asset targets (OrchardCore's `OrchardCoreEmbedModuleAssets` and any equivalent),
+    // each carrying a `LogicalName`. sharp embeds those files verbatim (see NativeCompiler.ProduceDll)
+    // so the compiled assembly can serve them the way `dotnet build` does. Items are only read from
+    // targets that also declare an `<AssemblyAttribute>` (the same gate as attributes), and .resx is
+    // skipped because the SDK compiles those through `GenerateResource`, which sharp does not emulate.
+    public static IReadOnlyList<(string Name, string FilePath)> GetEmbeddedResources(Project project)
+    {
+        var resources = new List<(string Name, string FilePath)>();
+
+        try
+        {
+            var cache = new Dictionary<string, Graph>(StringComparer.OrdinalIgnoreCase);
+            var app = Graph.Load(project.CsProjFile.FilePath, cache);
+            var projectReferences = TransitiveProjectReferences(project.CsProjFile.FilePath);
+
+            foreach (var target in app.Targets.Values)
+            {
+                if (!ContainsAssemblyAttribute(target)) continue;
+                if (!target.Descendants().Any(element => element.Name.LocalName == "EmbeddedResource")) continue;
+
+                var evaluated = app.EvaluateTarget(target, projectReferences, cache);
+                if (!evaluated.Items.TryGetValue("EmbeddedResource", out var embeddedResources)) continue;
+
+                foreach (var item in embeddedResources)
+                {
+                    if (!item.TryGetValue("FullPath", out var fullPath) || !File.Exists(fullPath)) continue;
+
+                    var extension = item.GetValueOrDefault("Extension") ?? Path.GetExtension(fullPath);
+                    if (string.Equals(extension, ".resx", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var name = item.GetValueOrDefault("LogicalName");
+                    if (string.IsNullOrEmpty(name)) name = DefaultResourceName(app, fullPath);
+
+                    resources.Add((name, fullPath));
+                }
+            }
+        }
+        catch
+        {
+            // Fail-safe: never let resource discovery break the build.
+        }
+
+        return resources
+            .GroupBy(resource => resource.Name, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static string DefaultResourceName(Graph app, string fullPath)
+    {
+        var root = app.Props.GetValueOrDefault("RootNamespace")
+                   ?? app.Props.GetValueOrDefault("AssemblyName")
+                   ?? "";
+        var relative = Path.GetRelativePath(app.Directory, fullPath).Replace('\\', '.');
+        return root.Length == 0 ? relative : root + "." + relative;
     }
 
     private static bool ContainsAssemblyAttribute(XElement target) =>
@@ -158,11 +217,20 @@ public static class AssemblyAttributeEvaluator
             .ToList();
 
         var named = item
-            .Where(pair => pair.Key != "Identity" && !pair.Key.StartsWith("_Parameter", StringComparison.Ordinal))
+            .Where(pair => !IsWellKnownMetadata(pair.Key) && !pair.Key.StartsWith("_Parameter", StringComparison.Ordinal))
             .ToDictionary(pair => pair.Key, pair => pair.Value);
 
         return (positional, named);
     }
+
+    // The SDK reads attribute arguments through `CloneCustomMetadata()`, which omits MSBuild's
+    // well-known item metadata. The evaluator synthesizes that metadata for file items, so it must
+    // be filtered out here or an attribute's type name would leak out as `FullPath = ...` etc.
+    private static bool IsWellKnownMetadata(string name) =>
+        name is "Identity" or "FullPath" or "RootDir" or "Filename" or "Extension" or "RelativeDir"
+            or "Directory" or "RecursiveDir" or "ModifiedTime" or "CreatedTime" or "AccessedTime"
+            or "DefiningProjectFullPath" or "DefiningProjectDirectory" or "DefiningProjectName"
+            or "DefiningProjectExtension";
 
     // ---- Minimal MSBuild graph + target evaluation ------------------------------------------------
 
@@ -173,7 +241,15 @@ public static class AssemblyAttributeEvaluator
         public readonly Dictionary<string, List<Dictionary<string, string>>> RootItems = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, XElement> Targets = new(StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, List<(string Relative, string Full)>> _globCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<(XElement Element, string Directory)> _pendingItems = new();
         private readonly HashSet<string> _visitedFiles = new(StringComparer.OrdinalIgnoreCase);
+
+        public sealed class TargetResult
+        {
+            public List<(string? Type, List<string> Positional, Dictionary<string, string> Named)> Attributes { get; } = new();
+            public Dictionary<string, List<Dictionary<string, string>>> Items { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        }
 
         public static Graph Load(string csprojPath, Dictionary<string, Graph> cache)
         {
@@ -182,6 +258,7 @@ public static class AssemblyAttributeEvaluator
 
             var graph = new Graph { Directory = Path.GetDirectoryName(full) ?? "" };
             cache[full] = graph;
+            graph.SeedDefaults(full);
 
             var props = FindUpwards(full, "Directory.Build.props");
             if (props is not null) graph.LoadFile(props, cache);
@@ -194,7 +271,41 @@ public static class AssemblyAttributeEvaluator
             if (!graph.Props.ContainsKey("AssemblyName"))
                 graph.Props["AssemblyName"] = Path.GetFileNameWithoutExtension(full);
 
+            graph.EvaluatePendingItems();
+
             return graph;
+        }
+
+        // The SDK props (Microsoft.Common.props / Microsoft.NET.Sdk.DefaultItems.props) are imported
+        // by the real build but not by this evaluator, so a small set of defaults the imported
+        // .props/.targets rely on (language extension, output roots, item excludes) is seeded here
+        // before any file is loaded. Notably `$(DefaultLanguageSourceExtension)` would otherwise
+        // expand to empty, turning the `**\*$(DefaultLanguageSourceExtension)` exclude into `**\*`
+        // and dropping every asset.
+        private void SeedDefaults(string csprojPath)
+        {
+            var directory = Path.GetDirectoryName(csprojPath) ?? "";
+            var separator = Path.DirectorySeparatorChar.ToString();
+            var root = Environment.GetEnvironmentVariable("NATIVECOMPILER_OUTPUT_ROOT") ?? "myc";
+            var assemblyName = Path.GetFileNameWithoutExtension(csprojPath);
+
+            void SetDefault(string key, string value)
+            {
+                if (!Props.ContainsKey(key)) Props[key] = value;
+            }
+
+            SetDefault("MSBuildProjectName", assemblyName);
+            SetDefault("AssemblyName", assemblyName);
+            SetDefault("RootNamespace", assemblyName);
+            SetDefault("MSBuildProjectDirectory", directory);
+            SetDefault("ProjectDir", directory + separator);
+            SetDefault("DefaultLanguageSourceExtension", ".cs");
+            SetDefault("AppDesignerFolder", "Properties");
+            SetDefault("BaseIntermediateOutputPath", "obj" + separator);
+            SetDefault("BaseOutputPath", root + separator);
+            SetDefault("DefaultExcludesInProjectFolder", "");
+            // Mirrors Microsoft.Common.props: the output roots plus project/solution/user files.
+            Props["DefaultItemExcludes"] = root + "/**;bin/**;obj/**;**/*.user;**/*.*proj;**/*.sln;**/*.vssscc;**/.DS_Store";
         }
 
         private static string? FindUpwards(string startFile, string fileName)
@@ -239,8 +350,10 @@ public static class AssemblyAttributeEvaluator
                             Props[property.Name.LocalName] = Expand(property.Value, Props).Trim();
                         break;
                     case "ItemGroup":
+                        // MSBuild evaluates every property in all imports before any item, so item
+                        // declarations are recorded here and expanded once all files are loaded.
                         foreach (var item in element.Elements())
-                            AddItem(RootItems, item, Props, directory);
+                            _pendingItems.Add((item, Directory));
                         break;
                     case "Target":
                         var name = (string?)element.Attribute("Name");
@@ -250,7 +363,13 @@ public static class AssemblyAttributeEvaluator
             }
         }
 
-        public List<(string? Type, List<string> Positional, Dictionary<string, string> Named)> EvaluateTarget(
+        private void EvaluatePendingItems()
+        {
+            foreach (var (element, directory) in _pendingItems)
+                AddItem(RootItems, element, Props, directory);
+        }
+
+        public TargetResult EvaluateTarget(
             XElement target, List<string> projectReferences, Dictionary<string, Graph> cache)
         {
             var items = Clone(RootItems);
@@ -258,7 +377,7 @@ public static class AssemblyAttributeEvaluator
             items["_MSBuildProjectReferenceExistent"] = projectReferences
                 .Select(reference => NewItem(reference)).ToList();
 
-            var results = new List<(string?, List<string>, Dictionary<string, string>)>();
+            var result = new TargetResult { Items = items };
 
             foreach (var child in target.Elements())
             {
@@ -274,7 +393,7 @@ public static class AssemblyAttributeEvaluator
                         {
                             if (item.Name.LocalName == "AssemblyAttribute")
                             {
-                                results.AddRange(ExpandAttribute(item, props, items));
+                                result.Attributes.AddRange(ExpandAttribute(item, props, items));
                             }
                             else
                             {
@@ -286,10 +405,36 @@ public static class AssemblyAttributeEvaluator
                     case "MSBuild":
                         RunMsBuildTask(child, props, items, Directory, cache);
                         break;
+
+                    case "RemoveDuplicates":
+                        RunRemoveDuplicates(child, props, items);
+                        break;
                 }
             }
 
-            return results;
+            return result;
+        }
+
+        // <RemoveDuplicates Inputs="@(X)"><Output TaskParameter="Filtered" ItemName="Y"/></RemoveDuplicates>
+        // Copies X into Y (metadata preserved), dropping later items with a duplicate identity.
+        private static void RunRemoveDuplicates(XElement task, Dictionary<string, string> props,
+            Dictionary<string, List<Dictionary<string, string>>> items)
+        {
+            if (!EvaluateCondition((string?)task.Attribute("Condition"), props, items)) return;
+            if (!IsSingleItemRef((string?)task.Attribute("Inputs") ?? "", out var inputName)) return;
+            if (!items.TryGetValue(inputName, out var source)) return;
+
+            var output = task.Elements().FirstOrDefault(element => element.Name.LocalName == "Output");
+            var itemName = (string?)output?.Attribute("ItemName");
+            if (string.IsNullOrEmpty(itemName)) return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var filtered = new List<Dictionary<string, string>>();
+            foreach (var item in source)
+                if (seen.Add(item["Identity"]))
+                    filtered.Add(new Dictionary<string, string>(item, StringComparer.OrdinalIgnoreCase));
+
+            items[itemName] = filtered;
         }
 
         private void RunMsBuildTask(XElement task, Dictionary<string, string> props,
@@ -414,17 +559,24 @@ public static class AssemblyAttributeEvaluator
             Dictionary<string, List<Dictionary<string, string>>> items, string? batchName,
             Dictionary<string, string>? batchItem)
         {
-            if (batchName is not null && batchItem is not null)
-                value = MetadataToken.Replace(value, match =>
-                    string.Equals(match.Groups["n"].Value, batchName, StringComparison.OrdinalIgnoreCase)
-                        && batchItem.TryGetValue(match.Groups["m"].Value, out var metadata)
-                        ? metadata
-                        : match.Value);
+            if (batchItem is not null)
+            {
+                if (batchName is not null)
+                    value = MetadataToken.Replace(value, match =>
+                        string.Equals(match.Groups["n"].Value, batchName, StringComparison.OrdinalIgnoreCase)
+                            ? (batchItem.TryGetValue(match.Groups["m"].Value, out var metadata) ? metadata : "")
+                            : match.Value);
+
+                // An unqualified `%(Meta)` refers to the current batch item's own metadata, e.g.
+                // `%(RelativeDir)%(Filename)%(Extension)` inside the module-asset LogicalName update.
+                value = UnqualifiedMetadataToken.Replace(value, match =>
+                    batchItem.TryGetValue(match.Groups[1].Value, out var metadata) ? metadata : "");
+            }
 
             return ExpandAll(value, props, items);
         }
 
-        private static void AddItem(Dictionary<string, List<Dictionary<string, string>>> target,
+        private void AddItem(Dictionary<string, List<Dictionary<string, string>>> target,
             XElement element, Dictionary<string, string> props, string directory)
         {
             var name = element.Name.LocalName;
@@ -442,28 +594,256 @@ public static class AssemblyAttributeEvaluator
                 return;
             }
 
-            var include = ExpandAll((string?)element.Attribute("Include") ?? "", props, target);
+            var update = (string?)element.Attribute("Update");
+            if (update is not null)
+            {
+                ApplyUpdate(target, name, element, props, directory, update);
+                return;
+            }
+
+            var includeRaw = (string?)element.Attribute("Include") ?? "";
+            if (includeRaw.Length == 0) return;
+
+            var conditionRaw = (string?)element.Attribute("Condition");
+            var batchName = DetectBatchItemType(includeRaw, conditionRaw);
+
+            // Metadata batching: `%(Item.Meta)` (or a bare `%(Meta)` batch) inside the include or
+            // condition creates one item per source item, e.g. the module-asset target's
+            // `ModuleAssets Include="Areas\$(AssemblyName)\%(ModuleAssetFiles.RelativeDir)..."`.
+            if (batchName is not null && target.TryGetValue(batchName, out var batchItems) && batchItems.Count > 0)
+            {
+                foreach (var batchItem in batchItems)
+                {
+                    var condition = ExpandValue(conditionRaw ?? "", props, target, batchName, batchItem);
+                    if (!EvaluateCondition(condition, props, target)) continue;
+                    var include = ExpandValue(includeRaw, props, target, batchName, batchItem);
+                    var metadata = element.Elements().ToDictionary(
+                        child => child.Name.LocalName,
+                        child => ExpandValue(child.Value, props, target, batchName, batchItem));
+                    AddIncludedItems(target, name, include, metadata, props, directory, exclude: "");
+                }
+                return;
+            }
+
+            if (!EvaluateCondition(conditionRaw, props, target)) return;
+
+            // `Include="@(Other)"` copies those items verbatim, metadata included.
+            if (IsSingleItemRef(includeRaw, out var referenced))
+            {
+                if (!target.TryGetValue(referenced, out var source)) return;
+                var metadata = element.Elements().ToDictionary(
+                    child => child.Name.LocalName,
+                    child => ExpandAll(child.Value, props, target));
+                foreach (var item in source)
+                {
+                    var clone = new Dictionary<string, string>(item, StringComparer.OrdinalIgnoreCase);
+                    foreach (var pair in metadata) clone[pair.Key] = pair.Value;
+                    GetList(target, name).Add(clone);
+                }
+                return;
+            }
+
+            var excludeRaw = (string?)element.Attribute("Exclude") ?? "";
+            AddIncludedItems(
+                target, name,
+                ExpandAll(includeRaw, props, target),
+                element.Elements().ToDictionary(child => child.Name.LocalName, child => ExpandAll(child.Value, props, target)),
+                props, directory,
+                ExpandAll(excludeRaw, props, target));
+        }
+
+        private static void ApplyUpdate(Dictionary<string, List<Dictionary<string, string>>> target,
+            string name, XElement element, Dictionary<string, string> props, string directory, string updateRaw)
+        {
+            var conditionRaw = (string?)element.Attribute("Condition");
+            var batchName = DetectBatchItemType(updateRaw, conditionRaw);
+
+            if (!target.TryGetValue(name, out var items)) return;
+
+            var metadata = element.Elements().Select(child => (child.Name.LocalName, child.Value)).ToList();
+            var effectiveBatch = batchName ?? name;
+
+            foreach (var item in items)
+            {
+                var condition = ExpandValue(conditionRaw ?? "", props, target, effectiveBatch, item);
+                if (!EvaluateCondition(condition, props, target)) continue;
+                foreach (var (key, value) in metadata)
+                {
+                    item[key] = ExpandValue(value, props, target, effectiveBatch, item);
+                }
+            }
+        }
+
+        private void AddIncludedItems(Dictionary<string, List<Dictionary<string, string>>> target, string name,
+            string include, Dictionary<string, string> metadata, Dictionary<string, string> props,
+            string directory, string exclude)
+        {
             if (include.Length == 0) return;
-            if (!EvaluateCondition((string?)element.Attribute("Condition"), props, target)) return;
 
-            var metadata = element.Elements().ToDictionary(
-                child => child.Name.LocalName,
-                child => ExpandAll(child.Value, props, target));
+            var excludeSpecs = exclude.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var list = GetList(target, name);
 
+            foreach (var spec in include.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (spec.IndexOfAny(GlobChars) >= 0)
+                {
+                    foreach (var (relative, full) in Glob(directory, spec, excludeSpecs))
+                        list.Add(MergeMetadata(metadata, FileMetadata(directory, relative, full), relative));
+                    continue;
+                }
+
+                list.Add(MergeMetadata(metadata, FileMetadata(directory, spec, null), spec));
+            }
+        }
+
+        private static Dictionary<string, string> MergeMetadata(
+            Dictionary<string, string> metadata, Dictionary<string, string> fileMetadata, string identity)
+        {
+            var item = new Dictionary<string, string>(fileMetadata, StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in metadata) item[pair.Key] = pair.Value;
+            item["Identity"] = identity;
+            return item;
+        }
+
+        private static Dictionary<string, string> FileMetadata(string projectDirectory, string identity, string? absolutePath)
+        {
+            string full;
+            try
+            {
+                full = absolutePath ?? (Path.IsPathRooted(identity)
+                    ? identity
+                    : Path.GetFullPath(Path.Combine(projectDirectory, identity.Replace('\\', Path.DirectorySeparatorChar))));
+            }
+            catch
+            {
+                full = identity;
+            }
+
+            string relative;
+            try { relative = Path.GetRelativePath(projectDirectory, full).Replace('\\', '/'); }
+            catch { relative = identity.Replace('\\', '/'); }
+
+            var slash = relative.LastIndexOf('/');
+            var relativeDir = slash < 0 ? "" : relative[..(slash + 1)];
+
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["FullPath"] = full.Replace('\\', '/'),
+                ["Directory"] = (Path.GetDirectoryName(full) ?? "").Replace('\\', '/'),
+                ["Filename"] = Path.GetFileNameWithoutExtension(full),
+                ["Extension"] = Path.GetExtension(full),
+                ["RelativeDir"] = relativeDir,
+            };
+        }
+
+        private static readonly char[] GlobChars = { '*', '?' };
+
+        private List<(string Relative, string Full)> Glob(string projectDirectory, string pattern, string[] excludePatterns)
+        {
+            var cacheKey = pattern + "|" + string.Join("|", excludePatterns);
+            if (_globCache.TryGetValue(cacheKey, out var cached)) return cached;
+
+            var include = GlobToRegex(pattern.Replace('\\', '/'));
+            var excludes = excludePatterns
+                .Select(spec => GlobToRegex(spec.Replace('\\', '/')))
+                .ToList();
+
+            var matches = new List<(string Relative, string Full)>();
+            if (System.IO.Directory.Exists(projectDirectory))
+            {
+                foreach (var file in System.IO.Directory.EnumerateFiles(projectDirectory, "*", SearchOption.AllDirectories))
+                {
+                    var relative = Path.GetRelativePath(projectDirectory, file).Replace('\\', '/');
+                    if (!include.IsMatch(relative)) continue;
+                    if (excludes.Any(regex => regex.IsMatch(relative))) continue;
+                    matches.Add((relative, file.Replace('\\', '/')));
+                }
+            }
+
+            _globCache[cacheKey] = matches;
+            return matches;
+        }
+
+        private static Regex GlobToRegex(string pattern)
+        {
+            var builder = new StringBuilder("^");
+            for (var i = 0; i < pattern.Length; i++)
+            {
+                var current = pattern[i];
+                if (current == '*')
+                {
+                    if (i + 1 < pattern.Length && pattern[i + 1] == '*')
+                    {
+                        i++;
+                        if (i + 1 < pattern.Length && pattern[i + 1] == '/')
+                        {
+                            i++;
+                            builder.Append("(?:.*/)?");
+                        }
+                        else
+                        {
+                            builder.Append(".*");
+                        }
+                    }
+                    else
+                    {
+                        builder.Append("[^/]*");
+                    }
+                }
+                else if (current == '?')
+                {
+                    builder.Append("[^/]");
+                }
+                else if ("+.()|{}[]^$\\".IndexOf(current) >= 0)
+                {
+                    builder.Append('\\').Append(current);
+                }
+                else
+                {
+                    builder.Append(current);
+                }
+            }
+
+            builder.Append('$');
+            return new Regex(builder.ToString(), RegexOptions.CultureInvariant);
+        }
+
+        private static List<Dictionary<string, string>> GetList(
+            Dictionary<string, List<Dictionary<string, string>>> target, string name)
+        {
             if (!target.TryGetValue(name, out var list))
             {
                 list = new List<Dictionary<string, string>>();
                 target[name] = list;
             }
+            return list;
+        }
 
-            foreach (var identity in include.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        private static string? DetectBatchItemType(params string?[] values)
+        {
+            string? found = null;
+            foreach (var value in values)
             {
-                var item = new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase)
+                if (string.IsNullOrEmpty(value)) continue;
+                foreach (Match match in MetadataToken.Matches(value))
                 {
-                    ["Identity"] = identity,
-                };
-                list.Add(item);
+                    var itemName = match.Groups["n"].Value;
+                    if (found is null) found = itemName;
+                    else if (!string.Equals(found, itemName, StringComparison.OrdinalIgnoreCase)) return null;
+                }
             }
+            return found;
+        }
+
+        private static bool IsSingleItemRef(string value, out string name)
+        {
+            name = "";
+            var trimmed = value.Trim();
+            var matches = ItemToken.Matches(trimmed);
+            if (matches.Count != 1) return false;
+            if (matches[0].Index != 0 || matches[0].Length != trimmed.Length) return false;
+            name = matches[0].Groups[1].Value;
+            return true;
         }
     }
 
@@ -474,6 +854,31 @@ public static class AssemblyAttributeEvaluator
     private static readonly Regex PropertyToken = new(@"\$\(([^)]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ItemToken = new(@"@\(([^)]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex MetadataToken = new(@"%\((?<n>[^).]+)\.(?<m>[^)]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex UnqualifiedMetadataToken = new(@"%\(([^).]+)\)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex StringNewFunction = new(
+        @"\$\(\[System\.String\]::new\('(?<s>[^']*)'\)(?<reps>(?:\.Replace\('(?<a>[^']*)',\s*'(?<b>[^']*)'\))*)\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ReplaceCall = new(
+        @"\.Replace\('(?<a>[^']*)',\s*'(?<b>[^']*)'\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    // Bounded support for the property functions the MSBuild targets in the wild use to compute item
+    // metadata, e.g. OrchardCore's module-asset LogicalName:
+    //   $([System.String]::new('$(AssemblyName).%(RelativeDir)%(FileName)%(Extension)')
+    //       .Replace('\', '>').Replace('/', '>'))
+    private static string EvaluatePropertyFunctions(string value)
+    {
+        if (value.IndexOf("$([System.String]::new(", StringComparison.Ordinal) < 0) return value;
+
+        return StringNewFunction.Replace(value, match =>
+        {
+            var text = match.Groups["s"].Value;
+            foreach (Match replace in ReplaceCall.Matches(match.Groups["reps"].Value))
+                text = text.Replace(replace.Groups["a"].Value, replace.Groups["b"].Value);
+            return text;
+        });
+    }
+
 
     private static string Expand(string value, IReadOnlyDictionary<string, string> props)
     {
@@ -498,6 +903,7 @@ public static class AssemblyAttributeEvaluator
                     ? string.Join(';', list.Select(item => item["Identity"]))
                     : "");
             next = Expand(next, props);
+            next = EvaluatePropertyFunctions(next);
             if (next == current) break;
             current = next;
         }
@@ -521,17 +927,17 @@ public static class AssemblyAttributeEvaluator
         IReadOnlyDictionary<string, List<Dictionary<string, string>>> items)
     {
         if (string.IsNullOrWhiteSpace(condition)) return true;
-        var value = condition.Trim();
+        var value = StripBalancedParens(condition.Trim());
 
-        var orIndex = value.IndexOf(" or ", StringComparison.OrdinalIgnoreCase);
+        if (value.StartsWith('!')) return !EvaluateCondition(value[1..], props, items);
+
+        var orIndex = FindTopLevelOperator(value, "or");
         if (orIndex >= 0)
             return EvaluateCondition(value[..orIndex], props, items) || EvaluateCondition(value[(orIndex + 4)..], props, items);
 
-        var andIndex = value.IndexOf(" and ", StringComparison.OrdinalIgnoreCase);
+        var andIndex = FindTopLevelOperator(value, "and");
         if (andIndex >= 0)
             return EvaluateCondition(value[..andIndex], props, items) && EvaluateCondition(value[(andIndex + 5)..], props, items);
-
-        if (value.StartsWith('!')) return !EvaluateCondition(value[1..], props, items);
 
         if (value.StartsWith("Exists(", StringComparison.OrdinalIgnoreCase) && value.EndsWith(')'))
         {
@@ -546,6 +952,48 @@ public static class AssemblyAttributeEvaluator
         var right = Operand(comparison.Groups["r"].Value.Trim(), props, items);
         var equal = string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
         return comparison.Groups["op"].Value == "==" ? equal : !equal;
+    }
+
+    // Removes redundant outer parentheses, e.g. `(a == b)` -> `a == b`, so the operator split below
+    // sees the real top-level structure: `!('a' == '' or 'b' == '.resx')` must negate the whole group.
+    private static string StripBalancedParens(string value)
+    {
+        while (value.Length >= 2 && value[0] == '(' && value[^1] == ')')
+        {
+            var depth = 0;
+            var wrapsWhole = true;
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (value[i] == '(') depth++;
+                else if (value[i] == ')')
+                {
+                    depth--;
+                    if (depth == 0 && i != value.Length - 1) { wrapsWhole = false; break; }
+                }
+            }
+            if (!wrapsWhole) break;
+            value = value[1..^1].Trim();
+        }
+        return value;
+    }
+
+    // Finds a top-level ` and `/` or ` separator, ignoring occurrences nested in parentheses or quotes.
+    private static int FindTopLevelOperator(string value, string op)
+    {
+        var depth = 0;
+        var quote = '\0';
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (quote != '\0') { if (c == quote) quote = '\0'; continue; }
+            if (c is '\'' or '"') { quote = c; continue; }
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth != 0 || i + op.Length + 1 >= value.Length) continue;
+            if (value[i] != ' ' || value[i + op.Length + 1] != ' ') continue;
+            if (value.AsSpan(i + 1, op.Length).Equals(op, StringComparison.OrdinalIgnoreCase)) return i;
+        }
+        return -1;
     }
 
     private static string Operand(string token, IReadOnlyDictionary<string, string> props,

@@ -15,6 +15,12 @@ namespace NativeCompilerTests;
 // improvements that bring the output closer to the SDK (or drift it apart) become reviewable diffs.
 // Success covers a real multi-project solution (the compiler repo itself); failure covers a
 // deliberately broken fixture so the error layout can be compared too.
+//
+// Shares the checked-in HelloParityFixture/FailingFixture directories with CliCommandParityTests (and
+// SolutionTests), which build them through the SDK and the CLI; running them in parallel races on the
+// fixtures' obj/bin and makes the captured terminal output nondeterministic. The sequential collection
+// keeps every builder of those fixtures serialized.
+[Collection("Sequential Tests 4")]
 public class CliComparisonTests
 {
     public static string RepoRoot =

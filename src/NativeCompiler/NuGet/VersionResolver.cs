@@ -149,7 +149,7 @@ public static class VersionResolver
     // Numeric-core comparison, matching NuGetPackage.TryParseVersion: a prerelease label is
     // ignored, so "1.0.0-beta" and "1.0.0" compare equal. Good enough for choosing between
     // feed versions; documented approximation, not a hidden one.
-    private static int CompareVersions(string left, string right)
+    public static int CompareVersions(string left, string right)
     {
         var leftVersion = Parse(left, out var leftParsed);
         var rightVersion = Parse(right, out var rightParsed);

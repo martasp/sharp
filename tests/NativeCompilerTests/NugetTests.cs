@@ -33,6 +33,25 @@ public class NuGetTests
         NuGetTfm.Score("net10.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("net8.0", "net10.0"));
     }
 
+    // A platform-specific lib folder (net10.0-ios26.0) must not be chosen for a platform-agnostic
+    // target: it would otherwise beat the compatible net8.0 folder and pull in the wrong variant.
+    [Fact]
+    public void Score_PlatformSpecificCandidate_IsNotCompatibleWithPlainTarget()
+    {
+        NuGetTfm.Score("net10.0-ios26.0", "net10.0").ShouldBe(0);
+        NuGetTfm.Score("net10.0-tvos26.0", "net10.0").ShouldBe(0);
+        NuGetTfm.Score("net8.0-windows7.0", "net10.0").ShouldBe(0);
+        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Score_PlatformSpecificCandidate_MatchesSamePlatformTarget()
+    {
+        NuGetTfm.Score("net10.0-ios26.0", "net10.0-ios26.0").ShouldBeGreaterThan(0);
+        NuGetTfm.Score("net8.0", "net10.0-ios26.0").ShouldBeGreaterThan(0);
+    }
+
+
     [Fact]
     public void FindPackageDLLs_MetaPackageWithoutLibReturnsEmpty()
     {
