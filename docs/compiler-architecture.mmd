@@ -1,0 +1,52 @@
+flowchart TB
+    subgraph CLI["NativeCompilerCLI"]
+        Program["Program.cs<br/>command registry"]
+        CmdBuild["build"]
+        CmdRun["run"]
+        CmdRestore["restore"]
+        CmdClean["clean"]
+    end
+
+    subgraph CORE["NativeCompiler (engine)"]
+        NC["Build / BuildCore"]
+        NCSol["BuildSolution<br/>wave scheduler"]
+        Refs["Reference resolution"]
+        Merge["MergeFrameworkSuppression<br/>dedup + keep HIGHEST version"]
+        AR["AnalyzerRunner"]
+        SG["SourceGeneratorRunner"]
+        Registry["AnalyzerRegistry<br/>static SDK generators"]
+        Razor["RazorSupport"]
+        Emit["ProduceDll (Roslyn emit)"]
+        Deps["DepsJsonWriter"]
+    end
+
+    subgraph MODEL["Project model"]
+        SolutionFile["SolutionFile .sln/.slnx"]
+        Project["Project (XMLProject/ProjectFile)"]
+        BuildProps["BuildPropsEvaluator"]
+        PRefFinder["ProjectReferenceFinder"]
+    end
+
+    subgraph NUGET["NuGet subsystem"]
+        Restorer["PackageRestorer"]
+        NuGetPkg["NuGetPackage"]
+        VersionRes["VersionResolver"]
+    end
+
+    Program --> CmdBuild & CmdRun & CmdRestore & CmdClean
+    CmdBuild -->|".sln/.slnx"| NCSol
+    CmdBuild -->|"project"| NC
+    CmdRun --> NC
+    NCSol --> SolutionFile
+    NCSol -->|"parallel waves"| NC
+    NC --> Project --> BuildProps
+    NC --> PRefFinder
+    NC --> Refs --> NuGetPkg --> VersionRes
+    NC --> Merge
+    NC --> AR --> SG
+    AR --> Registry
+    SG --> Razor
+    SG --> Registry
+    NC --> Emit
+    NC --> Deps
+    CmdRestore --> Restorer --> NuGetPkg

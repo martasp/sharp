@@ -1,0 +1,13 @@
+<Project>
+
+  <!-- Mirrors OrchardCore's Commons.props: inject a shared source-generator project as an analyzer
+       into every project (except the generator itself). Lives in the evaluated props chain, not the
+       csproj, so the topological sort only sees it if it evaluates Directory.Build.props. -->
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Gen/Gen.csproj"
+                      Condition="$(MSBuildProjectName) != 'Gen'"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

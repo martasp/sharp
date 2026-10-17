@@ -89,6 +89,19 @@ CopyAssemblies(
     required: true,
     what: "the ILLink analyzers");
 
+// The Razor source generators (Microsoft.CodeAnalysis.Razor.Compiler.dll and its shared utilities)
+// compile .cshtml/.razor files. They ship only inside the SDK's Microsoft.NET.Sdk.Razor component,
+// not in any reference pack or NuGet package, so they are copied from the installed SDK that is
+// running this staging step. Not required: a payload staged without an SDK present simply has no
+// Razor support, and sharp degrades to leaving .cshtml/.razor files uncompiled.
+var razorSourceGenerators = FindRazorSourceGenerators();
+if (razorSourceGenerators is not null)
+    CopyAssemblies(
+        razorSourceGenerators,
+        Path.Combine(payloadDir, sdkDir, "razor-source-generators"),
+        required: false,
+        what: "the Razor source generators");
+
 // DependencyModel ships only in the SDK, not in a ref pack or the shared framework. sharp loads it to
 // read .deps.json, so a payload without it cannot run.
 CopyFile(
@@ -218,6 +231,18 @@ string? FindAppHost(string hostPack, string apphost)
         return null;
 
     return Directory.EnumerateFiles(hostPack, apphost, SearchOption.AllDirectories).FirstOrDefault();
+}
+
+// The Razor SDK component lives beside the SDK's other MSBuild SDKs (MSBuildSDKsPath). Its
+// source-generators folder holds Microsoft.CodeAnalysis.Razor.Compiler.dll. Returns null when no SDK
+// is present (running the stager by hand) so the payload can still be produced without Razor support.
+string? FindRazorSourceGenerators()
+{
+    var sdksPath = Environment.GetEnvironmentVariable("MSBuildSDKsPath");
+    if (string.IsNullOrEmpty(sdksPath)) return null;
+
+    var candidate = Path.Combine(sdksPath, "Microsoft.NET.Sdk.Razor", "source-generators");
+    return Directory.Exists(candidate) ? candidate : null;
 }
 
 void WriteFrameworkNames(string runtimePack, string destinationPath, string what)

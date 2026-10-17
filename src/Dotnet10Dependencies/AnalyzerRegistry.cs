@@ -97,10 +97,19 @@ namespace CustomCompiler
                 new Microsoft.Extensions.Logging.Generators.LoggerMessageGenerator().AsSourceGenerator(),
 
                 new Microsoft.Extensions.Options.Generators.OptionsValidatorGenerator().AsSourceGenerator(),
-                new Microsoft.Extensions.Validation.ValidationsGenerator().AsSourceGenerator(),
-                new Microsoft.Extensions.Configuration.Binder.SourceGeneration.ConfigurationBindingGenerator().AsSourceGenerator()
+                new Microsoft.Extensions.Validation.ValidationsGenerator().AsSourceGenerator()
 
                 );
+
+        // The Configuration Binding Generator is off-by-default in the SDK (enabled only for
+        // PublishTrimmed/PublishAot or an explicit <EnableConfigurationBindingGenerator>). Unlike
+        // the attribute-driven generators above it is interceptor-based: it emits a
+        // Configure<TOptions> interceptor for every `services.Configure<T>(config)` call site, so
+        // running it unconditionally diverges from `dotnet build` and can collide with a project's
+        // own options-extension type (a CS0433 duplicate). Kept out of GetSourceGenerators(); the
+        // project-aware gate in SourceGeneratorRunner adds it back only when the SDK would.
+        public static ISourceGenerator GetConfigurationBindingGenerator()
+            => new Microsoft.Extensions.Configuration.Binder.SourceGeneration.ConfigurationBindingGenerator().AsSourceGenerator();
 
         // Generators the SDK applies only to web projects. Kept out of GetSourceGenerators() because
         // that set is unconditional, and running these for every project changes console output:

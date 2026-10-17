@@ -7,6 +7,7 @@ using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using XML;
@@ -597,38 +598,27 @@ public static class NativeCompilerUtils
         if (!File.Exists(csprojPath)) return results;
 
         var tfm = targetTfm ?? DefaultTargetFramework.Value;
+        var projectDirectory = Path.GetDirectoryName(csprojPath) ?? "";
         var xml = XML.Project.Parse(csprojPath);
-        var packages = xml.ItemGroup.SelectMany(ig => ig.PackageReferences);
 
-        foreach (var pkg in packages)
-        {
-            var pkgName = pkg.Include ?? "";
-            var pkgVersion = pkg.Version
-                ?? NuGetPackage.ResolveCentralVersion(pkgName, Path.GetDirectoryName(csprojPath) ?? "");
-            if (string.IsNullOrEmpty(pkgName) || string.IsNullOrEmpty(pkgVersion)) continue;
+        var roots = ResolvedPackageRoots(xml.ItemGroup.SelectMany(ig => ig.PackageReferences), projectDirectory);
 
-            var pkgPath = NuGetPackage.FindPackagePath(pkgName, pkgVersion);
-            if (string.IsNullOrEmpty(pkgPath)) continue;
-
-            results.AddRange(NuGetPackage.FindPackageDLLs(pkgPath, tfm));
-            results.AddRange(NuGetPackage.GetTransitivePackageDlls(pkgPath, tfm));
-        }
+        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm))
+            results.AddRange(NuGetPackage.FindPackageDLLs(packagePath, tfm));
 
         return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
     {
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
         var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project))
+        var roots = ResolvedPackageRoots(project.PackageReferences, project.ProjectRootPath);
+
+        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm))
         {
-            if (packagePath is null) continue;
-
-            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
-                referenceFiles.Add(dll);
-
-            foreach (var dll in NuGetPackage.GetTransitivePackageDlls(packagePath, project.TargetFramework ?? DefaultTargetFramework.Value))
+            foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, tfm))
                 referenceFiles.Add(dll);
         }
 
@@ -637,21 +627,130 @@ public static class NativeCompilerUtils
             .ToArray();
     }
 
+    // Resolves the whole package graph to one version per package id, mirroring NuGet's version
+    // unification: when two packages require the same id at different minimums (e.g. >= 2.1.11 and
+    // >= 3.0.3), the higher wins and only that version's assemblies are referenced or copied.
+    // Without this the closure carries several versions of one id, and the flat copy into the output
+    // folder lets the older one clobber the newer (SQLitePCLRaw.core 2.1.11 overwriting 3.0.3),
+    // producing a runtime FileNotFoundException even though the correct dll had been collected.
+    private static List<string> ResolveUnifiedPackagePaths(
+        IEnumerable<(string Id, string Version, string Path)> roots, string targetTfm)
+    {
+        var chosen = new Dictionary<string, (string Version, string Path)>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<(string Id, string Version, string Path)>(roots);
+
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (queue.Count > 0)
+        {
+            var (id, version, path) = queue.Dequeue();
+            if (!visited.Add(id + "/" + version)) continue;
+
+            // Skip a package we already resolved to an equal-or-higher version.
+            if (chosen.TryGetValue(id, out var current) &&
+                VersionResolver.CompareVersions(current.Version, version) >= 0)
+                continue;
+
+            chosen[id] = (version, path);
+
+            foreach (var dependency in NuGetPackage.ReadDependencies(path, targetTfm))
+            {
+                if (dependency.Excluded || string.IsNullOrEmpty(dependency.Id)) continue;
+
+                var dependencyPath = NuGetPackage.FindPackagePath(dependency.Id, dependency.Version);
+                if (string.IsNullOrEmpty(dependencyPath)) continue;
+
+                queue.Enqueue((dependency.Id, dependency.Version, dependencyPath));
+            }
+        }
+
+        return chosen.Values.Select(value => value.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     // Single place where a PackageReference becomes a version and a directory on disk, so the
     // reference collection and the diagnostics below can never disagree about what resolved.
-    private static IEnumerable<(string Name, string Version, string? Path)> ResolvePackageReferences(Project project)
+    // Path is null when the version or the package folder cannot be found; the diagnostics report it.
+    private static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
+        IEnumerable<PackageReference> packages, string projectDirectory)
     {
-        foreach (var item in project.PackageReferences)
+        foreach (var package in packages)
         {
-            var packageName = item.Include ?? "";
-            var packageVersion = item.Version ?? NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
-            if (string.IsNullOrEmpty(packageName)) continue;
+            var id = package.Include ?? "";
+            if (string.IsNullOrEmpty(id)) continue;
 
-            yield return (packageName, packageVersion ?? "",
-                string.IsNullOrEmpty(packageVersion)
-                    ? null
-                    : NuGetPackage.FindPackagePath(packageName, packageVersion));
+            var version = package.Version ?? NuGetPackage.ResolveCentralVersion(id, projectDirectory);
+            yield return (id, version ?? "",
+                string.IsNullOrEmpty(version) ? null : NuGetPackage.FindPackagePath(id, version));
         }
+    }
+
+    // The fully-resolved subset of ResolvePackageReferences: every entry has a directory on disk.
+    private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(
+        IEnumerable<PackageReference> packages, string projectDirectory) =>
+        ResolvePackageReferences(packages, projectDirectory)
+            .Where(reference => reference.Path is not null)
+            .Select(reference => (reference.Id, reference.Version, reference.Path!))
+            .ToList();
+
+    // Runtime-native assets (runtimes/<rid>/native/*) for the whole package graph - the project's
+    // own packages plus those of every referenced project, matching the managed copy set. Some
+    // packages ship only native files and no lib folder (e.g. SourceGear.sqlite3), so they can never
+    // be found by walking the collected managed dlls; the graph must be walked by package id.
+    // The dlls are placed next to the app because sharp emits no deps.json for the host to probe
+    // runtimes/<rid>/native through, so a DllImport like e_sqlite3 resolves from the app directory.
+    public static List<string> GetOutputNativeFiles(Project project)
+    {
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
+        var rid = string.IsNullOrEmpty(project.RuntimeIdentifier)
+            ? RuntimeInformation.RuntimeIdentifier
+            : project.RuntimeIdentifier!;
+        if (string.IsNullOrEmpty(rid)) return new List<string>();
+
+        var native = new List<string>();
+        foreach (var packagePath in CollectPackagePaths(project.ProjectRootPath, tfm))
+        {
+            var nativeDirectory = Path.Combine(packagePath, "runtimes", rid, "native");
+            if (Directory.Exists(nativeDirectory))
+                native.AddRange(Directory.EnumerateFiles(nativeDirectory));
+        }
+
+        return native.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    // Every package id reachable from the project's own PackageReferences and those of its referenced
+    // projects, unified to one version per id (same rule as the managed reference collection).
+    private static List<string> CollectPackagePaths(string projectRootPath, string targetTfm)
+    {
+        var packagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>();
+        queue.Enqueue(projectRootPath);
+
+        while (queue.Count > 0)
+        {
+            var directory = queue.Dequeue();
+            var csproj = Directory.EnumerateFiles(directory, "*.csproj", SearchOption.TopDirectoryOnly)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (csproj is null) continue;
+            if (!visitedProjects.Add(Path.GetFullPath(csproj))) continue;
+
+            var xml = XML.Project.Parse(csproj);
+            var roots = ResolvedPackageRoots(xml.ItemGroup.SelectMany(ig => ig.PackageReferences), directory);
+
+            foreach (var packagePath in ResolveUnifiedPackagePaths(roots, targetTfm))
+                packagePaths.Add(packagePath);
+
+            foreach (var reference in xml.ItemGroup.SelectMany(ig => ig.ProjectReferences))
+            {
+                var include = (reference.Include ?? "").Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+                if (string.IsNullOrEmpty(include)) continue;
+
+                queue.Enqueue(Path.GetFullPath(Path.Combine(directory, Path.GetDirectoryName(include) ?? "")));
+            }
+        }
+
+        return packagePaths.ToList();
     }
 
     // A PackageReference that cannot be satisfied used to be skipped in silence, surfacing later
@@ -661,7 +760,7 @@ public static class NativeCompilerUtils
     {
         var warnings = new List<string>();
 
-        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project))
+        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project.PackageReferences, project.ProjectRootPath))
         {
             if (string.IsNullOrEmpty(packageVersion))
             {
@@ -729,6 +828,14 @@ public static class NativeCompilerUtils
     // Mirrors NuGet's framework-assembly suppression: assemblies that are inbox in the runtime/ref pack
     // are dropped from package/project references so duplicate simple names (e.g. System.Collections.Immutable)
     // do not produce conflicting references.
+    //
+    // When one simple name appears at two versions - the entry project's own graph resolves one (e.g.
+    // Azure.Core 1.54.0 via Azure.Search.Documents) while a referenced project's graph resolves a higher
+    // one (Azure.Core 1.61.0 via Microsoft.Extensions.Azure) - a compilation can only reference one of
+    // them. Keep the highest: csc accepts a referenced assembly whose version is >= the version each
+    // dependent was compiled against, so the highest satisfies every dependency, whereas keeping the
+    // first-seen lower version triggers CS1705. This mirrors NuGet's graph-wide version unification,
+    // which the per-project resolution upstream cannot see across the project-reference closure.
     public static MetadataReference[] MergeFrameworkSuppression(
         IEnumerable<MetadataReference> nugetAndLocal,
         IEnumerable<MetadataReference> frameworkReferences)
@@ -738,20 +845,44 @@ public static class NativeCompilerUtils
                 Path.GetFileNameWithoutExtension(reference.Display) ?? ""),
             StringComparer.OrdinalIgnoreCase);
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var merged = new List<MetadataReference>();
+        // First-seen order is preserved so the emitted reference set stays deterministic.
+        var order = new List<string>();
+        var chosen = new Dictionary<string, (MetadataReference Reference, Version? Version)>(
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var reference in nugetAndLocal)
         {
             var name = Path.GetFileNameWithoutExtension(reference.Display) ?? "";
             if (name.Length == 0) continue;
             if (frameworkNames.Contains(name)) continue;
-            if (!seen.Add(name)) continue;
-            merged.Add(reference);
+
+            if (!chosen.TryGetValue(name, out var current))
+            {
+                chosen[name] = (reference, TryGetAssemblyVersion(reference.Display));
+                order.Add(name);
+                continue;
+            }
+
+            var candidate = TryGetAssemblyVersion(reference.Display);
+            if (candidate is null) continue;
+            if (current.Version is not null && candidate.CompareTo(current.Version) <= 0) continue;
+
+            chosen[name] = (reference, candidate);
         }
 
+        var merged = new List<MetadataReference>(order.Count + frameworkReferences.Count());
+        foreach (var name in order) merged.Add(chosen[name].Reference);
         merged.AddRange(frameworkReferences);
         return merged.ToArray();
+    }
+
+    // Reads an assembly's identity version from its file, tolerating paths that are not managed
+    // assemblies (returns null so the caller keeps the reference it already has).
+    private static Version? TryGetAssemblyVersion(string? displayPath)
+    {
+        if (string.IsNullOrEmpty(displayPath) || !File.Exists(displayPath)) return null;
+        try { return AssemblyName.GetAssemblyName(displayPath).Version; }
+        catch { return null; }
     }
 
     public static void ThrowErrors(EmitResult result)
@@ -1131,6 +1262,34 @@ public static class NativeCompilerUtils
         if (ivtSource.Length > 0)
             project.CSFiles.Add(new ProjectFile("InternalsVisibleTo.g.cs", ivtSource.ToString()));
 
+        // <AssemblyAttribute> items become [assembly:] attributes (MSBuild WriteCodeFragment),
+        // including the module-name manifest a target may synthesize from project references. See
+        // AssemblyAttributeEvaluator for the two sources.
+        var assemblyAttributeLines = AssemblyAttributeEvaluator.GetAttributeSources(project).ToList();
+
+        // Razor MVC views: when any .cshtml is compiled, MSBuild writes
+        // [assembly: ProvideApplicationPartFactory(ConsolidatedAssemblyApplicationPartFactory)] so MVC
+        // discovers the compiled views in the assembly (Microsoft.NET.Sdk.Razor.SourceGenerators.targets).
+        if (project.RazorInputs.Any(input => !input.IsComponent))
+        {
+            const string factory =
+                "Microsoft.AspNetCore.Mvc.ApplicationParts.ConsolidatedAssemblyApplicationPartFactory, Microsoft.AspNetCore.Mvc.Razor";
+            assemblyAttributeLines.Add(
+                "[assembly: Microsoft.AspNetCore.Mvc.ApplicationParts.ProvideApplicationPartFactoryAttribute(" +
+                $"\"{factory}\")]");
+        }
+
+        if (assemblyAttributeLines.Count > 0)
+        {
+            var assemblyAttributeSource = new StringBuilder();
+            assemblyAttributeSource.AppendLine("// <auto-generated />");
+            foreach (var line in assemblyAttributeLines)
+                assemblyAttributeSource.AppendLine(line);
+            project.CSFiles.Add(new ProjectFile(
+                Path.Combine(generatedRoot, project.ProjectName + ".AssemblyAttributeItems.g.cs"),
+                assemblyAttributeSource.ToString()));
+        }
+
         // Aspire AppHost SDK generates Projects.<ClassName> metadata classes at build time through
         // MSBuild targets (Aspire.Hosting.AppHost.targets: CreateAspireProjectMetadataSources +
         // CreateAspireHostProjectMetadataSources), not a Roslyn source generator. Those <Compile>
@@ -1448,7 +1607,7 @@ public static void WriteRuntimeConfig(Project project)
     //versions or machines, so embedding it here mirrors the SDK exactly.
     private const string AppBinaryPathPlaceholder = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2";
 
-    private static string CSharpStringLiteral(string value) =>
+    internal static string CSharpStringLiteral(string value) =>
         "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
 
     private static string PadToFourParts(string version)

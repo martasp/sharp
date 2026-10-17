@@ -21,6 +21,7 @@ public sealed record BuildProps(
     bool AllowUnsafeBlocks,
     bool UseAppHost,
     bool EnableRequestDelegateGenerator,
+    bool EnableConfigurationBindingGenerator,
     string? DefineConstants,
     IReadOnlyList<string> AnalyzerProjectReferences,
     string? InterceptorsNamespaces);
@@ -81,6 +82,16 @@ public static class BuildPropsEvaluator
             // (not evaluated here - this pipeline does not publish).
             var enableRdg = Expand(props.GetValueOrDefault("EnableRequestDelegateGenerator"), props)
                 .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+            // SDK gate for the Configuration Binding Generator: on only for trimmed/AOT-published
+            // apps or an explicit opt-in. It is an interceptor generator (not attribute-driven), so
+            // running it for a plain build emits binder glue the SDK never produces.
+            var publishTrimmed = Expand(props.GetValueOrDefault("PublishTrimmed"), props)
+                .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+            var publishAot = Expand(props.GetValueOrDefault("PublishAot"), props)
+                .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+            var enableConfigBinder = publishTrimmed || publishAot
+                || Expand(props.GetValueOrDefault("EnableConfigurationBindingGenerator"), props)
+                    .Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
 
             return new BuildProps(
                 EmptyToNull(targetFramework),
@@ -90,6 +101,7 @@ public static class BuildPropsEvaluator
                 allowUnsafe,
                 useAppHost,
                 enableRdg,
+                enableConfigBinder,
                 EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)),
                 analyzerRefs,
                 EmptyToNull(Expand(props.GetValueOrDefault("InterceptorsNamespaces") ??
@@ -102,7 +114,7 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static readonly BuildProps Default = new(null, false, null, null, false, true, false, null, Array.Empty<string>(), null);
+    private static readonly BuildProps Default = new(null, false, null, null, false, true, false, false, null, Array.Empty<string>(), null);
 
     // Resolves the assembly-identity properties for a project folder. Collects Directory.Build.props
     // (with its imports) then overlays the project's own <PropertyGroup> declarations, which override

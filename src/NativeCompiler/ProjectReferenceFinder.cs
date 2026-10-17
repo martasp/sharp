@@ -1,6 +1,4 @@
-﻿using System.Threading;
-
-namespace NativeCompiler;
+﻿namespace NativeCompiler;
 
 public class ProjectReferenceFinder
 {
@@ -11,8 +9,6 @@ public class ProjectReferenceFinder
         // Path.GetFileName treat '\' as a regular char on Linux).
         projectFilePath = projectFilePath.Replace('\\', Path.DirectorySeparatorChar)
             .Replace('/', Path.DirectorySeparatorChar);
-        // Extract the directory path of the project file.
-        var fileName = Path.GetFileNameWithoutExtension(projectFilePath) ?? throw new Exception("File not found");
 
         // Extract the directory path of the project file.
         var projectDirectory = Path.GetDirectoryName(projectFilePath) ?? throw new Exception("Directory not found");
@@ -22,34 +18,19 @@ public class ProjectReferenceFinder
         if (!File.Exists(referencedProjectCsproj))
             throw new Exception($"Cant find csproj {referencedProjectCsproj}");
 
-        var referencedProjectSharpBinDir = Project.GetSharpBinDirectory(
-            referencedProjectDir, Project.ResolveTargetFramework(referencedProjectCsproj));
-        var dllPath = Path.Combine(referencedProjectSharpBinDir, $"{fileName}.dll");
-
-        // Build the referenced project on demand when its output is missing. The compiler reports
-        // the authoritative location via the build result; the final existence check retries briefly
-        // so a freshly emitted file is always visible to this (possibly `..`-normalized) path probe.
-        BuildResult buildResult = default!;
-        if (!File.Exists(dllPath))
-        {
-            buildResult = NativeCompiler.Build(referencedProjectDir);
-            if (!buildResult.Success)
-                throw new Exception($"Cant build {referencedProjectDir}: {buildResult.Errors}");
-
-            if (buildResult.Project?.DllPathName is { } reportedPath && File.Exists(reportedPath))
-                return reportedPath;
-        }
-
-        for (var attempt = 0; attempt < 5 && !File.Exists(dllPath); attempt++)
-            Thread.Sleep(50);
-
+        // The wave plan builds every referenced project before its dependents, so in a solution build
+        // the output is present and we just locate it; only a standalone build reaches the missing
+        // case. GetOutputDllPath resolves TargetFramework the same way compilation does, so the probe
+        // cannot drift from the emitted path.
+        var dllPath = Project.GetOutputDllPath(Path.GetFullPath(referencedProjectDir), referencedProjectCsproj);
         if (File.Exists(dllPath)) return dllPath;
 
-        var detail = buildResult.Project is null
-            ? (success: true, dll: (string?)null, errors: "")
-            : (success: buildResult.Success, dll: buildResult.Project.DllPathName, errors: buildResult.Errors);
-        throw new Exception($"Cant find dll path {dllPath} (build success={detail.success}, "
-            + $"dll={detail.dll}, errors=[{detail.errors}])");
+        var buildResult = NativeCompiler.Build(referencedProjectDir);
+        if (!buildResult.Success)
+            throw new Exception($"Cant build {referencedProjectDir}: {buildResult.Errors}");
+
+        return buildResult.Project?.DllPathName
+            ?? throw new Exception($"Cant find dll path for {referencedProjectDir}");
     }
 
     public static string? FindReferencedCsproj(string projectFilePath, string projectPath)

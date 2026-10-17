@@ -47,6 +47,11 @@ public static class NativeCompiler
     public static BuildResult Build(string projectPath)
     {
         var fullPath = Path.GetFullPath(projectPath);
+
+        // Cycle guard. A project that reaches itself through its own (transitive) references must be
+        // reported, not built forever. BuildSolution schedules a complete, acyclic wave plan first, so
+        // within a solution build this only ever trips on a genuine cycle; a single-project build
+        // resolves its references on one thread, so re-entry here is always that same cycle.
         if (!BuildsInProgress.TryAdd(fullPath, 0))
             throw new InvalidOperationException(
                 $"Circular project reference detected: '{projectPath}' is already being built.");
@@ -54,6 +59,21 @@ public static class NativeCompiler
         try
         {
             return BuildCore(projectPath);
+        }
+        catch (Exception ex)
+        {
+            // A referenced project that cannot be produced (or any other resolution failure) must be
+            // reported like a compile error instead of escaping as an unhandled exception that aborts
+            // the process (SIGABRT). BuildSolution's per-project catch then sees a normal failed result.
+            return new BuildResult(
+                false,
+                ex.Message,
+                new[] { $"{Path.GetFileName(Path.TrimEndingDirectorySeparator(projectPath))} failed: {ex.Message}" },
+                TimeSpan.Zero,
+                null,
+                null,
+                null,
+                string.Empty);
         }
         finally
         {
@@ -163,6 +183,12 @@ public static class NativeCompiler
         DepsJsonWriter.Write(project, paths, hintPathCopies);
         paths.AddRange(hintPathCopies);
         WriteFiles(project.SharpBinFolderPath, paths);
+
+        // Runtime-native assets (e.g. libe_sqlite3.so) for the package graph. Copied next to the app
+        // because sharp emits no deps.json, so the host cannot probe runtimes/<rid>/native itself.
+        var nativePaths = GetOutputNativeFiles(project);
+        if (nativePaths.Count > 0)
+            WriteFiles(project.SharpBinFolderPath, nativePaths);
 
         // Self-hosting: when the project being compiled consumes sharp itself (NativeCompilerCLI via
         // its ProjectReference), the emitted assembly needs the embedded SDK payload. MSBuild embeds
@@ -300,10 +326,36 @@ public static class NativeCompiler
                 errors.Add($"{csproj}: {ex.Message}");
             }
 
+            // Analyzer project references injected through Directory.Build.props (e.g. OrchardCore's
+            // Commons.props adds OrchardCore.SourceGenerators to every project) are build dependencies
+            // too, but they live in the evaluated props chain rather than the csproj, so the
+            // ProjectReference items above never see them. Left out of the plan, a shared generator
+            // lands in the same wave as its consumers, and each consumer builds it on demand -
+            // concurrently and redundantly. Adding the edge puts it in its own earlier wave instead.
+            AddAnalyzerProjectReferences(csproj, directory, refs, projects, queue);
+
             references[csproj] = refs;
         }
 
         return TopologicalSort(projects, references, errors);
+    }
+
+    private static void AddAnalyzerProjectReferences(
+        string csproj, string directory, HashSet<string> refs, SortedSet<string> projects, Queue<string> queue)
+    {
+        var self = Path.GetFullPath(csproj);
+        foreach (var analyzerRef in BuildPropsEvaluator.Evaluate(directory).AnalyzerProjectReferences)
+        {
+            // The props evaluator does not honor MSBuild conditions, so a reference carrying
+            // Condition="$(MSBuildProjectName) != 'ThisProject'" is read as a self-reference. Those
+            // generator projects skip themselves at run time (SourceGeneratorRunner.SkippedSelf), so
+            // drop the self-edge here - otherwise it is an unorderable cycle and the whole solution
+            // falls back to a serial build.
+            if (string.Equals(analyzerRef, self, StringComparison.OrdinalIgnoreCase)) continue;
+
+            refs.Add(analyzerRef);
+            if (projects.Add(analyzerRef)) queue.Enqueue(analyzerRef);
+        }
     }
 
     // Dependencies build first; anything that cannot be ordered (a cycle) is still built, in stable
@@ -395,11 +447,21 @@ public static class NativeCompiler
                 pdbFilePath: project.PDBPathName,
                 highEntropyVirtualAddressSpace: true);
 
+            // Embedded resources (e.g. OrchardCore module assets) are embedded verbatim under the
+            // name a build target computed, mirroring `dotnet build`'s manifest resources.
+            var manifestResources = AssemblyAttributeEvaluator.GetEmbeddedResources(project)
+                .Select(resource => new ResourceDescription(
+                    resource.Name,
+                    () => File.OpenRead(resource.FilePath),
+                    isPublic: true))
+                .ToList();
+
             (bool success, string errors) result;
             using (var dllStream = File.Create(project.DllPathName))
             using (var pdbStream = File.Create(project.PDBPathName))
             {
-                var emitResult = compilation.Emit(dllStream, pdbStream, options: emitOptions);
+                var emitResult = compilation.Emit(dllStream, pdbStream,
+                    manifestResources: manifestResources, options: emitOptions);
                 result = (emitResult.Success, emitResult.PrintErrors());
             }
 

@@ -36,6 +36,8 @@ public class Project : IProject
     public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework
                                       ?? BuildProps.TargetFramework;
 
+    public string? RuntimeIdentifier => XMLProject.PropertyGroup?.FirstOrDefault()?.RuntimeIdentifier;
+
     public bool AllowUnsafeBlocks =>
         (XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
         || BuildProps.AllowUnsafeBlocks;
@@ -55,6 +57,18 @@ public class Project : IProject
         (XMLProject.PropertyGroup?.FirstOrDefault()?.EnableRequestDelegateGenerator?.Trim()
             .Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
         || BuildProps.EnableRequestDelegateGenerator;
+
+    // SDK gate for the Configuration Binding Generator. Like the Request Delegate Generator it is
+    // off-by-default (the SDK flips it on only for PublishTrimmed/PublishAot, handled by
+    // BuildProps) and, unlike the other targeting-pack generators, it is interceptor-based rather
+    // than attribute-driven: it emits glue for every `services.Configure<T>(config)` /
+    // `configuration.Get<T>()` call site. Running it for a plain build emits code the SDK never
+    // produces, which can collide with a project that defines its own
+    // Microsoft.Extensions.DependencyInjection.OptionsServiceCollectionExtensions.
+    public bool EnableConfigurationBindingGenerator =>
+        (XMLProject.PropertyGroup?.FirstOrDefault()?.EnableConfigurationBindingGenerator?.Trim()
+            .Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
+        || BuildProps.EnableConfigurationBindingGenerator;
 
     public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion ?? BuildProps.LangVersion;
 
@@ -148,6 +162,48 @@ public class Project : IProject
         .Select(sdk => sdk.Trim())
         .Contains("Microsoft.NET.Sdk.Web", StringComparer.OrdinalIgnoreCase);
 
+    // Razor SDK projects (Microsoft.NET.Sdk.Razor / Microsoft.NET.Sdk.Web). Drives Razor view/component
+    // compilation via the Razor source generator (see RazorSupport).
+    public bool UsesRazorSdk => RazorSupport.UsesRazorSdk(XMLProject.Sdk);
+
+    // <AddRazorSupportForMvc> (set by MVC view projects, e.g. OrchardCore modules). Determines whether
+    // .cshtml files compile into MVC views.
+    public bool AddRazorSupportForMvc =>
+        XMLProject.PropertyGroup?.FirstOrDefault()?.AddRazorSupportForMvc
+            ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+
+    // The Razor language version the generator targets. Defaults to the TFM's version (e.g. net10.0 ->
+    // "10.0"); a project may override it with <RazorLangVersion>.
+    public string RazorLangVersion
+    {
+        get
+        {
+            var declared = XMLProject.PropertyGroup?.FirstOrDefault()?.RazorLangVersion;
+            if (!string.IsNullOrWhiteSpace(declared)) return declared.Trim();
+
+            var tfm = TargetFramework ?? "";
+            var trimmed = tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase) ? tfm[3..] : tfm;
+            var dash = trimmed.IndexOf('-');
+            if (dash >= 0) trimmed = trimmed[..dash];
+            return string.IsNullOrEmpty(trimmed) ? "10.0" : trimmed;
+        }
+    }
+
+    // The Razor inputs (.cshtml -> MVC views, .razor -> components) the source generator compiles.
+    // Empty for projects that do not use the Razor SDK or have no Razor files.
+    private IReadOnlyList<RazorInput>? _razorInputs;
+    public IReadOnlyList<RazorInput> RazorInputs => _razorInputs ??= UsesRazorSdk
+        ? RazorSupport.Collect(
+            ProjectRootPath,
+            IsWebSdk,
+            defaultItemsEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultItems),
+            generateEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorGenerateItems),
+            componentEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorComponentItems))
+        : Array.Empty<RazorInput>();
+
+    private static bool IsPropertyFalse(string? value) =>
+        value?.Trim().Equals("false", StringComparison.OrdinalIgnoreCase) ?? false;
+
     // Aspire AppHost projects (Sdk="Aspire.AppHost.Sdk"). The SDK's build targets synthesize
     // "Projects.<ClassName>" metadata classes for every project resource reference (and the host
     // itself); those generated files are MSBuild artifacts, not source-generator output, so we
@@ -218,18 +274,19 @@ public class Project : IProject
         return path;
     }
 
-    // Reads the TargetFramework from an arbitrary csproj (used when a build output must be located
-    // for a referenced/analyzer project without constructing a full Project).
-    public static string? ResolveTargetFramework(string csprojPath)
+    // Locates a project's output DLL without building it, resolving TargetFramework exactly the way
+    // compilation does (csproj <TargetFramework>, then Directory.Build.props) so callers can skip a
+    // build when the output is already present without risking a path that drifts from the one the
+    // build actually writes.
+    public static string GetOutputDllPath(string projectRootPath, string csprojPath)
     {
-        try
-        {
-            return XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework;
-        }
-        catch
-        {
-            return null;
-        }
+        string? targetFramework = null;
+        try { targetFramework = XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework; }
+        catch { /* fall through to Directory.Build.props */ }
+        targetFramework ??= BuildPropsEvaluator.Evaluate(projectRootPath).TargetFramework;
+
+        return Path.Combine(GetSharpBinDirectory(projectRootPath, targetFramework),
+            Path.GetFileNameWithoutExtension(csprojPath) + ".dll");
     }
 
     public static void CreateFolderIfNotExists(string folderPath)
