@@ -310,7 +310,7 @@ async Task<int> RestoreCommandAsync(string[] args)
     if (isSolution)
     {
         var (success, projects, duration) =
-            await PackageRestorer.RestoreSolution(target).ConfigureAwait(false);
+            await NativeCompiler.NativeCompiler.RestoreSolution(target).ConfigureAwait(false);
 
         foreach (var project in projects)
         {
@@ -341,7 +341,7 @@ async Task<int> RestoreCommandAsync(string[] args)
         return 1;
     }
 
-    var result = await PackageRestorer.RestoreProject(target).ConfigureAwait(false);
+    var result = await NativeCompiler.NativeCompiler.RestoreProject(target).ConfigureAwait(false);
     foreach (var warning in result.Warnings) WriteLine(warning);
 
     if (result.Success)
@@ -388,46 +388,19 @@ int CleanCommand(string[] args)
 int CleanTarget(string target, string configuration)
 {
     var cleanTimer = Stopwatch.StartNew();
-    var roots = target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
-                target.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)
-        ? SolutionFile.Parse(target).Projects
-            .Select(project => Path.GetDirectoryName(project.ProjectPath))
-            .Where(directory => !string.IsNullOrEmpty(directory))
-            .Select(directory => directory!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray()
-        : [target];
+    var result = NativeCompiler.NativeCompiler.Clean(target, configuration);
 
-    var removed = 0;
-    foreach (var root in roots)
-    {
-        // Only this compiler's own trees. bin/ belongs to the SDK and is what the parity tests
-        // compare against, so deleting it would destroy the comparison baseline.
-        foreach (var candidate in CleanTargets(root, configuration))
-        {
-            if (!Directory.Exists(candidate)) continue;
-            try
-            {
-                Directory.Delete(candidate, recursive: true);
-                removed++;
-            }
-            catch (Exception exception)
-            {
-                WriteLine($"Warning: could not delete '{RelativePath(candidate)}': {exception.Message}");
-            }
-        }
-    }
+    foreach (var warning in result.Warnings)
+        WriteLine($"Warning: {warning}");
 
-    // SDK grammar: a clean that removed something still reports a (no-op) build line; one that
-    // found nothing says so, which is the only useful distinction here.
-    if (removed == 0)
+    if (result.Removed == 0)
     {
         WriteLine($"Nothing to clean for configuration '{configuration}'.");
         return 0;
     }
 
     WriteLine();
-    WriteLine($"Clean succeeded in {cleanTimer.Elapsed.TotalSeconds:0.0}s");
+    WriteLine($"Clean succeeded in {result.Duration.TotalSeconds:0.0}s");
     return 0;
 }
 

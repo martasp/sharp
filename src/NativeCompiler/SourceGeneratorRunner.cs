@@ -55,9 +55,9 @@ public static class SourceGeneratorRunner
             var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
             if (string.IsNullOrEmpty(packagePath)) continue;
 
-            AddAnalyzerDlls(dlls, packagePath);
+            dlls.UnionWith(AnalyzerDlls(packagePath));
             foreach (var transitive in NuGetPackage.GetTransitivePackagePaths(packagePath, tfm))
-                AddAnalyzerDlls(dlls, transitive);
+                dlls.UnionWith(AnalyzerDlls(transitive));
         }
 
         // <FrameworkReference> targeting packs can ship their own analyzers (e.g. the AspNetCore
@@ -66,9 +66,10 @@ public static class SourceGeneratorRunner
         // these only run for projects that actually hold the framework reference - web projects
         // get Microsoft.AspNetCore.App implicitly. The base Microsoft.NETCore.App pack is skipped
         // (its generators are the statically linked SDK set, already in AnalyzerRegistry).
-        var frameworkNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        NativeCompilerUtils.CollectFrameworkReferenceNames(project.ProjectRootPath, visitedProjects, frameworkNames);
+        var frameworkNames = new HashSet<string>(
+            NativeCompilerUtils.CollectFrameworkReferenceNames(
+                project.ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
+            StringComparer.OrdinalIgnoreCase);
         if (project.IsWebSdk) frameworkNames.Add("Microsoft.AspNetCore.App");
 
         foreach (var frameworkName in frameworkNames)
@@ -106,7 +107,7 @@ public static class SourceGeneratorRunner
         }
 
         // Razor projects pull their generator from the SDK's Microsoft.NET.Sdk.Razor component.
-        RazorSupport.AddGeneratorDlls(project, dlls);
+        dlls.UnionWith(RazorSupport.GeneratorDlls(project));
 
         // Analyzer project references (OutputItemType="Analyzer") ship generators from source
         // projects, e.g. OrchardCore.SourceGenerators (referenced from csproj XML by test
@@ -170,19 +171,18 @@ public static class SourceGeneratorRunner
             ?? throw new Exception($"Cant find dll path for analyzer project '{Path.GetFileName(csprojPath)}'");
     }
 
-    private static void AddAnalyzerDlls(HashSet<string> dlls, string packagePath)
+    [HasSideEffects]
+    private static IEnumerable<string> AnalyzerDlls(string packagePath)
     {
-        if (!Directory.Exists(packagePath)) return;
+        if (!Directory.Exists(packagePath)) return [];
 
-        var cached = AnalyzerDllCache.GetOrAdd(packagePath, path => Directory
+        return AnalyzerDllCache.GetOrAdd(packagePath, path => Directory
             .EnumerateFiles(path, "*.dll", SearchOption.AllDirectories)
             .Where(dll => dll.Replace('\\', '/')
                 .Contains("/analyzers/dotnet/cs/", StringComparison.OrdinalIgnoreCase))
             .Where(dll => !IsRoslynDistribution(dll))
             .OrderBy(dll => dll, StringComparer.OrdinalIgnoreCase)
             .ToList());
-
-        foreach (var dll in cached) dlls.Add(dll);
     }
 
     // The compiler's own assemblies shipped in analyzer folders (e.g. the

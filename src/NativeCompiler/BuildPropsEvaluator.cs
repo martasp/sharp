@@ -48,10 +48,13 @@ public static class BuildPropsEvaluator
             var propsFile = FindNearestPropsFile(projectRootPath);
             if (propsFile is null) return Default;
 
-            var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var analyzerRefs = new List<string>();
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Traverse(propsFile, props, analyzerRefs, visited);
+            var acc = new PropsAccumulator(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                new List<string>(),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            acc = Traverse(propsFile, acc);
+            var props = acc.Props;
+            var analyzerRefs = acc.AnalyzerRefs;
 
             var targetFramework = Expand(props.GetValueOrDefault("TargetFramework"), props);
             if (string.IsNullOrEmpty(targetFramework))
@@ -123,13 +126,15 @@ public static class BuildPropsEvaluator
     {
         try
         {
-            var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var analyzerRefs = new List<string>();
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var acc = new PropsAccumulator(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                new List<string>(),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
             var propsFile = FindNearestPropsFile(projectRootPath);
             if (propsFile is not null)
-                Traverse(propsFile, props, analyzerRefs, visited);
+                acc = Traverse(propsFile, acc);
+            var props = acc.Props;
 
             var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault();
@@ -210,21 +215,27 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static void Traverse(string propsFilePath, Dictionary<string, string> props, List<string> analyzerRefs, HashSet<string> visited)
+    private sealed record PropsAccumulator(
+        Dictionary<string, string> Props,
+        List<string> AnalyzerRefs,
+        HashSet<string> Visited);
+
+    [Query]
+    private static PropsAccumulator Traverse(string propsFilePath, PropsAccumulator acc)
     {
         var fullPath = Path.GetFullPath(propsFilePath);
-        if (!visited.Add(fullPath)) return;
-        if (!File.Exists(fullPath)) return;
+        if (!acc.Visited.Add(fullPath)) return acc;
+        if (!File.Exists(fullPath)) return acc;
 
         XDocument document;
         try { document = XDocument.Load(fullPath); }
-        catch { return; }
+        catch { return acc; }
 
         var root = document.Root;
-        if (root is null) return;
+        if (root is null) return acc;
 
         var directory = Path.GetDirectoryName(fullPath) ?? "";
-        props["MSBuildThisFileDirectory"] = directory + Path.DirectorySeparatorChar;
+        acc.Props["MSBuildThisFileDirectory"] = directory + Path.DirectorySeparatorChar;
 
         foreach (var element in root.Elements())
         {
@@ -235,39 +246,39 @@ public static class BuildPropsEvaluator
                 var project = (string?)element.Attribute("Project") ?? "";
                 if (project.Length == 0) continue;
 
-                var expanded = Expand(project, props);
+                var expanded = Expand(project, acc.Props);
                 var importPath = expanded
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
-                Traverse(Path.GetFullPath(Path.Combine(directory, importPath)), props, analyzerRefs, visited);
+                acc = Traverse(Path.GetFullPath(Path.Combine(directory, importPath)), acc);
             }
             else if (localName == "PropertyGroup")
             {
                 foreach (var property in element.Elements())
-                    props[property.Name.LocalName] = property.Value.Trim(); // last definition wins
+                    acc.Props[property.Name.LocalName] = property.Value.Trim();
             }
             else if (localName == "ItemGroup")
             {
-                // Analyzer project references injected from evaluated props (e.g. OrchardCore's
-                // OrchardCore.Commons.props adds OrchardCore.SourceGenerators to every project).
                 foreach (var item in element.Elements())
                 {
                     if (item.Name.LocalName != "ProjectReference") continue;
                     var outputType = (string?)item.Attribute("OutputItemType") ?? "";
                     if (!outputType.Contains("Analyzer", StringComparison.OrdinalIgnoreCase)) continue;
 
-                    var include = Expand((string?)item.Attribute("Include") ?? "", props);
+                    var include = Expand((string?)item.Attribute("Include") ?? "", acc.Props);
                     if (string.IsNullOrWhiteSpace(include)) continue;
 
                     include = include
                         .Replace('\\', Path.DirectorySeparatorChar)
                         .Replace('/', Path.DirectorySeparatorChar);
                     var full = Path.GetFullPath(Path.Combine(directory, include));
-                    if (!analyzerRefs.Contains(full, StringComparer.OrdinalIgnoreCase))
-                        analyzerRefs.Add(full);
+                    if (!acc.AnalyzerRefs.Contains(full, StringComparer.OrdinalIgnoreCase))
+                        acc.AnalyzerRefs.Add(full);
                 }
             }
         }
+
+        return acc;
     }
 
     private const int MaxExpansionDepth = 16;

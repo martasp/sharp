@@ -1,0 +1,210 @@
+/* Markdown -> PDF print stylesheet.
+ *
+ * Best practices encoded here (see README.md for the reasoning):
+ *  - print uses absolute units: pt for type, mm for page geometry;
+ *  - @page owns the page box; the bottom margin is larger so the running
+ *    footer has room;
+ *  - every modern `break-*` property is paired with its legacy `page-break-*`
+ *    twin, because Chromium honours them differently;
+ *  - headings are kept with the block that follows (break-after: avoid) AND
+ *    the generator additionally wraps heading+content in .keep, because
+ *    break-after: avoid alone still strands headings when the following
+ *    paragraph's first lines cannot fit;
+ *  - orphans/widows stop single stranded lines;
+ *  - figure / pre / blockquote / li are never split across a page;
+ *  - font-synthesis: none stops the browser inventing fake bold/italic,
+ *    which reads badly on paper.
+ */
+
+:root {
+  /* OpenAI-inspired palette: neutral inks + a single green accent. */
+  --ink:        #202123;   /* primary text                        */
+  --muted:      #6E6E80;   /* secondary text, captions            */
+  --accent:     #10A37F;   /* brand green: rules, accents         */
+  --accent-ink: #0B6B54;   /* green that is still readable as ink */
+  --hairline:   #E5E5E5;   /* borders                             */
+  --soft:       #F7F7F8;   /* code / block backgrounds            */
+  --paper:      #FFFFFF;
+}
+
+html {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Helvetica, Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+  font-optical-sizing: auto;
+  hyphens: auto;
+}
+
+/* ---------------------------------------------------------------- page box */
+@page {
+  size: A4;
+  margin: 20mm 18mm 24mm 18mm;   /* extra bottom for the running footer */
+}
+
+/* ------------------------------------------------------------- pagination */
+@media print {
+  /* Never strand a heading at the foot of a page. */
+  h1, h2, h3, h4, h5, h6 {
+    break-after: avoid;
+    page-break-after: avoid;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Heading + its first block travel together (added by the generator). */
+  .keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Never slice a figure, code block, quote or list item. */
+  figure, pre, blockquote, img, table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  li { break-inside: avoid; page-break-inside: avoid; }
+
+  /* A paragraph keeps at least three lines on each side of a break. */
+  p { orphans: 3; widows: 3; }
+
+  /* Repeat table headers when a table continues overleaf. */
+  thead { display: table-header-group; }
+}
+
+/* ----------------------------------------------------------- typography */
+h1, h2, h3, h4 {
+  text-wrap: balance;          /* even out heading line lengths   */
+  font-synthesis: none;
+}
+
+p { text-wrap: pretty; }
+
+h1 { font-size: 32pt; line-height: 1.1;  font-weight: 700; letter-spacing: -0.8px; margin: 0 0 10px; }
+h2 { font-size: 17pt; line-height: 1.2;  font-weight: 700; letter-spacing: -0.4px; margin: 34px 0 12px; }
+h3 { font-size: 12pt; line-height: 1.3;  font-weight: 700; margin: 22px 0 8px; }
+h4 { font-size: 11pt; line-height: 1.3;  font-weight: 700; margin: 18px 0 6px; color: var(--muted); }
+
+p, ul, ol { margin: 0 0 12px; }
+ul, ol { padding-left: 22px; }
+li { margin: 4px 0; }
+
+strong { font-weight: 700; }
+em     { font-style: italic; }
+
+/* ---------------------------------------------------------- accent rules */
+h2 {
+  padding-left: 15px;
+  position: relative;
+}
+h2::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0.12em; bottom: 0.12em;
+  width: 4px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* ----------------------------------------------------------- code */
+code {
+  font-family: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+               "Liberation Mono", monospace;
+  font-size: 9.2pt;
+  background: var(--soft);
+  color: var(--accent-ink);
+  padding: 1.5px 5px;
+  border-radius: 4px;
+}
+pre {
+  background: var(--soft);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+pre code {
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  font-size: 9pt;
+}
+pre, code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* --------------------------------------------------------------- blocks */
+hr {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: 26px 0;
+}
+blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 0 0 12px;
+  padding: 2px 0 2px 14px;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------------- figures */
+figure {
+  margin: 18px 0 22px;
+  padding: 14px 14px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper);
+  text-align: center;
+}
+figure svg, figure img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+figcaption {
+  font-size: 8.6pt;
+  color: var(--muted);
+  letter-spacing: 0.4px;
+  margin-top: 8px;
+}
+
+/* ------------------------------------------------------------ title block */
+header.title { margin: 6mm 0 8mm; }
+.eyebrow {
+  font-size: 8.6pt;
+  font-weight: 700;
+  letter-spacing: 2.4px;       /* tracked caps: never track lowercase */
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+header.title h1 { margin-bottom: 10px; }
+.subtitle { font-size: 11pt; color: var(--muted); margin: 0; }
+.rule {
+  border-top: 2px solid var(--accent);
+  width: 46px;
+  margin: 20px 0 30px;
+}
+
+/* ------------------------------------------------------------ pagination */
+.pagebreak {
+  break-before: page;
+  page-break-before: always;
+}
+
+/* --------------------------------------------------------------- links */
+a { color: var(--accent-ink); text-decoration: none; }
+@media print {
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: var(--muted);
+    word-break: break-all;
+  }
+}

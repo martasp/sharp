@@ -45,3 +45,6 @@ artifacts/
 tmp/
 *.tmp
 *.temp
+
+# Node (tools/md2pdf)
+node_modules/

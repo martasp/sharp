@@ -407,7 +407,9 @@ public static class AssemblyAttributeEvaluator
                         break;
 
                     case "RemoveDuplicates":
-                        RunRemoveDuplicates(child, props, items);
+                        var removeDuplicates = RunRemoveDuplicates(child, props, items);
+                        if (removeDuplicates is { } duplicateResult)
+                            items[duplicateResult.ItemName] = duplicateResult.Filtered;
                         break;
                 }
             }
@@ -417,16 +419,20 @@ public static class AssemblyAttributeEvaluator
 
         // <RemoveDuplicates Inputs="@(X)"><Output TaskParameter="Filtered" ItemName="Y"/></RemoveDuplicates>
         // Copies X into Y (metadata preserved), dropping later items with a duplicate identity.
-        private static void RunRemoveDuplicates(XElement task, Dictionary<string, string> props,
+        // Returns the target item name plus its filtered list; null when the task does not apply
+        // (the caller decides where the result lands, keeping this helper free of mutation).
+        [Pure]
+        private static (string ItemName, List<Dictionary<string, string>> Filtered)? RunRemoveDuplicates(
+            XElement task, Dictionary<string, string> props,
             Dictionary<string, List<Dictionary<string, string>>> items)
         {
-            if (!EvaluateCondition((string?)task.Attribute("Condition"), props, items)) return;
-            if (!IsSingleItemRef((string?)task.Attribute("Inputs") ?? "", out var inputName)) return;
-            if (!items.TryGetValue(inputName, out var source)) return;
+            if (!EvaluateCondition((string?)task.Attribute("Condition"), props, items)) return null;
+            if (!IsSingleItemRef((string?)task.Attribute("Inputs") ?? "", out var inputName)) return null;
+            if (!items.TryGetValue(inputName, out var source)) return null;
 
             var output = task.Elements().FirstOrDefault(element => element.Name.LocalName == "Output");
             var itemName = (string?)output?.Attribute("ItemName");
-            if (string.IsNullOrEmpty(itemName)) return;
+            if (string.IsNullOrEmpty(itemName)) return null;
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var filtered = new List<Dictionary<string, string>>();
@@ -434,7 +440,7 @@ public static class AssemblyAttributeEvaluator
                 if (seen.Add(item["Identity"]))
                     filtered.Add(new Dictionary<string, string>(item, StringComparer.OrdinalIgnoreCase));
 
-            items[itemName] = filtered;
+            return (itemName, filtered);
         }
 
         private void RunMsBuildTask(XElement task, Dictionary<string, string> props,
@@ -597,7 +603,8 @@ public static class AssemblyAttributeEvaluator
             var update = (string?)element.Attribute("Update");
             if (update is not null)
             {
-                ApplyUpdate(target, name, element, props, directory, update);
+                var updatedItems = ApplyUpdate(target, name, element, props, directory, update);
+                if (updatedItems is not null) target[name] = updatedItems;
                 return;
             }
 
@@ -652,26 +659,39 @@ public static class AssemblyAttributeEvaluator
                 ExpandAll(excludeRaw, props, target));
         }
 
-        private static void ApplyUpdate(Dictionary<string, List<Dictionary<string, string>>> target,
+        // Applies <Item Update="..."> metadata edits. Returns the new item list (null when the
+        // named item group is absent) so the caller decides where it lands. Metadata is expanded
+        // against a clone that grows key-by-key, preserving the order an in-place edit had (a value
+        // referencing an earlier key sees that key's new value).
+        [Pure]
+        private static List<Dictionary<string, string>>? ApplyUpdate(Dictionary<string, List<Dictionary<string, string>>> target,
             string name, XElement element, Dictionary<string, string> props, string directory, string updateRaw)
         {
             var conditionRaw = (string?)element.Attribute("Condition");
             var batchName = DetectBatchItemType(updateRaw, conditionRaw);
 
-            if (!target.TryGetValue(name, out var items)) return;
+            if (!target.TryGetValue(name, out var items)) return null;
 
             var metadata = element.Elements().Select(child => (child.Name.LocalName, child.Value)).ToList();
             var effectiveBatch = batchName ?? name;
 
+            var updated = new List<Dictionary<string, string>>(items.Count);
             foreach (var item in items)
             {
                 var condition = ExpandValue(conditionRaw ?? "", props, target, effectiveBatch, item);
-                if (!EvaluateCondition(condition, props, target)) continue;
-                foreach (var (key, value) in metadata)
+                if (!EvaluateCondition(condition, props, target))
                 {
-                    item[key] = ExpandValue(value, props, target, effectiveBatch, item);
+                    updated.Add(item);
+                    continue;
                 }
+
+                var clone = new Dictionary<string, string>(item, StringComparer.OrdinalIgnoreCase);
+                foreach (var (key, value) in metadata)
+                    clone[key] = ExpandValue(value, props, target, effectiveBatch, clone);
+                updated.Add(clone);
             }
+
+            return updated;
         }
 
         private void AddIncludedItems(Dictionary<string, List<Dictionary<string, string>>> target, string name,

@@ -1,0 +1,17 @@
+{
+  "name": "md2pdf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Markdown to print-quality PDF (markdown-it + Chromium, vector mermaid)",
+  "type": "module",
+  "bin": {
+    "md2pdf": "./md2pdf.mjs"
+  },
+  "scripts": {
+    "md2pdf": "node md2pdf.mjs"
+  },
+  "dependencies": {
+    "markdown-it": "^15.0.3",
+    "puppeteer": "^25.15.0"
+  }
+}

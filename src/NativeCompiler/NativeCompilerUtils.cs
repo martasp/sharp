@@ -20,14 +20,17 @@ public static class NativeCompilerUtils
     // The SDK materializes synthesized/generated sources at obj/<config>/<tfm>/ and records those
     // paths as the PDB documents. Reusing the same location keeps the PDB document set (names and
     // SHA-1 checksums) equal to `dotnet build` output.
+    [Pure]
     public static string GetGeneratedFileRoot(Project project) =>
         Path.Combine(project.ProjectRootPath, "obj",
             BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath)?.Configuration ?? "Debug",
             project.TargetFramework ?? DefaultTargetFramework.Value);
 
+    [Pure]
     public static string GetGeneratedFileRoot(Project project, string configuration) =>
         Path.Combine(project.ProjectRootPath, "obj", configuration, project.TargetFramework ?? DefaultTargetFramework.Value);
 
+    [Query]
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) Parse(ProjectFile projectFile,
         CSharpParseOptions options)
     {
@@ -41,12 +44,14 @@ public static class NativeCompilerUtils
         return (SyntaxTree, embeddedText);
     }
 
+    [Query]
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText) ParseFile(ProjectFile file)
     {
         var parsedSyntaxTree = Parse(file, CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest));
         return parsedSyntaxTree;
     }
 
+    [Query]
     public static (SyntaxTree syntaxTree, EmbeddedText embeddedText)[] ParseProject(Project project)
     {
         var parseOptions = CSharpParseOptions.Default
@@ -60,6 +65,7 @@ public static class NativeCompilerUtils
     // Gate for the test-project entry-point shim (main.md roadmap #2). Matches the SDK surface:
     // test projects are only exempted from the genuine CS5001 (missing-Main) error, and the shim
     // only runs when Roslyn reports there is no entry point, so real console projects are untouched.
+    [Pure]
     public static bool NeedsTestEntryPointShim(CSharpCompilation compilation, Project project) =>
         project.IsTestProject
         && project.ResolvedProjectOutputKind() == OutputKind.ConsoleApplication
@@ -71,6 +77,7 @@ public static class NativeCompilerUtils
     // Microsoft.Testing.Platform's auto-generated SelfRegisteredExtensions. A faithful replica is
     // provider-chain-specific, so this emits a dependency-free no-op Main: the project compiles
     // (no CS5001) and the tests still run under `dotnet test` against the real SDK build.
+    [Pure]
     public static SyntaxTree BuildTestEntryPointTree(string projectName)
     {
         var source =
@@ -97,6 +104,7 @@ public static class NativeCompilerUtils
     // <InterceptorsNamespaces>/<InterceptorsPreviewNamespaces> do for csc. The Roslyn API exposes
     // the property read-only, so the private backing field is seeded via reflection.
     // Kept general. DELETABLE FEATURE.
+    [Pure]
     public static CSharpParseOptions ApplyInterceptorsNamespaces(
         CSharpParseOptions parseOptions, string? interceptorsNamespaces)
     {
@@ -123,6 +131,7 @@ public static class NativeCompilerUtils
     }
 
     // Debug helper: reads back the seeded interceptor namespaces for diagnostics.
+    [Pure]
     public static string GetInterceptorsNamespacesOrEmpty(CSharpParseOptions parseOptions)
     {
         var field = typeof(CSharpParseOptions)
@@ -138,13 +147,14 @@ public static class NativeCompilerUtils
     // SDK-style preprocessor symbols: the implicit TFM constants (NET10_0, NET9_0_OR_GREATER, ...)
     // + DEBUG/TRACE + the project's DefineConstants. Mirrors what Microsoft.NET.Sdk feeds csc for
     // a Debug build. Kept general. DELETABLE FEATURE.
+    [Pure]
     public static IEnumerable<string> GetSdkPreprocessorSymbols(Project project)
     {
         var symbols = new HashSet<string>(StringComparer.Ordinal);
 
         var tfm = project.TargetFramework?.Trim();
         if (!string.IsNullOrWhiteSpace(tfm))
-            AddTargetFrameworkSymbols(symbols, tfm);
+            symbols.UnionWith(TargetFrameworkSymbols(tfm));
 
         symbols.Add("DEBUG");
         symbols.Add("TRACE");
@@ -160,29 +170,31 @@ public static class NativeCompilerUtils
         return symbols.OrderBy(symbol => symbol, StringComparer.Ordinal).ToList();
     }
 
-    private static void AddTargetFrameworkSymbols(HashSet<string> symbols, string tfm)
+    [Pure]
+    private static IEnumerable<string> TargetFrameworkSymbols(string tfm)
     {
+        var symbols = new List<string>();
         var baseTfm = tfm.Split('-')[0];
 
         if (baseTfm.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase))
         {
-            if (!TryParseVersion(baseTfm.Substring("netstandard".Length), out var major, out var minor)) return;
+            if (!TryParseVersion(baseTfm.Substring("netstandard".Length), out var major, out var minor)) return symbols;
             symbols.Add("NETSTANDARD");
             symbols.Add($"NETSTANDARD{major}_{minor}");
             var chain = new[] { "1_0", "1_1", "1_2", "1_3", "1_4", "1_5", "1_6", "2_0", "2_1" };
-            for (var i = 0; i < chain.Length; i++)
+            foreach (var entry in chain)
             {
-                var symbol = $"NETSTANDARD{chain[i]}";
+                var symbol = $"NETSTANDARD{entry}";
                 if (symbol == $"NETSTANDARD{major}_{minor}") continue;
                 symbols.Add(symbol + "_OR_GREATER");
             }
-            return;
+            return symbols;
         }
 
         if (baseTfm == "net" || baseTfm.StartsWith("net", StringComparison.OrdinalIgnoreCase))
         {
             var versionPart = baseTfm.Substring(3);
-            if (!TryParseVersion(versionPart, out var major, out var minor)) return;
+            if (!TryParseVersion(versionPart, out var major, out var minor)) return symbols;
 
             symbols.Add("NET");
             symbols.Add("NETCOREAPP");
@@ -192,28 +204,32 @@ public static class NativeCompilerUtils
             {
                 for (var m = 5; m < major; m++) symbols.Add($"NET{m}_0_OR_GREATER");
                 symbols.Add($"NET{major}_{minor}_OR_GREATER");
-                AddNetCoreAppChain(symbols);
+                symbols.AddRange(NetCoreAppChain());
             }
             else
             {
                 // netcoreapp1.0..3.1 chain
-                AddNetCoreAppChain(symbols);
+                symbols.AddRange(NetCoreAppChain());
                 symbols.Add($"NETCOREAPP{major}_{minor}_OR_GREATER");
             }
         }
+
+        return symbols;
     }
 
-    private static void AddNetCoreAppChain(HashSet<string> symbols)
-    {
-        symbols.Add("NETCOREAPP1_0_OR_GREATER");
-        symbols.Add("NETCOREAPP1_1_OR_GREATER");
-        symbols.Add("NETCOREAPP2_0_OR_GREATER");
-        symbols.Add("NETCOREAPP2_1_OR_GREATER");
-        symbols.Add("NETCOREAPP2_2_OR_GREATER");
-        symbols.Add("NETCOREAPP3_0_OR_GREATER");
-        symbols.Add("NETCOREAPP3_1_OR_GREATER");
-    }
+    [Pure]
+    private static IEnumerable<string> NetCoreAppChain() =>
+    [
+        "NETCOREAPP1_0_OR_GREATER",
+        "NETCOREAPP1_1_OR_GREATER",
+        "NETCOREAPP2_0_OR_GREATER",
+        "NETCOREAPP2_1_OR_GREATER",
+        "NETCOREAPP2_2_OR_GREATER",
+        "NETCOREAPP3_0_OR_GREATER",
+        "NETCOREAPP3_1_OR_GREATER",
+    ];
 
+    [Pure]
     private static bool TryParseVersion(string version, out int major, out int minor)
     {
         major = 0;
@@ -224,6 +240,7 @@ public static class NativeCompilerUtils
         return int.TryParse(majorText, out major) && int.TryParse(minorText, out minor);
     }
 
+    [Pure]
     private static LanguageVersion ResolveLanguageVersion(string? langVersion)
     {
         if (!string.IsNullOrWhiteSpace(langVersion) &&
@@ -232,6 +249,7 @@ public static class NativeCompilerUtils
         return LanguageVersion.Latest;
     }
 
+    [Query]
     public static MetadataReference[] GetdefaultReferencesForCompiling(string dotNetAssemblyRefPath)
     {
         var directory = new DirectoryInfo(dotNetAssemblyRefPath);
@@ -252,13 +270,14 @@ public static class NativeCompilerUtils
     // through project references, so the referencing project compiles against the shared frameworks
     // of every transitively referenced project (e.g. a module consuming a core library that declares
     // Microsoft.AspNetCore.App).
+    [Query]
     public static MetadataReference[] GetFrameworkReferenceCompilingRefs(Project project)
     {
         var tfm = project.TargetFramework ?? "net" + Environment.Version.Major + ".0";
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        CollectFrameworkReferenceNames(project.ProjectRootPath, visitedProjects, names);
+        var names = new HashSet<string>(
+            CollectFrameworkReferenceNames(
+                project.ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
+            StringComparer.OrdinalIgnoreCase);
 
         // Mirror the Web SDK, which injects <FrameworkReference Include="Microsoft.AspNetCore.App" />
         // implicitly. Microsoft.NETCore.App does not carry those types, so without this a
@@ -279,13 +298,18 @@ public static class NativeCompilerUtils
         return references.ToArray();
     }
 
-    internal static void CollectFrameworkReferenceNames(string projectRootPath,
-        HashSet<string> visitedProjects, HashSet<string> names)
+    // Returns the <FrameworkReference> names gathered from the project and, transitively, its
+    // project references. `visitedProjects` guards against reference cycles; the returned names are
+    // not de-duplicated (callers fold them into a set).
+    [Query]
+    internal static IEnumerable<string> CollectFrameworkReferenceNames(
+        string projectRootPath, HashSet<string> visitedProjects)
     {
+        var names = new List<string>();
         var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
             .FirstOrDefault();
-        if (csprojFile is null) return;
-        if (!visitedProjects.Add(Path.GetFullPath(csprojFile))) return;
+        if (csprojFile is null) return names;
+        if (!visitedProjects.Add(Path.GetFullPath(csprojFile))) return names;
 
         var xml = XML.Project.Parse(csprojFile);
         foreach (var itemGroup in xml.ItemGroup)
@@ -295,8 +319,7 @@ public static class NativeCompilerUtils
                 if (!string.IsNullOrEmpty(include)) names.Add(include);
             }
 
-        var projectReferences = xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences);
-        foreach (var reference in projectReferences)
+        foreach (var reference in xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences))
         {
             var include = reference.Include ?? "";
             if (string.IsNullOrEmpty(include)) continue;
@@ -305,17 +328,19 @@ public static class NativeCompilerUtils
             if (referencedCsproj is null) continue;
 
             var referencedProjectDir = Path.GetDirectoryName(referencedCsproj) ?? projectRootPath;
-            CollectFrameworkReferenceNames(referencedProjectDir, visitedProjects, names);
+            names.AddRange(CollectFrameworkReferenceNames(referencedProjectDir, visitedProjects));
         }
+
+        return names;
     }
 
+    [Query]
     public static MetadataReference[] GetdefaultLocalReferences(Project project)
     {
-        var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var visitedProjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        CollectProjectReferences(project.ProjectRootPath, project.TargetFramework, visitedProjects, referenceFiles,
-            collectHintPathReferences: true);
+        var referenceFiles = new HashSet<string>(
+            CollectProjectReferences(project.ProjectRootPath, project.TargetFramework,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase), collectHintPathReferences: true),
+            StringComparer.OrdinalIgnoreCase);
 
         return referenceFiles
             .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
@@ -327,20 +352,23 @@ public static class NativeCompilerUtils
     // projects (RAR only forwards the referenced project's output DLL). Scoping HintPath collection to
     // the entry project also avoids type-identity collisions in consumers (e.g. the analyzer DLLs
     // shipping an embedded copy of System.Text.Json clashing with the framework's own System.Text.Json).
-    private static void CollectProjectReferences(string projectRootPath, string? targetTfm,
-        HashSet<string> visitedProjects, HashSet<string> referenceFiles, bool collectHintPathReferences)
+    [Query]
+    private static IEnumerable<string> CollectProjectReferences(string projectRootPath, string? targetTfm,
+        HashSet<string> visitedProjects, bool collectHintPathReferences)
     {
+        var referenceFiles = new List<string>();
+
         var csprojFile = Directory.EnumerateFiles(projectRootPath, "*.csproj", SearchOption.TopDirectoryOnly)
             .FirstOrDefault();
-        if (csprojFile is null) return;
+        if (csprojFile is null) return referenceFiles;
 
-        if (!visitedProjects.Add(Path.GetFullPath(csprojFile))) return;
+        if (!visitedProjects.Add(Path.GetFullPath(csprojFile))) return referenceFiles;
 
         var xml = XML.Project.Parse(csprojFile);
         var projectReferences = xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences);
 
         if (collectHintPathReferences)
-            CollectHintPathReferences(xml, projectRootPath, referenceFiles);
+            referenceFiles.AddRange(CollectHintPathReferences(xml, projectRootPath));
 
         foreach (var reference in projectReferences)
         {
@@ -354,16 +382,17 @@ public static class NativeCompilerUtils
 
             if (referencedCsproj is not null)
             {
-                foreach (var transitiveNuget in GetTransitiveNugetPackages(referencedCsproj, targetTfm))
-                    referenceFiles.Add(transitiveNuget);
+                referenceFiles.AddRange(GetTransitiveNugetPackages(referencedCsproj, targetTfm));
 
-                CollectProjectReferences(referencedProjectDir, targetTfm, visitedProjects, referenceFiles,
-                    collectHintPathReferences: false);
+                referenceFiles.AddRange(CollectProjectReferences(
+                    referencedProjectDir, targetTfm, visitedProjects, collectHintPathReferences: false));
             }
 
             // Builds the referenced project on demand, then resolves its produced DLL.
             referenceFiles.Add(ProjectReferenceFinder.FindReferencedDLL(include, projectRootPath));
         }
+
+        return referenceFiles;
     }
 
     // MSBuild copies every <Reference HintPath="..."> assembly into the entry project's output
@@ -372,21 +401,25 @@ public static class NativeCompilerUtils
         // statically-linked types stay bindable at runtime. Mirror it: add the resolved HintPath
         // files of the whole graph to the copy set. Projects without HintPath references (ordinary
         // apps) get nothing extra, so the whole-tree parity gate stays clean.
+        [Query]
         public static List<string> GetHintPathCopyLocalFiles(string projectRootPath)
         {
-            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CollectGraphHintPathFiles(projectRootPath, visited, files);
-            return files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+            return CollectGraphHintPathFiles(
+                    projectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
-        private static void CollectGraphHintPathFiles(string root, HashSet<string> visited, HashSet<string> files)
+        [Query]
+        private static IEnumerable<string> CollectGraphHintPathFiles(string root, HashSet<string> visited)
         {
+            var files = new List<string>();
             var csproj = Directory.EnumerateFiles(root, "*.csproj", SearchOption.TopDirectoryOnly).FirstOrDefault();
-            if (csproj is null || !visited.Add(Path.GetFullPath(csproj))) return;
+            if (csproj is null || !visited.Add(Path.GetFullPath(csproj))) return files;
 
             var xml = XML.Project.Parse(csproj);
-            CollectHintPathReferences(xml, root, files);
+            files.AddRange(CollectHintPathReferences(xml, root));
 
             foreach (var reference in xml.ItemGroup.SelectMany(itemGroup => itemGroup.ProjectReferences))
             {
@@ -395,8 +428,10 @@ public static class NativeCompilerUtils
                 if (string.IsNullOrEmpty(include)) continue;
                 var referencedCsproj = ProjectReferenceFinder.FindReferencedCsproj(include, root);
                 if (referencedCsproj is null) continue;
-                CollectGraphHintPathFiles(Path.GetDirectoryName(referencedCsproj) ?? root, visited, files);
+                files.AddRange(CollectGraphHintPathFiles(Path.GetDirectoryName(referencedCsproj) ?? root, visited));
             }
+
+            return files;
         }
 
     // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
@@ -429,10 +464,12 @@ public static class NativeCompilerUtils
         "ILLink.CodeFixProvider.dll",
     };
 
+    [Query]
     private static string IllinkAnalyzersDirectory() => EmbeddedSdkRefs.IllinkAnalyzers;
 
     // Produced app folders must carry the analyzer assemblies so a runnable JIT build of the compiler
     // can resolve the statically registered AnalyzerRegistry types at runtime.
+    [Query]
     public static List<string> GetAnalyzerRuntimeFiles()
     {
         var files = new List<string>();
@@ -455,6 +492,7 @@ public static class NativeCompilerUtils
     // from the installed runtime at run time and is never copied; analyzer/generator DLLs are
     // compile-time only. Returns the subset of merged run references that the produced app actually
     // needs beside its own dll/pdb/runtimeconfig/apphost.
+    [Query]
     public static List<string> GetOutputRuntimeFiles(IEnumerable<MetadataReference> mergedRunReferences,
         string projectRootPath, string targetFramework)
     {
@@ -478,6 +516,7 @@ public static class NativeCompilerUtils
     // that targets the console SDK and does not reference them. The exclusion is version-agnostic:
     // file names are stable across patches of the same framework, and the app resolves whatever the
     // targeted runtime provides at run time.
+    [Query]
     private static HashSet<string> SharedFrameworkAssemblyNames(string projectRootPath, string targetFramework)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -533,6 +572,7 @@ public static class NativeCompilerUtils
 
     // "net10.0", "net10.0-windows", "netcoreapp3.1" -> "10.0"/"3.1" so the matching installed
     // shared framework version folder (e.g. "10.0.11") is selected.
+    [Pure]
     private static bool FrameworkFolderMatches(string folderPath, string targetFramework)
     {
         var numeric = new string(targetFramework.SkipWhile(c => !char.IsDigit(c)).TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
@@ -542,6 +582,7 @@ public static class NativeCompilerUtils
         return folderName.StartsWith(parts[0] + "." + parts[1] + ".", StringComparison.Ordinal);
     }
 
+    [Pure]
     private static bool MatchesTargetFramework(string assetFramework, string projectFramework)
     {
         if (string.Equals(assetFramework, projectFramework, StringComparison.OrdinalIgnoreCase)) return true;
@@ -556,9 +597,10 @@ public static class NativeCompilerUtils
     // Dotnet10Dependencies.csproj, via the ILLink/Roslyn generator analyzers) failed to compile under
     // self-hosting. Only the analyzer/SDK property tokens this codebase actually uses are expanded;
     // anything else is skipped rather than emulating MSBuild property evaluation.
-    private static void CollectHintPathReferences(XML.Project xml, string projectRootPath,
-        HashSet<string> referenceFiles)
+    [Query]
+    private static IEnumerable<string> CollectHintPathReferences(XML.Project xml, string projectRootPath)
     {
+        var files = new List<string>();
         foreach (var itemGroup in xml.ItemGroup)
         {
             foreach (var reference in itemGroup.References)
@@ -587,11 +629,14 @@ public static class NativeCompilerUtils
                     : Path.GetFullPath(Path.Combine(projectRootPath, expanded));
 
                 if (File.Exists(filePath))
-                    referenceFiles.Add(filePath);
+                    files.Add(filePath);
             }
         }
+
+        return files;
     }
 
+    [Query]
     private static List<string> GetTransitiveNugetPackages(string csprojPath, string? targetTfm)
     {
         var results = new List<string>();
@@ -609,6 +654,7 @@ public static class NativeCompilerUtils
         return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    [Query]
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
     {
         var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
@@ -633,6 +679,7 @@ public static class NativeCompilerUtils
     // Without this the closure carries several versions of one id, and the flat copy into the output
     // folder lets the older one clobber the newer (SQLitePCLRaw.core 2.1.11 overwriting 3.0.3),
     // producing a runtime FileNotFoundException even though the correct dll had been collected.
+    [Query]
     private static List<string> ResolveUnifiedPackagePaths(
         IEnumerable<(string Id, string Version, string Path)> roots, string targetTfm)
     {
@@ -669,6 +716,7 @@ public static class NativeCompilerUtils
     // Single place where a PackageReference becomes a version and a directory on disk, so the
     // reference collection and the diagnostics below can never disagree about what resolved.
     // Path is null when the version or the package folder cannot be found; the diagnostics report it.
+    [Query]
     private static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
         IEnumerable<PackageReference> packages, string projectDirectory)
     {
@@ -684,6 +732,7 @@ public static class NativeCompilerUtils
     }
 
     // The fully-resolved subset of ResolvePackageReferences: every entry has a directory on disk.
+    [Query]
     private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(
         IEnumerable<PackageReference> packages, string projectDirectory) =>
         ResolvePackageReferences(packages, projectDirectory)
@@ -697,6 +746,7 @@ public static class NativeCompilerUtils
     // be found by walking the collected managed dlls; the graph must be walked by package id.
     // The dlls are placed next to the app because sharp emits no deps.json for the host to probe
     // runtimes/<rid>/native through, so a DllImport like e_sqlite3 resolves from the app directory.
+    [Query]
     public static List<string> GetOutputNativeFiles(Project project)
     {
         var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
@@ -718,6 +768,7 @@ public static class NativeCompilerUtils
 
     // Every package id reachable from the project's own PackageReferences and those of its referenced
     // projects, unified to one version per id (same rule as the managed reference collection).
+    [Query]
     private static List<string> CollectPackagePaths(string projectRootPath, string targetTfm)
     {
         var packagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -756,6 +807,7 @@ public static class NativeCompilerUtils
     // A PackageReference that cannot be satisfied used to be skipped in silence, surfacing later
     // as a confusing CS0246 about a type from a package the user never mentioned. Naming the
     // package is the whole point of this.
+    [Query]
     public static IReadOnlyList<string> GetUnresolvedPackageWarnings(Project project)
     {
         var warnings = new List<string>();
@@ -781,6 +833,7 @@ public static class NativeCompilerUtils
         return warnings;
     }
 
+    [Query]
     public static CSharpCompilationOptions GetCompilationOptions(Project project)
     {
         IEnumerable<string> Namespaces = new[]
@@ -825,85 +878,12 @@ public static class NativeCompilerUtils
         return DefaultCompilationOptions;
     }
 
-    // Mirrors NuGet's framework-assembly suppression: assemblies that are inbox in the runtime/ref pack
-    // are dropped from package/project references so duplicate simple names (e.g. System.Collections.Immutable)
-    // do not produce conflicting references.
-    //
-    // When one simple name appears at two versions - the entry project's own graph resolves one (e.g.
-    // Azure.Core 1.54.0 via Azure.Search.Documents) while a referenced project's graph resolves a higher
-    // one (Azure.Core 1.61.0 via Microsoft.Extensions.Azure) - a compilation can only reference one of
-    // them. Keep the highest: csc accepts a referenced assembly whose version is >= the version each
-    // dependent was compiled against, so the highest satisfies every dependency, whereas keeping the
-    // first-seen lower version triggers CS1705. This mirrors NuGet's graph-wide version unification,
-    // which the per-project resolution upstream cannot see across the project-reference closure.
-    public static MetadataReference[] MergeFrameworkSuppression(
-        IEnumerable<MetadataReference> nugetAndLocal,
-        IEnumerable<MetadataReference> frameworkReferences)
-    {
-        var frameworkNames = new HashSet<string>(
-            frameworkReferences.Select(reference =>
-                Path.GetFileNameWithoutExtension(reference.Display) ?? ""),
-            StringComparer.OrdinalIgnoreCase);
-
-        // First-seen order is preserved so the emitted reference set stays deterministic.
-        var order = new List<string>();
-        var chosen = new Dictionary<string, (MetadataReference Reference, Version? Version)>(
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var reference in nugetAndLocal)
-        {
-            var name = Path.GetFileNameWithoutExtension(reference.Display) ?? "";
-            if (name.Length == 0) continue;
-            if (frameworkNames.Contains(name)) continue;
-
-            if (!chosen.TryGetValue(name, out var current))
-            {
-                chosen[name] = (reference, TryGetAssemblyVersion(reference.Display));
-                order.Add(name);
-                continue;
-            }
-
-            var candidate = TryGetAssemblyVersion(reference.Display);
-            if (candidate is null) continue;
-            if (current.Version is not null && candidate.CompareTo(current.Version) <= 0) continue;
-
-            chosen[name] = (reference, candidate);
-        }
-
-        var merged = new List<MetadataReference>(order.Count + frameworkReferences.Count());
-        foreach (var name in order) merged.Add(chosen[name].Reference);
-        merged.AddRange(frameworkReferences);
-        return merged.ToArray();
-    }
-
-    // Reads an assembly's identity version from its file, tolerating paths that are not managed
-    // assemblies (returns null so the caller keeps the reference it already has).
-    private static Version? TryGetAssemblyVersion(string? displayPath)
-    {
-        if (string.IsNullOrEmpty(displayPath) || !File.Exists(displayPath)) return null;
-        try { return AssemblyName.GetAssemblyName(displayPath).Version; }
-        catch { return null; }
-    }
-
-    public static void ThrowErrors(EmitResult result)
-    {
-        var errors = new List<string>();
-
-        var failures = result.Diagnostics.Where(diagnostic =>
-            diagnostic.IsWarningAsError ||
-            diagnostic.Severity == DiagnosticSeverity.Error);
-
-        foreach (var diagnostic in failures)
-            errors.Add($"{diagnostic.Location} {diagnostic.Id}: {diagnostic.GetMessage()}");
-
-        throw new Exception(string.Join("\n", errors));
-    }
-
     private static readonly HashSet<string> GeneratedDirectoryNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "bin", "obj", "myc", "sharpbin", "TestResults", ".vs", ".idea"
     };
 
+    [Query]
     public static string[] ReadAllProjectFilesPath(string projectPath)
     {
         // Respect the project's own compile items. Real MSBuild starts from a default
@@ -959,6 +939,7 @@ public static class NativeCompilerUtils
 
     // Simple glob over absolute file paths against patterns resolved from the project directory.
     // Supports **, * and ?. Patterns use MSBuild-style '/' separators; matching is case-insensitive.
+    [Query]
     private static IEnumerable<string> MatchesAnyGlob(List<string> patterns, List<string> files, string projectPath)
     {
         if (patterns.Count == 0) return Enumerable.Empty<string>();
@@ -989,6 +970,7 @@ public static class NativeCompilerUtils
     // on disk are returned as absolute paths so they compile even though they are outside the
     // local **/*.cs enumeration. Glob includes (containing * or ?) stay unresolved here because
     // they can only span the local tree.
+    [Query]
     private static IEnumerable<string> ResolveExternalCompileIncludes(List<string> compileIncludes, string projectPath)
     {
         foreach (var include in compileIncludes)
@@ -1008,6 +990,7 @@ public static class NativeCompilerUtils
     // MSBuild-style glob over full paths: '**' is any run of characters (including '/'), '*' a single
     // path segment, '?' a single character. Matching is case-insensitive (paths come from the project
     // tree; MSBuild globs are case-insensitive on Windows and patterns originated there).
+    [Pure]
     private static bool GlobMatch(string path, string pattern)
     {
         var target = (path + Path.DirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/');
@@ -1021,6 +1004,7 @@ public static class NativeCompilerUtils
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
+    [Query]
     private static IEnumerable<string> EnumerateProjectSourceFiles(string directory)
     {
         foreach (var file in Directory.EnumerateFiles(directory, "*.*", SearchOption.TopDirectoryOnly))
@@ -1042,6 +1026,7 @@ public static class NativeCompilerUtils
         }
     }
 
+    [Query]
     public static List<ProjectFile> ReadAllFilesInMemory(string[] projectFiles)
     {
         var files = new ProjectFile[projectFiles.Length];
@@ -1059,6 +1044,7 @@ public static class NativeCompilerUtils
     // consumes these items when generating the implicit GlobalUsings file. General (no
     // provider-specific types). DELETABLE FEATURE.
     // ---------------------------------------------------------------------------
+    [Query]
     public static string BuildPackageUsingStatements(Project project)
     {
         var result = new StringBuilder();
@@ -1092,6 +1078,7 @@ public static class NativeCompilerUtils
         return result.ToString();
     }
 
+    [Query]
     public static Project GetProjectDetails(List<ProjectFile> projectFiles, string projectRootPath)
     {
         var CsProjFile = projectFiles.FirstOrDefault(item => Path.GetExtension(item.FilePath) == ".csproj")
@@ -1396,12 +1383,27 @@ public static class NativeCompilerUtils
         return project;
     }
 
-public static void WriteRuntimeConfig(Project project)
+    // The runtimeconfig is a pure function of the project (see RuntimeFrameworkFor); WriteRuntimeConfig
+    // is the thin shell that persists it. BuildRuntimeConfig selects the ASP.NET Core variant when the
+    // project references the shared web framework.
+    [Pure]
+    public static string BuildRuntimeConfig(Project project) =>
+        project.UsesAspNetCoreApp ? RuntimeConfigWeb(project) : RuntimeConfig(project);
+
+    [HasSideEffects]
+    public static void WriteRuntimeConfig(Project project) =>
+        File.WriteAllText(RuntimeConfigPath(project), BuildRuntimeConfig(project));
+
+    [Pure]
+    private static string RuntimeConfigPath(Project project) =>
+        Path.Combine(project.SharpBinFolderPath, $"{project.ProjectName}.runtimeconfig.json");
+
+    [Pure]
+    private static string RuntimeConfig(Project project)
     {
         var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
-        var runtimeConfig =
-        $$"""
+        return $$"""
         {
           "runtimeOptions": {
             "tfm": "{{tfm}}",
@@ -1416,20 +1418,18 @@ public static void WriteRuntimeConfig(Project project)
           }
         }
         """;
-
-        WriteRuntimeConfigFile(project, runtimeConfig);
     }
 
     // ASP.NET Core apps declare the shared framework in the runtimeconfig ("frameworks" array);
     // without it the runtime cannot load Microsoft.AspNetCore.* and the app dies on the first
     // WebApplication touch. Mirrors what the Web SDK generates (Microsoft.NETCore.App, then
     // Microsoft.AspNetCore.App).
-    public static void WriteRuntimeConfigWeb(Project project)
+    [Pure]
+    private static string RuntimeConfigWeb(Project project)
     {
         var (tfm, baselineVersion) = RuntimeFrameworkFor(project);
 
-        var runtimeConfig =
-        $$"""
+        return $$"""
         {
           "runtimeOptions": {
             "tfm": "{{tfm}}",
@@ -1451,8 +1451,6 @@ public static void WriteRuntimeConfig(Project project)
           }
         }
         """;
-
-        WriteRuntimeConfigFile(project, runtimeConfig);
     }
 
     // The embedded SDK records the exact runtime it was built against (10.0.11 here), but the app
@@ -1471,6 +1469,7 @@ public static void WriteRuntimeConfig(Project project)
     //
     // The major.minor baseline plus rollForward lets any installed patch of that major.minor satisfy
     // the app, which is what makes a published binary portable across machines.
+    [Pure]
     private static (string Tfm, string BaselineVersion) RuntimeFrameworkFor(Project project)
     {
         var targetFramework = project.TargetFramework?.Trim();
@@ -1489,31 +1488,27 @@ public static void WriteRuntimeConfig(Project project)
         return (tfm, baseline);
     }
 
-    private static void WriteRuntimeConfigFile(Project project, string runtimeConfig)
-    {
-        File.WriteAllText(
-            Path.Combine(project.SharpBinFolderPath, $"{project.ProjectName}.runtimeconfig.json"),
-            runtimeConfig);
-    }
-
+    [HasSideEffects]
     public static void WriteAppHost(Project project)
     {
-        var appHostTemplate = FindAppHostTemplate();
-        if (appHostTemplate is null)
+        var appDllName = Path.GetFileName(project.DllPathName);
+        var bytes = BuildAppHost(appDllName);
+        if (bytes is null)
         {
             Console.WriteLine(
                 $"Skipping apphost: no AppHostTemplate found under '{Path.Combine(AsemblyExtensions.ResolveSdkRoot, "sdk")}'.");
             return;
         }
 
-        //The SDK template is read-only and File.Copy preserves that attribute, which would make the
-        //destination unwritable for the patch below (and block the next overwrite). Clear it first.
-        MakeWritableIfExists(project.ExePathName);
-        File.Copy(appHostTemplate, project.ExePathName, overwrite: true);
+        //The SDK template is read-only and copying preserves that attribute, which would make the
+        //destination unwritable. Clear it on any existing file before overwriting, then normalise.
+        if (File.Exists(project.ExePathName))
+            File.SetAttributes(project.ExePathName, File.GetAttributes(project.ExePathName) & ~FileAttributes.ReadOnly);
+        File.WriteAllBytes(project.ExePathName, bytes);
         File.SetAttributes(project.ExePathName, FileAttributes.Normal);
 
-        // On Unix the SDK emits the apphost as an executable; the template (and a plain
-        // File.Copy) leave it non-executable, so stage the rwx bits like dotnet build does.
+        // On Unix the SDK emits the apphost as an executable; a plain write leaves it
+        // non-executable, so stage the rwx bits like dotnet build does.
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(project.ExePathName,
@@ -1522,16 +1517,12 @@ public static void WriteRuntimeConfig(Project project)
                 | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         }
 
-        var appDllName = Path.GetFileName(project.DllPathName);
-        BindAppHost(project.ExePathName, appDllName);
+        //Verify the placeholder is gone so a silent failure cannot leave an unbound apphost behind.
+        if (IndexOf(File.ReadAllBytes(project.ExePathName), Encoding.ASCII.GetBytes(AppBinaryPathPlaceholder)) >= 0)
+            throw new InvalidOperationException("Failed to bind apphost: the placeholder hash is still present.");
     }
 
-    private static void MakeWritableIfExists(string path)
-    {
-        if (!File.Exists(path)) return;
-        File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
-    }
-
+    [Query]
     private static string? FindAppHostTemplate()
     {
         var sdkDir = Path.Combine(AsemblyExtensions.ResolveSdkRoot, "sdk");
@@ -1549,6 +1540,7 @@ public static void WriteRuntimeConfig(Project project)
             .FirstOrDefault(File.Exists);
     }
 
+    [Pure]
     private static Version? ParseSdkVersion(string sdkDirectoryPath)
     {
         var name = Path.GetFileName(sdkDirectoryPath) ?? "";
@@ -1556,15 +1548,22 @@ public static void WriteRuntimeConfig(Project project)
         return Version.TryParse(digits, out var version) ? version : null;
     }
 
-    private static void BindAppHost(string appHostPath, string appDllName)
+    // Reads the SDK AppHost template and patches its embedded placeholder hash with the managed DLL
+    // name, producing the exact bytes `dotnet build` would emit. Returns null when no template is
+    // installed. The only I/O is reading the template.
+    [Query]
+    private static byte[]? BuildAppHost(string appDllName)
     {
+        var template = FindAppHostTemplate();
+        if (template is null) return null;
+
         var placeholder = Encoding.ASCII.GetBytes(AppBinaryPathPlaceholder);
         var appName = Encoding.UTF8.GetBytes(appDllName);
 
         if (appName.Length > placeholder.Length)
             throw new InvalidOperationException($"App DLL name '{appDllName}' is too long for the apphost.");
 
-        var bytes = File.ReadAllBytes(appHostPath);
+        var bytes = File.ReadAllBytes(template);
         var position = IndexOf(bytes, placeholder);
         if (position < 0)
             throw new InvalidOperationException("AppHost template is missing the placeholder hash; cannot bind it.");
@@ -1572,14 +1571,10 @@ public static void WriteRuntimeConfig(Project project)
         for (var i = 0; i < placeholder.Length; i++)
             bytes[position + i] = i < appName.Length ? appName[i] : (byte)0;
 
-        File.WriteAllBytes(appHostPath, bytes);
-
-        //Verify the placeholder is gone so a silent failure cannot leave an unbound apphost behind.
-        var verify = File.ReadAllBytes(appHostPath);
-        if (IndexOf(verify, placeholder) >= 0)
-            throw new InvalidOperationException("Failed to bind apphost: the placeholder hash is still present.");
+        return bytes;
     }
 
+    [Pure]
     private static int IndexOf(byte[] haystack, byte[] needle)
     {
         for (var i = 0; i <= haystack.Length - needle.Length; i++)
@@ -1607,9 +1602,11 @@ public static void WriteRuntimeConfig(Project project)
     //versions or machines, so embedding it here mirrors the SDK exactly.
     private const string AppBinaryPathPlaceholder = "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2";
 
+    [Pure]
     internal static string CSharpStringLiteral(string value) =>
         "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
 
+    [Pure]
     private static string PadToFourParts(string version)
     {
         var parts = version.Split('.');

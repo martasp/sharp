@@ -1,0 +1,51 @@
+flowchart TB
+    subgraph CLI["NativeCompilerCLI"]
+        Program["Program.cs<br/>command registry"]
+        CmdBuild["build"]
+        CmdRun["run"]
+        CmdRestore["restore"]
+        CmdClean["clean"]
+    end
+
+    subgraph CORE["NativeCompiler (thin facade → slices)"]
+        NC["Build → ProjectBuild"]
+        NCSol["BuildSolution → SolutionBuild<br/>wave scheduler"]
+        NCRun["Run → Runtime"]
+        Refs["References<br/>GetCompilingRefs / GetRuntimeRefs"]
+        Merge["FrameworkFix<br/>Merge: keep HIGHEST version"]
+        AR["AnalyzerRunner"]
+        SG["SourceGeneratorRunner"]
+        Registry["AnalyzerRegistry"]
+        Razor["RazorSupport"]
+        Emit["Output<br/>WriteDll / RunAssembly"]
+        Deps["DepsJsonWriter"]
+    end
+
+    subgraph MODEL["Model + graph"]
+        PL["ProjectLoader"]
+        PG["ProjectGraph"]
+        Project["Project (XMLProject/ProjectFile)"]
+        BuildProps["BuildPropsEvaluator"]
+        PRefFinder["ProjectReferenceFinder"]
+    end
+
+    subgraph NUGET["NuGet subsystem"]
+        Restorer["PackageRestorer"]
+        NuGetPkg["NuGetPackage"]
+        VersionRes["VersionResolver"]
+    end
+
+    Program --> CmdBuild & CmdRun & CmdRestore & CmdClean
+    CmdBuild -->|".sln/.slnx"| NCSol
+    CmdBuild -->|"project"| NC
+    CmdRun --> NCRun
+    NCSol -->|"parallel waves"| NC
+    NC --> PL --> Project --> BuildProps
+    NC --> PRefFinder
+    NC --> Refs --> Merge
+    NC --> AR --> SG
+    AR --> Registry
+    SG --> Razor & Registry
+    NC --> Emit --> Deps
+    CmdRestore --> Restorer --> NuGetPkg --> VersionRes
+    CmdClean --> PG

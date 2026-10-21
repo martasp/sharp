@@ -174,18 +174,17 @@ public static class RazorSupport
     // reference pack or NuGet package carries Microsoft.CodeAnalysis.Razor.Compiler.dll). The
     // payload stages those DLLs on a machine with the SDK installed; when absent, .cshtml/.razor
     // files simply are not compiled (the same degradation as a razor-less build).
-    public static void AddGeneratorDlls(Project project, HashSet<string> dlls)
+    [Query]
+    public static IEnumerable<string> GeneratorDlls(Project project)
     {
-        if (project.RazorInputs.Count == 0) return;
+        if (project.RazorInputs.Count == 0) return [];
         var razorDir = EmbeddedSdkRefs.RazorSourceGenerators;
         if (Directory.Exists(razorDir))
-        {
-            foreach (var dll in Directory.EnumerateFiles(razorDir, "*.dll", SearchOption.TopDirectoryOnly))
-                dlls.Add(dll);
-        }
-        else if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
-        {
+            return Directory.EnumerateFiles(razorDir, "*.dll", SearchOption.TopDirectoryOnly);
+
+        if (Environment.GetEnvironmentVariable("NATIVECOMPILER_TRACE_GENERATORS") == "1")
             Console.WriteLine($"[gens] {project.ProjectName}: {project.RazorInputs.Count} Razor files but no Razor source generators staged at '{razorDir}'");
-        }
+
+        return [];
     }
 }
