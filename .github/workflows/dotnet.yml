@@ -19,10 +19,10 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore NativeCompiler.sln
+      run: dotnet restore Sharp.sln
 
     # Fixture projects under testProjects/ and tests/TestExampleProjects/ are deliberately
-    # outside NativeCompiler.sln, so `dotnet restore NativeCompiler.sln` does not cover them.
+    # outside Sharp.sln, so `dotnet restore Sharp.sln` does not cover them.
     # A cold clone has no obj/ assets, and the parity tests compare our output against the SDK's
     # build of these same projects, so both must exist before the suite runs.
     # PackageCacheFixtures is restore-only: it pins the exact packages NuGetTests reads out of the
@@ -35,12 +35,12 @@ jobs:
     # Tests build Debug: the parity tests compare against paths under bin/Debug, and
     # BootstrapPipelineTests plus the published-AOT benchmark need a Release publish of the CLI.
     - name: Build
-      run: dotnet build NativeCompiler.sln --no-restore -c Debug
+      run: dotnet build Sharp.sln --no-restore -c Debug
 
     - name: Publish AOT compiler
-      run: dotnet publish src/NativeCompilerCLI/NativeCompilerCLI.csproj -r linux-x64 -c Release
+      run: dotnet publish src/Sharp.Cli/Sharp.Cli.csproj -r linux-x64 -c Release
 
     # Benchmarks (Category=Benchmark) run with the suite by default and write their captures to
     # benchmarks/. No filter excludes them, so a regression in comparison output fails the build.
     - name: Test
-      run: dotnet test NativeCompiler.sln --no-build -c Debug --nologo
+      run: dotnet test Sharp.sln --no-build -c Debug --nologo

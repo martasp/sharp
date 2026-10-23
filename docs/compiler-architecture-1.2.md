@@ -16,7 +16,7 @@ machine with **no .NET SDK installed at all**.
 Three principles shape the whole codebase.
 
 **One facade, many slices.** The public surface is a tiny static facade —
-`NativeCompiler.Build`, `BuildSolution`, `Run`, `RestoreProject`,
+`SharpCompiler.Build`, `BuildSolution`, `Run`, `RestoreProject`,
 `RestoreSolution`, `Clean`. Everything behind it is organised as *intent-based
 vertical slices*: `ProjectBuild` builds one project, `SolutionBuild` schedules a
 solution, `PackageRestorer` restores packages, `Cleaner` removes output. Each
@@ -41,7 +41,7 @@ parsing and SDK-parity text. Below it, the compiler proper.
 
 ```mermaid
 flowchart TB
-    subgraph CLI["NativeCompilerCLI (thin wrapper)"]
+    subgraph CLI["sharp CLI (thin wrapper)"]
         Program["Program.cs<br/>command registry + arg parsing"]
         CmdBuild["build"]
         CmdRun["run"]
@@ -49,8 +49,8 @@ flowchart TB
         CmdClean["clean"]
     end
 
-    subgraph CORE["NativeCompiler core library (facade + vertical slices)"]
-        Facade["NativeCompiler facade<br/>Build / BuildSolution / Run<br/>RestoreProject / RestoreSolution / Clean"]
+    subgraph CORE["Sharp core library (facade + vertical slices)"]
+        Facade["Sharp facade<br/>Build / BuildSolution / Run<br/>RestoreProject / RestoreSolution / Clean"]
         PB["ProjectBuild<br/>Build [HasSideEffects]<br/>cycle guard / Core"]
         SB["SolutionBuild<br/>wave scheduler (Kahn)"]
         RT["Runtime.Run"]
@@ -59,7 +59,7 @@ flowchart TB
         REF["References + FrameworkFix"]
         OUT["Output<br/>WriteDll / RunAssembly"]
         DEPS["DepsJsonWriter"]
-        UTILS["NativeCompilerUtils<br/>runtimeconfig / apphost / SDK payload"]
+        UTILS["SharpUtils<br/>runtimeconfig / apphost / SDK payload"]
         CLEAN["Cleaner.Clean"]
         REST["PackageRestorer"]
     end
@@ -216,7 +216,7 @@ flowchart TB
     A --> C["ResolveTargetOrFail(checkRunnable: false)"]
     C --> C1["ResolveDirectory → glob *.csproj | *.sln | *.slnx"]
 
-    A -->|".sln / .slnx"| D["NativeCompiler.BuildSolution(target)"]
+    A -->|".sln / .slnx"| D["Sharp.BuildSolution(target)"]
     D --> D1["SolutionBuild.Build(solutionPath) [HasSideEffects]"]
     D1 --> D2["SolutionFile.Parse"]
     D1 --> D3["ResolveBuildOrder(projects, errors) [Query]"]
@@ -225,7 +225,7 @@ flowchart TB
     D3 --> D3c["TopologicalSort (Kahn waves) [Pure]"]
     D1 --> D4["Parallel.ForEach(wave) → BuildOne → ProjectBuild.Build(folder)"]
 
-    A -->|"project"| E["NativeCompiler.Build(target)"]
+    A -->|"project"| E["Sharp.Build(target)"]
     E --> E1["ProjectBuild.Build(projectPath) [HasSideEffects]"]
     E1 --> E2["BuildsInProgress.Add (cycle guard)"]
     E1 --> E3["ProjectBuild.Core(projectPath) [HasSideEffects]"]
@@ -238,7 +238,7 @@ flowchart TB
     F5 --> F5a["AnalyzerRegistry.GetSourceGenerators()"]
     F5 --> F5b["SourceGeneratorRunner.CollectGeneratorDlls (JIT only)"]
     F5b --> F5b1["NuGetPackage.FindPackagePath / AnalyzerDlls / RazorSupport.GeneratorDlls"]
-    F5b --> F5b2["ResolveAnalyzerProjectDll → NativeCompiler.Build (recursive)"]
+    F5b --> F5b2["ResolveAnalyzerProjectDll → Sharp.Build (recursive)"]
     F5 --> F5c["SourceGeneratorRunner.RunGeneratorDriver"]
     E3 --> F6["Output.WriteDll(compilation, project) [HasSideEffects]"]
     F6 --> F6a["compilation.Emit (dll + pdb)"]
@@ -262,7 +262,7 @@ builds it recursively through the same facade.
 flowchart TB
     A["RunCommand(args)"] --> B["PositionalAndFlags(args) → (path, appArgs)"]
     A --> C["ResolveTargetOrFail(checkRunnable: true)"]
-    A --> D["NativeCompiler.Build(target)"]
+    A --> D["Sharp.Build(target)"]
     D --> D1["ProjectBuild.Build → ProjectBuild.Core<br/>(same slice as build)"]
     A --> E["Process.Start(apphost ? apphost : dotnet DLL + appArgs)"]
     E --> E1["WaitForExit → ExitCode"]
@@ -274,10 +274,10 @@ flowchart TB
 flowchart TB
     A["RestoreCommandAsync(args)"] --> B["parse -p / --project"]
     A --> C["ResolveTargetOrFail(checkRunnable: false)"]
-    A -->|"solution"| D["NativeCompiler.RestoreSolution(target)"]
+    A -->|"solution"| D["Sharp.RestoreSolution(target)"]
     D --> D1["PackageRestorer.RestoreSolution"]
     D1 --> D2["per project → RestoreProject"]
-    A -->|"project"| E["NativeCompiler.RestoreProject(target)"]
+    A -->|"project"| E["Sharp.RestoreProject(target)"]
     D2 --> E1
     E --> E1["PackageRestorer.RestoreProject(directory)"]
     E1 --> F1["FindProjectFile / NuGetConfig.Load / ResolveCentralVersion"]
@@ -297,7 +297,7 @@ flowchart TB
     A["CleanCommand(args)"] --> B["parse -c / --configuration (default Debug)"]
     A --> C["ResolveTargetOrFail(checkRunnable: false)"]
     A --> D["CleanTarget(target, configuration)"]
-    D --> E["NativeCompiler.Clean(target, configuration)"]
+    D --> E["Sharp.Clean(target, configuration)"]
     E --> F["Cleaner.Clean(target, configuration) [HasSideEffects]"]
     F --> F1["ProjectGraph.GetProjectDirectories(target) [Query]"]
     F1 --> F1a["GetProjectPathsFromSolution → SolutionFile.Parse"]

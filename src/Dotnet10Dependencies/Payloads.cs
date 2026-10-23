@@ -9,8 +9,8 @@ namespace Dotnet10Dependencies;
 /// </summary>
 /// <remarks>
 /// <para>
-/// NativeCompiler used to embed the payload in its own assembly. It now references this project
-/// instead, so NativeCompiler.csproj carries a single ProjectReference rather than an Exec plus an
+/// Sharp used to embed the payload in its own assembly. It now references this project
+/// instead, so Sharp.csproj carries a single ProjectReference rather than an Exec plus an
 /// EmbeddedResource, and the resource lookup that NativeAOT depends on lives in exactly one place.
 /// </para>
 /// <para>

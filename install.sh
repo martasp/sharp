@@ -10,13 +10,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_root"
 
-project="src/NativeCompilerCLI/NativeCompilerCLI.csproj"
+project="src/Sharp.Cli/Sharp.Cli.csproj"
 runtime="linux-x64"
 if [[ "$(uname -s)" == "Darwin" ]]; then runtime="osx-arm64"; fi
 
-name="NativeCompilerCLI"
-[[ "$(uname -s)" == "Darwin" ]] && name="${name}.app/Contents/MacOS/NativeCompilerCLI"
-published="src/NativeCompilerCLI/bin/Release/net10.0/$runtime/publish/$name"
+name="Sharp.Cli"
+[[ "$(uname -s)" == "Darwin" ]] && name="${name}.app/Contents/MacOS/Sharp.Cli"
+published="src/Sharp.Cli/bin/Release/net10.0/$runtime/publish/$name"
 
 skip_publish=0
 [[ "${1:-}" == "--no-publish" ]] && skip_publish=1

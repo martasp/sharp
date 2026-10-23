@@ -1,4 +1,4 @@
-// Stages the compiler payload that NativeCompiler embeds, so a published sharp works on a machine
+// Stages the compiler payload that Sharp embeds, so a published sharp works on a machine
 // with no .NET SDK installed.
 //
 // sharp needs compile-time metadata (the targeting reference packs), the SDK source generators,

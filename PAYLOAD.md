@@ -28,7 +28,7 @@ The chosen design then splits into sub-decisions, each marked the same way:
 | Sub-decision | Chosen | Alternative rejected |
 |---|---|---|
 | Producer: **C# stager program** | ✓ | MSBuild `<Copy>` + `<Zip>` tasks |
-| Host assembly: **dedicated `Dotnet10Dependencies`** | ✓ | Embed in `NativeCompiler` itself |
+| Host assembly: **dedicated `Dotnet10Dependencies`** | ✓ | Embed in `Sharp` itself |
 | Resource name: **`embedded-refs.<refpack>.zip`, discovered at run time** | ✓ | A second, hand-written copy of the version |
 | Runtime lookup: **`typeof(Payloads).Assembly`** | ✓ | `Assembly.Load("Dotnet10Dependencies")` |
 
@@ -127,11 +127,11 @@ The runtime extracts it once into a keyed cache.
 | Metadata fan-out | Explicit | MSBuild cartesian-metadata behaviour needs one `Copy` per group |
 | Risk | — | Fragile task/version coupling |
 
-#### G2. Host assembly: dedicated project vs `NativeCompiler` itself — **chose dedicated**
+#### G2. Host assembly: dedicated project vs `Sharp` itself — **chose dedicated**
 
-| | Dedicated `Dotnet10Dependencies` (**✓**) | Embedded in `NativeCompiler` |
+| | Dedicated `Dotnet10Dependencies` (**✓**) | Embedded in `Sharp` |
 |---|---|---|
-| `NativeCompiler.csproj` | One `ProjectReference`; no Exec/EmbeddedResource | Carries the Exec + EmbeddedResource + stager args |
+| `Sharp.csproj` | One `ProjectReference`; no Exec/EmbeddedResource | Carries the Exec + EmbeddedResource + stager args |
 | Resource lookup | Lives in one place (`Payloads`), cannot be re-implemented elsewhere | Spread through the compiler assembly |
 | Downside | An extra project and a **sidecar-copy path that must track where the payload is hosted** (this broke self-hosting once and was fixed in `EmbeddedSdkRefs.FindSidecarPayloadPath`) | — |
 
@@ -191,7 +191,7 @@ the SDK shape. Only the reported SDK version is still taken from the building SD
 | `tools/PayloadStager/Program.cs` | Builds the SDK-shaped tree, writes version stamps, zips it |
 | `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | Runs the stager, embeds the zip |
 | `src/Dotnet10Dependencies/Payloads.cs` | Resource-name discovery; the AOT-safe resource API |
-| `src/NativeCompiler/EmbeddedSdkRefs.cs` | Extracts to the cache; version + sidecar resolution |
+| `src/Sharp/EmbeddedSdkRefs.cs` | Extracts to the cache; version + sidecar resolution |
 
 ## Invariants and traps
 

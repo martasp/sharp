@@ -2,13 +2,13 @@
 
   <!-- Owns the compile-time payload sharp carries so it can build projects on a machine with no .NET
        SDK installed. At build time this project runs tools/PayloadStager and embeds its zip as the
-       'embedded-refs.<refpack>.zip' manifest resource; at run time NativeCompiler references the
+       'embedded-refs.<refpack>.zip' manifest resource; at run time Sharp references the
        project as a plain library and reads the payload back through Payloads.
 
        Everything the payload and the SDK analyzers need lives here and nowhere else: the pinned
        package versions, the PackageReference/PackageDownload items, the analyzer <Reference>
        HintPaths, and the AnalyzerRegistry that statically binds those analyzer types. Consumers
-       (NativeCompiler, NativeCompilerCLI, the tests) just reference this project and carry none of
+       (Sharp, Sharp.Cli, the tests) just reference this project and carry none of
        it.
 
        The stager stays a separate executable rather than becoming a private entry point: it has to
@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <!-- The Microsoft-published packages the payload is sourced from. DependencyModel is an ordinary
-       library used by DepsJsonWriter, so it flows to NativeCompiler as a normal transitive package.
+       library used by DepsJsonWriter, so it flows to Sharp as a normal transitive package.
        ILLink is consumed only for its analyzer folder, so it stays private, and GeneratePathProperty
        exposes its root as $(Pkg...) for the analyzer <Reference> HintPaths below. The stager reads
        both package folders from the restore output, not from here. -->
@@ -53,7 +53,7 @@
 
   <!-- Analyzer file locations, used both as compile-time <Reference> HintPaths here and rewritten to
        the embedded payload by sharp when it compiles this project during self-hosting
-       (NativeCompilerUtils.CollectHintPathReferences). The $(_Payload*) token names are the contract
+       (SharpUtils.CollectHintPathReferences). The $(_Payload*) token names are the contract
        with that rewriter. -->
   <PropertyGroup>
     <_PayloadNetCoreAnalyzersPath>$(NuGetPackageRoot)microsoft.netcore.app.ref/10.0.11/analyzers/dotnet/cs</_PayloadNetCoreAnalyzersPath>

@@ -1,4 +1,4 @@
-# NativeCompiler
+# Sharp
 
 A self-hosting C# compiler built on Roslyn that compiles `.csproj` projects and `.sln` / `.slnx`
 solutions **without MSBuild**, driven by a CLI whose commands, paths, flags, exit codes and output
@@ -12,18 +12,18 @@ are shaped to match the .NET SDK's `dotnet`.
 ## Build
 
 ```
-dotnet build NativeCompiler.sln            # debug compiler + native libs + tests
+dotnet build Sharp.sln            # debug compiler + native libs + tests
 bash publish.sh                            # AOT self-contained CLI at
-                                           #   src/NativeCompilerCLI/bin/Release/net10.0/linux-x64/publish/NativeCompilerCLI
+                                           #   src/Sharp.Cli/bin/Release/net10.0/linux-x64/publish/Sharp.Cli
 ```
 
-The test suite is `dotnet test tests/NativeCompilerTests --nologo` (58 tests, incl. byte-for-byte
+The test suite is `dotnet test tests/Sharp.Tests --nologo` (58 tests, incl. byte-for-byte
 CLI parity verification against `dotnet`).
 
 ## Commands
 
 ```
-NativeCompilerCLI <command> [target] [-- app args]
+sharp <command> [target] [-- app args]
 ```
 
 | Command | Behaviour |
@@ -32,7 +32,7 @@ NativeCompilerCLI <command> [target] [-- app args]
 | `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
 | `version` / `--version` | prints the hosting SDK version (e.g. `10.0.400`) |
 | `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the version line comes from the hosting SDK |
-| `NativeCompilerCLI <target>` | legacy form, routed to `build` |
+| `sharp <target>` | legacy form, routed to `build` |
 
 `<target>` may be:
 
@@ -58,7 +58,7 @@ Captured output, `<repo>` = absolute path to this repo.
 Uses the SDK terminal-logger summary, seconds included, path relative to the current directory:
 
 ```
-$ cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/HelloParityFixture
+$ cd <repo> && sharp build tests/TestExampleProjects/HelloParityFixture
   HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
@@ -72,7 +72,7 @@ current directory, then the summary. Warning-severity diagnostics are listed ind
 project; info-severity diagnostics stay hidden, exactly like the SDK at default verbosity.
 
 ```
-$ NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
+$ sharp build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
   LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
   LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
   SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
@@ -90,12 +90,12 @@ Xs` where the SDK would say `Build succeeded with N warning(s) in Xs`.
 ### Build with no target (current-directory search)
 
 ```
-$ cd <repo>/tests/TestExampleProjects/HelloParityFixture && NativeCompilerCLI build
+$ cd <repo>/tests/TestExampleProjects/HelloParityFixture && sharp build
   HelloParityFixture net10.0 succeeded (0.4s) → myc/Debug/net10.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
 
-$ cd <repo>/tests/TestExampleProjects && NativeCompilerCLI build        # sole .slnx wins
+$ cd <repo>/tests/TestExampleProjects && sharp build        # sole .slnx wins
   LibA -> ...
   ...
 ```
@@ -103,14 +103,14 @@ $ cd <repo>/tests/TestExampleProjects && NativeCompilerCLI build        # sole .
 ### Run an app (args after `--` are forwarded)
 
 ```
-$ NativeCompilerCLI run <repo>/tests/TestExampleProjects/HelloParityFixture
-Hello from NativeCompiler!
+$ sharp run <repo>/tests/TestExampleProjects/HelloParityFixture
+Hello from Sharp!
 ```
 
 ### A failing build (`error CS0103`, exit code 1)
 
 ```
-$ NativeCompilerCLI build <repo>/tests/TestExampleProjects/FailingFixture
+$ sharp build <repo>/tests/TestExampleProjects/FailingFixture
   FailingFixture net10.0 failed with 1 error(s) (0.6s)
     <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
@@ -120,9 +120,9 @@ Build failed with 1 error(s) in 1.2s     # $? = 1
 ### Version and help
 
 ```
-$ NativeCompilerCLI --version
+$ sharp --version
 10.0.400                  # the hosting SDK version, matching `dotnet --version`
-$ NativeCompilerCLI help
+$ sharp help
 .NET SDK (10.0.400)       # correct SDK version, never hardcoded
 ...
 SDK commands:

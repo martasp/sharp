@@ -1,5 +1,5 @@
 flowchart TB
-    subgraph CLI["NativeCompilerCLI"]
+    subgraph CLI["sharp CLI"]
         Program["Program.cs<br/>command registry"]
         CmdBuild["build"]
         CmdRun["run"]
@@ -7,8 +7,8 @@ flowchart TB
         CmdClean["clean"]
     end
 
-    subgraph CORE["NativeCompiler (thin facade → slices)"]
-        NC["Build → ProjectBuild"]
+    subgraph CORE["Sharp (thin facade → slices)"]
+        ENGINE["Build → ProjectBuild"]
         NCSol["BuildSolution → SolutionBuild<br/>wave scheduler"]
         NCRun["Run → Runtime"]
         Refs["References<br/>GetCompilingRefs / GetRuntimeRefs"]
@@ -37,15 +37,15 @@ flowchart TB
 
     Program --> CmdBuild & CmdRun & CmdRestore & CmdClean
     CmdBuild -->|".sln/.slnx"| NCSol
-    CmdBuild -->|"project"| NC
+    CmdBuild -->|"project"| ENGINE
     CmdRun --> NCRun
-    NCSol -->|"parallel waves"| NC
-    NC --> PL --> Project --> BuildProps
-    NC --> PRefFinder
-    NC --> Refs --> Merge
-    NC --> AR --> SG
+    NCSol -->|"parallel waves"| ENGINE
+    ENGINE --> PL --> Project --> BuildProps
+    ENGINE --> PRefFinder
+    ENGINE --> Refs --> Merge
+    ENGINE --> AR --> SG
     AR --> Registry
     SG --> Razor & Registry
-    NC --> Emit --> Deps
+    ENGINE --> Emit --> Deps
     CmdRestore --> Restorer --> NuGetPkg --> VersionRes
     CmdClean --> PG

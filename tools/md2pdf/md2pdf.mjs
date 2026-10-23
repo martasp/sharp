@@ -139,6 +139,12 @@ function buildHtml(html, { title, eyebrow }) {
 
 const escapeHtml = (s) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
 
+const NAMED = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
+const unescapeHtml = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, body) => {
+  if (body[0] === "#") return String.fromCodePoint(parseInt(body[1] === "x" || body[1] === "X" ? body.slice(2) : body.slice(1), body[1] === "x" || body[1] === "X" ? 16 : 10));
+  return NAMED[body.toLowerCase()] ?? m;
+});
+
 // --------------------------------------------------------------------- cli
 function parseArgs(argv) {
   const args = { input: null, output: null, title: null, eyebrow: null, mermaid: true };
@@ -174,7 +180,7 @@ function main() {
 
   // The first H1 becomes the document title unless one is given.
   const firstH1 = body.match(/<h1[^>]*>(.*?)<\/h1>/s);
-  const title = args.title || (firstH1 ? firstH1[1].replace(/<[^>]+>/g, "").trim() : "") ||
+  const title = args.title || (firstH1 ? unescapeHtml(firstH1[1].replace(/<[^>]+>/g, "")).trim() : "") ||
     basename(args.input);
 
   const output = args.output || args.input.replace(/\.md$/i, ".pdf");

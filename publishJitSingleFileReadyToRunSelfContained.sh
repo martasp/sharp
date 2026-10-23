@@ -12,7 +12,7 @@
 #
 # Unlike AOT, ReadyToRun is not a closed world - the JIT is still present at run time, so
 # reflection, runtime assembly loading and dynamic source generators behave normally. It is
-# the middle ground between the in-process JIT build (NativeCompilerCLI.dll) and AOT: faster
+# the middle ground between the in-process JIT build (Sharp.Cli.dll) and AOT: faster
 # startup than pure JIT, full dynamic-code support unlike AOT.
 #
 # Output lands in artifacts/ (gitignored) rather than bin/Release/.../publish, so it never
@@ -24,7 +24,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_root"
 
-project="src/NativeCompilerCLI/NativeCompilerCLI.csproj"
+project="src/Sharp.Cli/Sharp.Cli.csproj"
 runtime="linux-x64"
 if [[ "$(uname -s)" == "Darwin" ]]; then runtime="osx-arm64"; fi
 
@@ -40,9 +40,9 @@ dotnet publish "$project" \
   -p:PublishReadyToRun=true \
   -o "$out"
 
-exe="$out/NativeCompilerCLI"
+exe="$out/Sharp.Cli"
 if [[ ! -f "$exe" ]]; then
-  exe="$(find "$out" -type f -name NativeCompilerCLI | head -n1)"
+  exe="$(find "$out" -type f -name Sharp.Cli | head -n1)"
 fi
 
 echo

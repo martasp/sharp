@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Build-time only: stages the payload that NativeCompiler embeds. Never published or shipped.
+  <!-- Build-time only: stages the payload that Sharp embeds. Never published or shipped.
        Plain framework-dependent exe so it builds and runs identically on Linux and Windows, which
        publish.sh and publish.bat both rely on. -->
   <PropertyGroup>

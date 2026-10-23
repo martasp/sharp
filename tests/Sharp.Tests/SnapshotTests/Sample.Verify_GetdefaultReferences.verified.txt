@@ -1,0 +1,298 @@
+﻿[
+  {
+    Display: ./Argon.dll,
+    FilePath: ./Argon.dll
+  },
+  {
+    Display: ./BouncyCastle.Cryptography.dll,
+    FilePath: ./BouncyCastle.Cryptography.dll
+  },
+  {
+    Display: ./DiffEngine.dll,
+    FilePath: ./DiffEngine.dll
+  },
+  {
+    Display: ./DiffPlex.dll,
+    FilePath: ./DiffPlex.dll
+  },
+  {
+    Display: ./Docker.DotNet.dll,
+    FilePath: ./Docker.DotNet.dll
+  },
+  {
+    Display: ./Docker.DotNet.Handler.Abstractions.dll,
+    FilePath: ./Docker.DotNet.Handler.Abstractions.dll
+  },
+  {
+    Display: ./Docker.DotNet.LegacyHttp.dll,
+    FilePath: ./Docker.DotNet.LegacyHttp.dll
+  },
+  {
+    Display: ./Docker.DotNet.NativeHttp.dll,
+    FilePath: ./Docker.DotNet.NativeHttp.dll
+  },
+  {
+    Display: ./Docker.DotNet.NPipe.dll,
+    FilePath: ./Docker.DotNet.NPipe.dll
+  },
+  {
+    Display: ./Docker.DotNet.Unix.dll,
+    FilePath: ./Docker.DotNet.Unix.dll
+  },
+  {
+    Display: ./Docker.DotNet.X509.dll,
+    FilePath: ./Docker.DotNet.X509.dll
+  },
+  {
+    Display: ./Dotnet10Dependencies.dll,
+    FilePath: ./Dotnet10Dependencies.dll
+  },
+  {
+    Display: ./EmptyFiles.dll,
+    FilePath: ./EmptyFiles.dll
+  },
+  {
+    Display: ./Humanizer.dll,
+    FilePath: ./Humanizer.dll
+  },
+  {
+    Display: ./ICSharpCode.SharpZipLib.dll,
+    FilePath: ./ICSharpCode.SharpZipLib.dll
+  },
+  {
+    Display: ./ILLink.CodeFixProvider.dll,
+    FilePath: ./ILLink.CodeFixProvider.dll
+  },
+  {
+    Display: ./ILLink.RoslynAnalyzer.dll,
+    FilePath: ./ILLink.RoslynAnalyzer.dll
+  },
+  {
+    Display: ./Microsoft.ApplicationInsights.dll,
+    FilePath: ./Microsoft.ApplicationInsights.dll
+  },
+  {
+    Display: ./Microsoft.AspNetCore.App.SourceGenerators.dll,
+    FilePath: ./Microsoft.AspNetCore.App.SourceGenerators.dll
+  },
+  {
+    Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
+    FilePath: ./Microsoft.Bcl.AsyncInterfaces.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.CSharp.dll,
+    FilePath: ./Microsoft.CodeAnalysis.CSharp.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.dll,
+    FilePath: ./Microsoft.CodeAnalysis.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.Workspaces.dll,
+    FilePath: ./Microsoft.CodeAnalysis.Workspaces.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll,
+    FilePath: ./Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll,
+    FilePath: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.DependencyModel.dll,
+    FilePath: ./Microsoft.Extensions.DependencyModel.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
+    FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Logging.Generators.dll,
+    FilePath: ./Microsoft.Extensions.Logging.Generators.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Options.SourceGeneration.dll,
+    FilePath: ./Microsoft.Extensions.Options.SourceGeneration.dll
+  },
+  {
+    Display: ./Microsoft.Extensions.Validation.ValidationsGenerator.dll,
+    FilePath: ./Microsoft.Extensions.Validation.ValidationsGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.ComInterfaceGenerator.dll,
+    FilePath: ./Microsoft.Interop.ComInterfaceGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.JavaScript.JSImportGenerator.dll,
+    FilePath: ./Microsoft.Interop.JavaScript.JSImportGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.LibraryImportGenerator.dll,
+    FilePath: ./Microsoft.Interop.LibraryImportGenerator.dll
+  },
+  {
+    Display: ./Microsoft.Interop.SourceGeneration.dll,
+    FilePath: ./Microsoft.Interop.SourceGeneration.dll
+  },
+  {
+    Display: ./Microsoft.Net.Http.Client.dll,
+    FilePath: ./Microsoft.Net.Http.Client.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.MSBuild.dll,
+    FilePath: ./Microsoft.Testing.Extensions.MSBuild.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.Telemetry.dll,
+    FilePath: ./Microsoft.Testing.Extensions.Telemetry.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Extensions.TrxReport.Abstractions.dll,
+    FilePath: ./Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+  },
+  {
+    Display: ./Microsoft.Testing.Platform.dll,
+    FilePath: ./Microsoft.Testing.Platform.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CommunicationUtilities.dll,
+    FilePath: ./Microsoft.TestPlatform.CommunicationUtilities.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CoreUtilities.dll,
+    FilePath: ./Microsoft.TestPlatform.CoreUtilities.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.CrossPlatEngine.dll,
+    FilePath: ./Microsoft.TestPlatform.CrossPlatEngine.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.PlatformAbstractions.dll,
+    FilePath: ./Microsoft.TestPlatform.PlatformAbstractions.dll
+  },
+  {
+    Display: ./Microsoft.TestPlatform.Utilities.dll,
+    FilePath: ./Microsoft.TestPlatform.Utilities.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.CodeCoverage.Shim.dll,
+    FilePath: ./Microsoft.VisualStudio.CodeCoverage.Shim.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.TestPlatform.Common.dll,
+    FilePath: ./Microsoft.VisualStudio.TestPlatform.Common.dll
+  },
+  {
+    Display: ./Microsoft.VisualStudio.TestPlatform.ObjectModel.dll,
+    FilePath: ./Microsoft.VisualStudio.TestPlatform.ObjectModel.dll
+  },
+  {
+    Display: ./Renci.SshNet.dll,
+    FilePath: ./Renci.SshNet.dll
+  },
+  {
+    Display: ./Sharp.dll,
+    FilePath: ./Sharp.dll
+  },
+  {
+    Display: ./Sharp.Tests.dll,
+    FilePath: ./Sharp.Tests.dll
+  },
+  {
+    Display: ./Shouldly.dll,
+    FilePath: ./Shouldly.dll
+  },
+  {
+    Display: ./SimpleInfoName.dll,
+    FilePath: ./SimpleInfoName.dll
+  },
+  {
+    Display: ./System.Composition.AttributedModel.dll,
+    FilePath: ./System.Composition.AttributedModel.dll
+  },
+  {
+    Display: ./System.Composition.Convention.dll,
+    FilePath: ./System.Composition.Convention.dll
+  },
+  {
+    Display: ./System.Composition.Hosting.dll,
+    FilePath: ./System.Composition.Hosting.dll
+  },
+  {
+    Display: ./System.Composition.Runtime.dll,
+    FilePath: ./System.Composition.Runtime.dll
+  },
+  {
+    Display: ./System.Composition.TypedParts.dll,
+    FilePath: ./System.Composition.TypedParts.dll
+  },
+  {
+    Display: ./System.Reflection.MetadataLoadContext.dll,
+    FilePath: ./System.Reflection.MetadataLoadContext.dll
+  },
+  {
+    Display: ./System.Text.Json.SourceGeneration.dll,
+    FilePath: ./System.Text.Json.SourceGeneration.dll
+  },
+  {
+    Display: ./System.Text.RegularExpressions.Generator.dll,
+    FilePath: ./System.Text.RegularExpressions.Generator.dll
+  },
+  {
+    Display: ./Testcontainers.dll,
+    FilePath: ./Testcontainers.dll
+  },
+  {
+    Display: ./testhost.dll,
+    FilePath: ./testhost.dll
+  },
+  {
+    Display: ./Verify.DiffPlex.dll,
+    FilePath: ./Verify.DiffPlex.dll
+  },
+  {
+    Display: ./Verify.dll,
+    FilePath: ./Verify.dll
+  },
+  {
+    Display: ./Verify.XunitV3.dll,
+    FilePath: ./Verify.XunitV3.dll
+  },
+  {
+    Display: ./xunit.abstractions.dll,
+    FilePath: ./xunit.abstractions.dll
+  },
+  {
+    Display: ./xunit.runner.visualstudio.testadapter.dll,
+    FilePath: ./xunit.runner.visualstudio.testadapter.dll
+  },
+  {
+    Display: ./xunit.v3.assert.dll,
+    FilePath: ./xunit.v3.assert.dll
+  },
+  {
+    Display: ./xunit.v3.common.dll,
+    FilePath: ./xunit.v3.common.dll
+  },
+  {
+    Display: ./xunit.v3.core.dll,
+    FilePath: ./xunit.v3.core.dll
+  },
+  {
+    Display: ./xunit.v3.mtp-v1.dll,
+    FilePath: ./xunit.v3.mtp-v1.dll
+  },
+  {
+    Display: ./xunit.v3.runner.common.dll,
+    FilePath: ./xunit.v3.runner.common.dll
+  },
+  {
+    Display: ./xunit.v3.runner.inproc.console.dll,
+    FilePath: ./xunit.v3.runner.inproc.console.dll
+  },
+  {
+    Display: ./xunit.v3.runner.utility.netcore.dll,
+    FilePath: ./xunit.v3.runner.utility.netcore.dll
+  }
+]

@@ -1,0 +1,50 @@
+﻿[
+  {
+    Name: Dotnet10Dependencies,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: src\Dotnet10Dependencies\Dotnet10Dependencies.csproj,
+    FlatPath: {SolutionDirectory}src/Dotnet10Dependencies/Dotnet10Dependencies.csproj
+  },
+  {
+    Name: DotnetRuntime10,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: DotnetRuntime10\DotnetRuntime10.csproj,
+    FlatPath: {SolutionDirectory}DotnetRuntime10/DotnetRuntime10.csproj
+  },
+  {
+    Name: DotnetRuntimeHostExe,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj,
+    FlatPath: {SolutionDirectory}DotnetRuntimeHostExe/DotnetRuntimeHostExe.csproj
+  },
+  {
+    Name: PayloadStager,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: tools\PayloadStager\PayloadStager.csproj,
+    FlatPath: {SolutionDirectory}tools/PayloadStager/PayloadStager.csproj
+  },
+  {
+    Name: Sharp,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: src\Sharp\Sharp.csproj,
+    FlatPath: {SolutionDirectory}src/Sharp/Sharp.csproj
+  },
+  {
+    Name: Sharp.Cli,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: src\Sharp.Cli\Sharp.Cli.csproj,
+    FlatPath: {SolutionDirectory}src/Sharp.Cli/Sharp.Cli.csproj
+  },
+  {
+    Name: Sharp.Tests,
+    ProjectTypeGuid: Guid_2,
+    ProjectRelativePath: tests\Sharp.Tests\Sharp.Tests.csproj,
+    FlatPath: {ProjectDirectory}Sharp.Tests.csproj
+  },
+  {
+    Name: SimplePlayground,
+    ProjectTypeGuid: Guid_1,
+    ProjectRelativePath: SimplePlayground\SimplePlayground.csproj,
+    FlatPath: {SolutionDirectory}SimplePlayground/SimplePlayground.csproj
+  }
+]

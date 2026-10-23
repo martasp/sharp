@@ -1,5 +1,5 @@
 flowchart TB
-    subgraph CLI["NativeCompilerCLI"]
+    subgraph CLI["sharp CLI"]
         Program["Program.cs<br/>command registry"]
         CmdBuild["build"]
         CmdRun["run"]
@@ -7,8 +7,8 @@ flowchart TB
         CmdClean["clean"]
     end
 
-    subgraph CORE["NativeCompiler (engine)"]
-        NC["Build / BuildCore"]
+    subgraph CORE["Sharp (engine)"]
+        ENGINE["Build / BuildCore"]
         NCSol["BuildSolution<br/>wave scheduler"]
         Refs["Reference resolution"]
         Merge["MergeFrameworkSuppression<br/>dedup + keep HIGHEST version"]
@@ -35,18 +35,18 @@ flowchart TB
 
     Program --> CmdBuild & CmdRun & CmdRestore & CmdClean
     CmdBuild -->|".sln/.slnx"| NCSol
-    CmdBuild -->|"project"| NC
-    CmdRun --> NC
+    CmdBuild -->|"project"| ENGINE
+    CmdRun --> ENGINE
     NCSol --> SolutionFile
-    NCSol -->|"parallel waves"| NC
-    NC --> Project --> BuildProps
-    NC --> PRefFinder
-    NC --> Refs --> NuGetPkg --> VersionRes
-    NC --> Merge
-    NC --> AR --> SG
+    NCSol -->|"parallel waves"| ENGINE
+    ENGINE --> Project --> BuildProps
+    ENGINE --> PRefFinder
+    ENGINE --> Refs --> NuGetPkg --> VersionRes
+    ENGINE --> Merge
+    ENGINE --> AR --> SG
     AR --> Registry
     SG --> Razor
     SG --> Registry
-    NC --> Emit
-    NC --> Deps
+    ENGINE --> Emit
+    ENGINE --> Deps
     CmdRestore --> Restorer --> NuGetPkg

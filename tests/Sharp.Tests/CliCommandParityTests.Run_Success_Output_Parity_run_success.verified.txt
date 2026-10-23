@@ -1,0 +1,4 @@
+﻿NATIVE run "{SolutionDirectory}/tests/TestExampleProjects/HelloParityFixture" | DOTNET run --project "{SolutionDirectory}/tests/TestExampleProjects/HelloParityFixture" --no-restore
+-----------------------------------------------------------------------------------
+Hello from Sharp!                        | Hello from Sharp!                       
+                                         |                                         

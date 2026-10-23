@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Restore-only fixture. Never built, never referenced by NativeCompiler.sln, and never loaded.
+    Restore-only fixture. Never built, never referenced by Sharp.sln, and never loaded.
 
     NuGetTests reads these packages out of the global packages folder as *data* - it asserts how
     our package reader interprets a real .nuspec (lib folder selection, dependency groups,

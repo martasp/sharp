@@ -49,32 +49,32 @@ and the compiler failed its run-time lookup.
 
 ### 3. Compiler + first-party TFMs
 `<TargetFramework>net10.0</TargetFramework>` → `net11.0` in:
-- `src/NativeCompiler/NativeCompiler.csproj`
-- `src/NativeCompilerCLI/NativeCompilerCLI.csproj`
+- `src/Sharp/Sharp.csproj`
+- `src/Sharp.Cli/Sharp.Cli.csproj`
 - `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
 - `tools/PayloadStager/PayloadStager.csproj`
-- `tests/NativeCompilerTests/NativeCompilerTests.csproj`
+- `tests/Sharp.Tests/Sharp.Tests.csproj`
 - `DotnetRuntime10/`, `DotnetRuntimeHostExe/`, `SimplePlayground/`
 
 ### 4. Fallback TFM literals
 None to touch - the ~14 `?? "net10.0"` fallbacks and the restored pack default are all
-`DefaultTargetFramework.Value` in `src/NativeCompiler/DefaultTargetFramework.cs`; bump that one line.
+`DefaultTargetFramework.Value` in `src/Sharp/DefaultTargetFramework.cs`; bump that one line.
 It is the fragile one: nothing fails if it is missed for a net11 build, the out-of-date TFM is just
 silently assumed when the target does not state one.
 
 ### 5. Names carrying the major
 Only two, and they are cosmetic — rename only if you want the major gone:
 - `Dotnet10Dependencies` — project name, assembly name, `namespace Dotnet10Dependencies`, and the
-  `using` in `EmbeddedSdkRefs.cs`. Referenced by `NativeCompiler.csproj` and the solution.
+  `using` in `EmbeddedSdkRefs.cs`. Referenced by `Sharp.csproj` and the solution.
 - `DotnetRuntime10` — test fixture project + `namespace DotnetRuntime10`, referenced by
-  `NativeCompiler.sln` and asserted in `SolutionTests.cs`.
+  `Sharp.sln` and asserted in `SolutionTests.cs`.
 
 Note `Dotnet10Dependencies` now also appears in `SolutionTests.Parse_RootSolution_Snapshot.verified.txt`
 and `SnapshotTests/Sample.Verify_GetdefaultReferences.verified.txt`, so a rename regenerates those.
 
 ### 6. Package versions
 - `Microsoft.NET.ILLink.Tasks` — the pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
-  (the only reference; `NativeCompiler` gets ILLink through `Dotnet10Dependencies` and the SDK's own
+  (the only reference; `Sharp` gets ILLink through `Dotnet10Dependencies` and the SDK's own
   `PublishAot` bring-up).
 - `System.Reflection.MetadataLoadContext` `10.0.1`.
 - Roslyn `Microsoft.CodeAnalysis*` `5.9.0` — bump to whatever SDK 11 bundles (Roslyn's major is
@@ -92,7 +92,7 @@ and `SnapshotTests/Sample.Verify_GetdefaultReferences.verified.txt`, so a rename
 ## Validation
 
 ```
-dotnet test NativeCompiler.sln -c Release          # expect 100/100
+dotnet test Sharp.sln -c Release          # expect 124/124
 bash publish.sh                                     # AOT CLI
 # then compile a real project with the published binary and confirm the cache:
 #   ~/.cache/sharp/<hash>/sdk/<new-refpack>/

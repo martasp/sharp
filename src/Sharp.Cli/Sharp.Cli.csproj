@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>true</PublishAot>
+    <!--//dotnet publish -r win-x64 -c Release-->
+    <!--<SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>-->
+
+    <WarningsAsErrors>Nullable</WarningsAsErrors>
+
+    <!-- PublishAot bakes IsDynamicCodeSupported=false into the runtimeconfig even for ordinary
+         `dotnet build` + `dotnet Sharp.Cli.dll` (JIT) runs, killing the dynamic
+         source-generator discovery that NativeAOT legitimately can't do but JIT can. Pin the
+         SDK's DynamicCodeSupport host-option to true for managed builds; a real `dotnet publish`
+         AOT flow (the SDK's _IsPublishing is set) re-applies the runtime's true capability itself. -->
+    <DynamicCodeSupport Condition="'$(_IsPublishing)' != 'true'">true</DynamicCodeSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+	  <ProjectReference Include="..\Sharp\Sharp.csproj" />
+  </ItemGroup>
+
+  <!-- PublishAot bakes IsDynamicCodeSupported=false into the runtimeconfig even for ordinary
+       `dotnet build` + `dotnet Sharp.Cli.dll` (JIT) runs, killing the dynamic
+       source-generator discovery that NativeAOT legitimately can't do but JIT can. Override the
+       RuntimeHostConfigurationOption back to true for the managed build only. -->
+  <ItemGroup Condition="'$(_IsPublishing)' != 'true'">
+    <RuntimeHostConfigurationOption Update="System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported" Value="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same descriptor as Sharp so the CLI's own ILC run keeps analyzer resources embedded. -->
+    <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\..\Sharp\AotAnalyzerResources.xml" />
+  </ItemGroup>
+
+<ItemGroup>
+	  <!--<PackageReference Include="Cocona" Version="2.0.3" />-->
+	  <!--<PackageReference Include="Cocona.Core" Version="2.0.3" />-->
+	  <!--<PackageReference Include="Microsoft.DotNet.ILCompiler" Version="7.0.0-*"/>-->
+  </ItemGroup>
+
+
+</Project>
+

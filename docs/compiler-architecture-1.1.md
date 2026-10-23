@@ -1,9 +1,9 @@
 # Sharp Compiler Architecture — v1.1
 
-Intent-based vertical-slice layout of the `NativeCompiler` engine, the `NativeCompilerCLI`
+Intent-based vertical-slice layout of the `Sharp` engine, the `sharp`
 command layer, and the reference/NuGet support code.
 
-**v1.1** reflects the refactor that turned the single `NativeCompiler.cs` god class into
+**v1.1** reflects the refactor that turned the single `Sharp.cs` god class into
 one class per responsibility, with the code physically moved (not wrapped).
 
 ---
@@ -12,7 +12,7 @@ one class per responsibility, with the code physically moved (not wrapped).
 
 ```mermaid
 flowchart TB
-    subgraph CLI["NativeCompilerCLI"]
+    subgraph CLI["sharp CLI"]
         Program["Program.cs<br/>command registry"]
         CmdBuild["build"]
         CmdRun["run"]
@@ -20,20 +20,20 @@ flowchart TB
         CmdClean["clean"]
     end
 
-    subgraph ENGINE["NativeCompiler (thin facade)"]
-        NC["NativeCompiler.Build<br/>(→ ProjectBuild)"]
-        NCSol["NativeCompiler.BuildSolution<br/>(→ SolutionBuild)"]
-        NCRun["NativeCompiler.Run<br/>(→ Runtime)"]
+    subgraph ENGINE["Sharp (thin facade)"]
+        ENGINE["SharpCompiler.Build<br/>(→ ProjectBuild)"]
+        NCSol["Sharp.BuildSolution<br/>(→ SolutionBuild)"]
+        NCRun["Sharp.Run<br/>(→ Runtime)"]
     end
 
     Program --> CmdBuild & CmdRun & CmdRestore & CmdClean
     CmdBuild -->|".sln/.slnx"| NCSol
-    CmdBuild -->|"project"| NC
+    CmdBuild -->|"project"| ENGINE
     CmdRun --> NCRun
     CmdRestore --> Restorer["PackageRestorer"]
 ```
 
-`NativeCompiler.cs` is now only 42 lines: the three public entry points plus the
+`Sharp.cs` is now only 42 lines: the three public entry points plus the
 `BuildResult` / `SolutionProjectResult` / `BuildSolutionResult` records. All implementation
 lives in the slice modules below.
 
@@ -81,7 +81,7 @@ flowchart TB
   `AddAnalyzerProjectReferences`, `TopologicalSort` (private).
 - `Emit/Output.cs` — real Roslyn `WriteDll` (`ProduceDll`) and `RunAssembly` bodies.
 - `References/FrameworkFix.cs` — real `MergeFrameworkSuppression` (moved out of
-  `NativeCompilerUtils.cs`).
+  `SharpUtils.cs`).
 - `References/References.cs` — `GetCompilingRefs` / `GetRuntimeRefs`.
 - `Loading/ProjectLoader.cs` — file-read + model parse.
 - `Graph/ProjectGraph.cs` — solution/project enumeration (used by CLI `clean`).

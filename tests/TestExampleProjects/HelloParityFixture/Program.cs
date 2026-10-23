@@ -1,2 +1,2 @@
 using System;
-Console.WriteLine("Hello from NativeCompiler!");
+Console.WriteLine("Hello from Sharp!");

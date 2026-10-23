@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo === building test host ===
-dotnet build tests\NativeCompilerTests\NativeCompilerTests.csproj -v q -nologo
+dotnet build tests\Sharp.Tests\Sharp.Tests.csproj -v q -nologo
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
@@ -13,9 +13,9 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
 echo === running bootstrap pipeline test ===
-dotnet test tests\NativeCompilerTests\NativeCompilerTests.csproj --no-build --filter "Category=Bootstrap" -l "console;verbosity=detailed"
+dotnet test tests\Sharp.Tests\Sharp.Tests.csproj --no-build --filter "Category=Bootstrap" -l "console;verbosity=detailed"
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo.
-echo === full transcript: %TEMP%\nc-bootstrap-last-run.txt ===
-if exist "%TEMP%\nc-bootstrap-last-run.txt" type "%TEMP%\nc-bootstrap-last-run.txt"
+echo === full transcript: %TEMP%\sharp-bootstrap-last-run.txt ===
+if exist "%TEMP%\sharp-bootstrap-last-run.txt" type "%TEMP%\sharp-bootstrap-last-run.txt"

@@ -1,15 +1,15 @@
-# NativeCompiler
+# Sharp
 
 Self-hosting C# compiler built on Roslyn. Compiles `.csproj` projects and `.sln` solutions without MSBuild.
 
 ## Usage
 
 ```
-NativeCompilerCLI <command> [target] [arguments]
+sharp <command> [target] [arguments]
 ```
 
 Commands mirror the .NET SDK: `build`, `run`, `help`, `version` (`--version`).
-Legacy bare-path invocation still works: `NativeCompilerCLI <target>` routes to `build`.
+Legacy bare-path invocation still works: `sharp <target>` routes to `build`.
 
 `<target>` can be:
 
@@ -35,7 +35,7 @@ SDK side-by-side output live in **`README.md`**.
 
 ```
 # build a single project by folder or .csproj file (terminal-logger summary w/ seconds, path relative to CWD)
-cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/HelloParityFixture
+cd <repo> && sharp build tests/TestExampleProjects/HelloParityFixture
   HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
@@ -43,7 +43,7 @@ Build succeeded in 1.2s
 
 ```
 # build a solution (.sln/.slnx use the terminal-logger grammar: per-project timing lines + summary)
-NativeCompilerCLI build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
+sharp build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
   LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
   LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
   SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
@@ -53,19 +53,19 @@ Build succeeded in 0.4s
 
 ```
 # build with no target: the current directory is searched for a single project/solution
-cd <repo>/tests/TestExampleProjects/HelloParityFixture && NativeCompilerCLI build
-cd <repo>/tests/TestExampleProjects              && NativeCompilerCLI build   # sole SlnxFixtures.slnx
+cd <repo>/tests/TestExampleProjects/HelloParityFixture && sharp build
+cd <repo>/tests/TestExampleProjects              && sharp build   # sole SlnxFixtures.slnx
 ```
 
 ```
 # run a console app; arguments after `--` are forwarded to the app
-NativeCompilerCLI run <repo>/tests/TestExampleProjects/HelloParityFixture
-Hello from NativeCompiler!
+sharp run <repo>/tests/TestExampleProjects/HelloParityFixture
+Hello from Sharp!
 ```
 
 ```
 # a failing build reports errors (one indented line per error) and exits 1
-cd <repo> && NativeCompilerCLI build tests/TestExampleProjects/FailingFixture
+cd <repo> && sharp build tests/TestExampleProjects/FailingFixture
   FailingFixture net10.0 failed with 1 error(s) (0.6s)
     <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
@@ -75,8 +75,8 @@ Build failed with 1 error(s) in 1.2s
 
 ```
 # version and help mirror the host SDK
-NativeCompilerCLI version    # prints the SDK version, e.g. 10.0.400
-NativeCompilerCLI help       # full dotnet help text
+sharp version    # prints the SDK version, e.g. 10.0.400
+sharp help       # full dotnet help text
 ```
 
 ## What we support
@@ -159,18 +159,18 @@ rather than printed from the analyzer pipeline.
 ## Benchmarking
 
 ```
-dotnet test tests\NativeCompilerTests --filter "Category=Benchmark" --nologo
+dotnet test tests\Sharp.Tests --filter "Category=Benchmark" --nologo
 ```
 
 Runs with the suite every time and prints how `BuildSolution` compares to `dotnet build`
-(cold incl. restore, and warm/incremental) on `NativeCompiler.sln`. Both tools build a
+(cold incl. restore, and warm/incremental) on `Sharp.sln`. Both tools build a
 clean temp copy so the repo is untouched. The table is also saved to `benchmarks/` in the repo so
 results can be committed to git. Timings are informational — no thresholds are asserted. Set
-`NATIVECOMPILER_SKIP_BENCHMARK=1` to skip it for a fast suite run.
+`SHARP_SKIP_BENCHMARK=1` to skip it for a fast suite run.
 
 ## What we do NOT support (by design, for now)
 
-`NativeCompilerTests` is part of `NativeCompiler.sln` and compiles via the test entry-point shim
+`Sharp.Tests` is part of `Sharp.sln` and compiles via the test entry-point shim
 (see "Next features", item 2). `DotnetRuntimeHostExe` is re-enabled and compiles. `dotnet build`
 and our `BuildSolution` both pass on the solution.
 
@@ -179,13 +179,13 @@ and our `BuildSolution` both pass on the solution.
 - **Packages with no `lib` assemblies** – compile references injected purely through package `buildTransitive` targets are not reproduced. `xunit.v3` ships zero DLLs (its assemblies arrive via `.nuspec` dependencies + targets), so `Xunit.*` namespaces stay unresolved; transitive `.nuspec` resolution helps but cannot fully replace target-injected `<Reference>` items
 - **Analyzers / generators / build targets** from packages (`build`, `buildTransitive`, `analyzers` folders)
 - **Configuration matrix** – a single build configuration is compiled; `Debug`/`Release`-conditional csproj items are not evaluated (MSBuild condition evaluation)
-- **AOT for other platforms** – NativeCompilerCLI has `PublishAot=true`; emitting linux-x64 native requires the host machine's AOT cross toolchain (see `publish.sh`)
+- **AOT for other platforms** – the `sharp` CLI has `PublishAot=true`; emitting linux-x64 native requires the host machine's AOT cross toolchain (see `publish.sh`)
 
 ## Future work
 
 ### OrchardCore canary
 `OrchardCore.slnx` (239 projects, .NET 10, ASP.NET Core CMS) is the external stress test. Fresh clone +
-`dotnet restore` (warms the NuGet cache), then `NativeCompilerCLI OrchardCore.slnx`. Baseline
+`dotnet restore` (warms the NuGet cache), then `sharp OrchardCore.slnx`. Baseline
 measurement: **3 OK / 236 FAIL** (42.3s) vs `dotnet build OrchardCore.slnx --no-restore` (149.4s, exit 0).
 Pilot led to real fixes (`.slnx` parsing, CLI routing) and this prioritized gap list:
 
@@ -231,7 +231,7 @@ Canary command:
 ```
 git clone --depth 1 https://github.com/OrchardCMS/OrchardCore.git
 dotnet restore OrchardCore.slnx          # populate ~/.nuget/packages once
-NativeCompilerCLI OrchardCore.slnx       # then: OK/FAIL counts + ours2.err analysis
+sharp OrchardCore.slnx       # then: OK/FAIL counts + ours2.err analysis
 ```
 
 ### Source generator support (GENERATOR_PIPELINE)
@@ -247,12 +247,12 @@ Implemented in `SourceGeneratorRunner.cs` — real `CSharpGeneratorDriver` runs,
    M.CA packages matched to OrchardCore's central version (`Microsoft.CodeAnalysis*` 5.6.0 in the host app),
    Roslyn-distribution assemblies filtered out of the analyzer set so dev-version M.C.A doesn't clash with the
    loaded compiler, generator `ParseOptions` built with **implicit TFM preprocessor constants**
-   (`NET9_0_OR_GREATER`, `NET10_0_OR_GREATER`, … from `NativeCompilerUtils.GetSdkPreprocessorSymbols`) so
+   (`NET9_0_OR_GREATER`, `NET10_0_OR_GREATER`, … from `SharpUtils.GetSdkPreprocessorSymbols`) so
    `#if`-guarded generated code compiles, and `InterceptorsNamespaces` opt-in plumbed from the SDK/csproj
    props (`ApplyInterceptorsNamespaces`). Only Error-severity generator diagnostics fail the build; load/init
    warnings are printed. Generated trees are re-parsed with the project's parse options before being merged
    via `AddSyntaxTrees`.
-3. **Shadow-copy loading** — analyzer DLLs are copied to `%TEMP%\NativeCompilerGenerators` keyed by
+3. **Shadow-copy loading** — analyzer DLLs are copied to `%TEMP%\SharpGenerators` keyed by
    last-write time and loaded from there, so repeated builds can rewrite the original `sharpbin` DLL
    (otherwise the load lock raises IOException). Loads go through one dedicated `AssemblyLoadContext`
    per project run whose `Resolving` handler maps each analyzer's simple name back to its shadow copy:
@@ -272,13 +272,13 @@ trees the way csc matches it (real `dotnet build` passes, ours reports "intercep
 in this namespace"). One remaining OrchardCore cluster; `InterceptorsNamespaces` still keyed off the SDK
 property so non-OrchardCore interceptors work.
 
-Once green, `DotnetRuntimeHostExe` was un-commented in `NativeCompiler.sln` and now compiles under both
+Once green, `DotnetRuntimeHostExe` was un-commented in `Sharp.sln` and now compiles under both
 `dotnet build` and our `BuildSolution` (its `[LibraryImport]` partial methods are emitted by the
-ref-pack `LibraryImportGenerator`). `NativeCompilerTests` stays commented pending the entry-point
+ref-pack `LibraryImportGenerator`). `Sharp.Tests` stays commented pending the entry-point
 shim listed under "Next features" below. Microsoft's docs: `Microsoft.CodeAnalysis.CSharp` ships
 everything needed (`CSharpGeneratorDriver`, `ISourceGenerator`/`IIncrementalGenerator`).
 
-**Execution note (Smart App Control)**: `NativeCompilerCLI` sets `<UseAppHost>false</UseAppHost>`, and our
+**Execution note (Smart App Control)**: `sharp` sets `<UseAppHost>false</UseAppHost>`, and our
 executable emission now respects that property too (the CLI's `bin\sharpbin` output is DLL-only). This
 machine's code-integrity policy enforces enterprise signing-level on image loads into **unsigned**
 processes — exactly what `dotnet build` avoids by hosting everything in Microsoft-signed `dotnet`
@@ -295,7 +295,7 @@ not OrchardCore-specific.
 | # | Feature | Why | Unlocks |
 |---|---------|-----|---------|
 | 1 | `InterceptsLocation` checksum parity (CS9137) | csc matches the checksum encoded in interceptor `data` against the file that triggered generation; we report "interceptors feature is not enabled in this namespace" instead | `OrchardCore.Navigation.Core` + ~40 cascades |
-| 2 | **DONE** | Test-project entry-point shim | `OutputType=Exe` with no source `Main` failed CS5001; xunit.v3 injects `XunitAutoGeneratedEntryPoint.cs` via build targets that don't run here, so a dependency-free no-op `Main` is generated for `IsTestProject`/test-runner projects (unit test: `TestEntryPointShimTests`) | `NativeCompilerTests` un-commented, project compiles |
+| 2 | **DONE** | Test-project entry-point shim | `OutputType=Exe` with no source `Main` failed CS5001; xunit.v3 injects `XunitAutoGeneratedEntryPoint.cs` via build targets that don't run here, so a dependency-free no-op `Main` is generated for `IsTestProject`/test-runner projects (unit test: `TestEntryPointShimTests`) | `Sharp.Tests` un-commented, project compiles |
 | 3 | `Microsoft.NET.Sdk.Razor` project support | module csprojs use the Razor SDK; implicit `FrameworkReference` + razor generators are SDK-injected | remaining modules behind the Razor wall |
 | 4 | Package `build`/`buildTransitive`-injected compile references | some packages inject `<Reference>` items via target files we don't run; `xunit.v3` ships zero `lib/` DLLs | packages without `lib` assemblies |
 | 5 | MSBuild condition evaluation (configuration matrix) | Debug/Release-conditional csproj items are currently skipped | correct multi-configuration output |
