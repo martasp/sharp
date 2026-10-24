@@ -48,3 +48,6 @@ tmp/
 
 # Node (tools/md2pdf)
 node_modules/
+
+# Personal roadmap/scratch notes (colon is invalid on Windows checkouts)
+Things to do next:.md
