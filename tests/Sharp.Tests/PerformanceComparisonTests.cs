@@ -245,7 +245,7 @@ public class PerformanceComparisonTests
     private static string SaveBenchmark(string kind, List<string> lines)
     {
         // Written into the repo (benchmarks/) so results can be committed to git:
-        // - a dated file keeps a per-run history
+        // - a dated file keeps a per-run history, rendered by tools/benchmark-graph.mjs
         // - a stable "latest-<kind>.txt" is overwritten every run so `git diff` shows the
         //   change between consecutive benchmark runs.
         // The commit under test goes in the second line: these numbers drift with ambient load as
