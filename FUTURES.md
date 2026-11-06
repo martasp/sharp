@@ -52,7 +52,7 @@ The archived `experiment/pure-cache` prototype produced byte-identical output an
 generator/analyzer/emit work. Decide whether to land it, including eviction, concurrency, and
 cross-checkout keying.
 
-## Distribution
+## Additional release targets
 
-`install.sh` builds and installs the CLI locally. Add a GitHub Releases flow so users can install a
-published, versioned binary without a source checkout.
+Releases currently ship Linux x64 and Windows x64. Add Linux arm64, Windows arm64, and macOS
+(arm64/x64), plus a signed Windows binary and package-manager manifests.

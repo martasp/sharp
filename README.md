@@ -4,10 +4,33 @@ A self-hosting C# compiler built on Roslyn that compiles `.csproj` projects and 
 solutions **without MSBuild**, driven by a CLI whose commands, paths, flags, exit codes and output
 are shaped to match the .NET SDK's `dotnet`.
 
+## Install
+
+Prebuilt NativeAOT binaries are published for Linux x64 and Windows x64.
+
+Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/martasp/sharp/main/install.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/martasp/sharp/main/install.ps1 | iex
+```
+
+Both installers fetch the latest GitHub release, verify the SHA-256 checksum, and put `sharp` on
+your PATH. Pin a release with `SHARP_VERSION` (for example `v0.1.0`) and change the destination with
+`SHARP_INSTALL_DIR`. See [Releases](https://github.com/martasp/sharp/releases).
+
+The Windows binary is currently unsigned, so SmartScreen may show a warning on first launch.
+
 ## Requirements
 
-- .NET SDK 10 (`10.0.400`), which supplies both Roslyn and the framework ref packs
-- Linux or WSL for the AOT publish path; `dotnet` must be on `PATH`
+- **Prebuilt binary:** Linux x64 or Windows x64; the installer needs `curl` or PowerShell.
+- **Building from source:** .NET SDK 10 (`10.0.400`), which supplies both Roslyn and the framework
+  ref packs. The NativeAOT publish path needs the native toolchain on Linux/WSL or Windows.
 
 ## Build
 

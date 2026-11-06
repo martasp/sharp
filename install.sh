@@ -1,71 +1,93 @@
 #!/usr/bin/env bash
-# Build the NativeAOT compiler and put `sharp` on your PATH.
+# Install a prebuilt sharp release for Linux x64.
 #
-#   ./install.sh              publish, then install to ~/.local/bin/sharp
-#   ./install.sh --no-publish reuse the existing publish output (fast re-install)
+#   curl -fsSL https://raw.githubusercontent.com/martasp/sharp/main/install.sh | bash
 #
-# Safe to re-run on any machine: it only writes ~/.local/bin/sharp and one line in your shell rc.
+# Environment:
+#   SHARP_VERSION       release tag to install (default: latest), e.g. v0.1.0
+#   SHARP_INSTALL_DIR   destination directory (default: ~/.local/bin)
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$repo_root"
+repo="martasp/sharp"
+install_dir="${SHARP_INSTALL_DIR:-$HOME/.local/bin}"
 
-project="src/Sharp.Cli/Sharp.Cli.csproj"
-runtime="linux-x64"
-if [[ "$(uname -s)" == "Darwin" ]]; then runtime="osx-arm64"; fi
-
-name="Sharp.Cli"
-[[ "$(uname -s)" == "Darwin" ]] && name="${name}.app/Contents/MacOS/Sharp.Cli"
-published="src/Sharp.Cli/bin/Release/net10.0/$runtime/publish/$name"
-
-skip_publish=0
-[[ "${1:-}" == "--no-publish" ]] && skip_publish=1
-
-if [[ $skip_publish -eq 0 ]]; then
-  echo "==> Publishing NativeAOT compiler (this takes a minute)"
-  dotnet publish "$project" -r "$runtime" -c Release
-fi
-
-if [[ ! -f "$published" ]]; then
-  echo "error: publish output not found at $published" >&2
-  echo "       run without --no-publish to build it first" >&2
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "error: this installer supports Linux only" >&2
   exit 1
 fi
 
-# Prefer a real copy over a symlink: the publish output sits under bin/, which any
-# `dotnet clean` would delete, and a symlink would then dangle.
-install_dir="$HOME/.local/bin"
-mkdir -p "$install_dir"
-target="$install_dir/sharp"
-
-echo "==> Installing to $target"
-cp "$published" "$target"
-chmod +x "$target"
-
-# ~/.local/bin is on PATH on most modern Linux/macOS setups, but not all shells pick that
-# up automatically. Add it once, only if it is genuinely missing.
-rc_file=""
-for candidate in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-  [[ -f "$candidate" ]] && { rc_file="$candidate"; break; }
-done
-
-case ":$PATH:" in
-  *":$install_dir:"*) on_path=1 ;;
-  *) on_path=0 ;;
+case "$(uname -m)" in
+  x86_64|amd64) arch="x64" ;;
+  *)
+    echo "error: sharp is currently published for Linux x64 only (detected $(uname -m))" >&2
+    exit 1
+    ;;
 esac
 
-if [[ $on_path -eq 1 ]]; then
-  echo "==> $install_dir is already on your PATH"
+asset="sharp-linux-${arch}.tar.gz"
+
+if [[ -n "${SHARP_VERSION:-}" ]]; then
+  version="${SHARP_VERSION#v}"
+  base_url="https://github.com/${repo}/releases/download/v${version}"
 else
-  [[ -n "$rc_file" ]] || { echo "warning: no shell rc file found; add $install_dir to PATH manually" >&2; exit 0; }
-  echo "==> Adding $install_dir to PATH in $rc_file"
-  {
-    echo
-    echo "# added by sharp install.sh"
-    echo "export PATH=\"\$PATH:$install_dir\""
-  } >> "$rc_file"
-  echo "    restart your shell, or run: source $rc_file"
+  base_url="https://github.com/${repo}/releases/latest/download"
 fi
+
+for cmd in curl tar sha256sum; do
+  command -v "$cmd" >/dev/null || { echo "error: $cmd is required" >&2; exit 1; }
+done
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+echo "==> Downloading ${asset}"
+curl -fsSL "${base_url}/${asset}" -o "${tmp}/${asset}"
+curl -fsSL "${base_url}/SHA256SUMS" -o "${tmp}/SHA256SUMS"
+
+echo "==> Verifying checksum"
+expected="$(awk -v asset="$asset" '$2 == asset { print $1 }' "${tmp}/SHA256SUMS")"
+if [[ -z "$expected" ]]; then
+  echo "error: ${asset} not found in SHA256SUMS" >&2
+  exit 1
+fi
+actual="$(sha256sum "${tmp}/${asset}" | awk '{ print $1 }')"
+if [[ "$actual" != "$expected" ]]; then
+  echo "error: checksum mismatch for ${asset}" >&2
+  exit 1
+fi
+
+tar -xzf "${tmp}/${asset}" -C "$tmp"
+src="${tmp}/sharp-linux-${arch}/sharp"
+if [[ ! -f "$src" ]]; then
+  echo "error: ${asset} does not contain sharp-linux-${arch}/sharp" >&2
+  exit 1
+fi
+
+mkdir -p "$install_dir"
+echo "==> Installing to ${install_dir}/sharp"
+cp "$src" "${install_dir}/sharp"
+chmod 0755 "${install_dir}/sharp"
+
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *)
+    rc_file=""
+    for candidate in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+      [[ -f "$candidate" ]] && { rc_file="$candidate"; break; }
+    done
+
+    if [[ -n "$rc_file" ]] && ! grep -Fq "export PATH=\"\$PATH:$install_dir\"" "$rc_file"; then
+      {
+        echo
+        echo "# added by sharp install.sh"
+        echo "export PATH=\"\$PATH:$install_dir\""
+      } >> "$rc_file"
+      echo "==> Added $install_dir to PATH in $rc_file; restart your shell or source it."
+    elif [[ -z "$rc_file" ]]; then
+      echo "warning: $install_dir is not on PATH; add it manually." >&2
+    fi
+    ;;
+esac
 
 echo
 echo "==> Done. Try:"
