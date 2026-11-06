@@ -20,9 +20,13 @@ Windows (PowerShell):
 irm https://raw.githubusercontent.com/martasp/sharp/main/install.ps1 | iex
 ```
 
-Both installers fetch the latest GitHub release, verify the SHA-256 checksum, and put `sharp` on
-your PATH. Pin a release with `SHARP_VERSION` (for example `v0.1.0`) and change the destination with
-`SHARP_INSTALL_DIR`. See [Releases](https://github.com/martasp/sharp/releases).
+Both installers fetch the latest stable GitHub release, verify the SHA-256 checksum, and put `sharp`
+on your PATH. Pin a release with `SHARP_VERSION` (for example `v0.1.0`) and change the destination
+with `SHARP_INSTALL_DIR`.
+
+Stable releases come from the `VERSION` file when a PR merges to `main`. Pull requests publish
+prerelease previews tagged `v<VERSION>-preview.<PR>`; install one with
+`SHARP_VERSION=v0.1.0-preview.12`. See [Releases](https://github.com/martasp/sharp/releases).
 
 The Windows binary is currently unsigned, so SmartScreen may show a warning on first launch.
 
