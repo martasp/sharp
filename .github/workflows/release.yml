@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp into the binaries (e.g. v0.1.0). Manual runs build artifacts only."
+        required: false
+        default: "v0.0.0-dev"
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: "src/Sharp.Cli/Sharp.Cli.csproj"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="$INPUT_VERSION"
+          if [[ -z "$tag" && "$EVENT_NAME" == "push" ]]; then
+            tag="$REF_NAME"
+          fi
+          if [[ -z "$tag" ]]; then
+            tag="v0.0.0-dev"
+          fi
+          case "$tag" in
+            v*) ;;
+            *) tag="v$tag" ;;
+          esac
+          version="${tag#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid version '$version' (expected e.g. 0.1.0)"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  linux-x64:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish
+        run: dotnet publish "$PROJECT" -r linux-x64 -c Release -p:Version="${{ needs.version.outputs.version }}" -o dist
+      - name: Package
+        run: |
+          mkdir -p package/sharp-linux-x64
+          cp dist/Sharp.Cli package/sharp-linux-x64/sharp
+          chmod 0755 package/sharp-linux-x64/sharp
+          cp LICENSE README.md NOTICE.md package/sharp-linux-x64/
+          tar -C package -czf sharp-linux-x64.tar.gz sharp-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sharp-linux-x64
+          path: sharp-linux-x64.tar.gz
+          if-no-files-found: error
+
+  windows-x64:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Publish
+        shell: pwsh
+        run: dotnet publish $env:PROJECT -r win-x64 -c Release -p:Version=${{ needs.version.outputs.version }} -o dist
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package/sharp-windows-x64 | Out-Null
+          Copy-Item dist/Sharp.Cli.exe package/sharp-windows-x64/sharp.exe
+          Copy-Item LICENSE, README.md, NOTICE.md package/sharp-windows-x64/
+          Compress-Archive -Path package/sharp-windows-x64 -DestinationPath sharp-windows-x64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sharp-windows-x64
+          path: sharp-windows-x64.zip
+          if-no-files-found: error
+
+  release:
+    needs: [ version, linux-x64, windows-x64 ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum sharp-linux-x64.tar.gz sharp-windows-x64.zip > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            args=(--title "$TAG" --generate-notes)
+            case "$TAG" in
+              *-*) args+=(--prerelease) ;;
+            esac
+            gh release create "$TAG" "${args[@]}" \
+              dist/sharp-linux-x64.tar.gz \
+              dist/sharp-windows-x64.zip \
+              dist/SHA256SUMS
+          fi

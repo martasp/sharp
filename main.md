@@ -105,6 +105,8 @@ sharp help       # full dotnet help text
 - Recursive build-in-progress guard that turns cyclic project-reference graphs into a clear error instead of infinite recursion
 
 ### Scripts
+- `install.sh` / `install.ps1` – install a prebuilt release (Linux x64 / Windows x64)
+- `.github/workflows/release.yml` – publish Linux x64 and Windows x64 assets on `v*` tags
 - `publish.bat` – `dotnet publish` win-x64 Release
 - `publish.sh`  – `dotnet publish` linux-x64 Release (needs Linux/WSL for the AOT native toolchain)
 
