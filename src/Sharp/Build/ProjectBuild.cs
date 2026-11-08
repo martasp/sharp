@@ -9,21 +9,23 @@ namespace Sharp;
 public static class ProjectBuild
 {
     [HasSideEffects]
-    public static BuildResult Build(string projectPath)
+    public static BuildResult Build(string projectPath, BuildOptions? options = null)
     {
+        options ??= BuildOptions.Default;
         var fullPath = Path.GetFullPath(projectPath);
+        var buildKey = fullPath + "|" + (options.Configuration ?? "");
 
         // Cycle guard. A project that reaches itself through its own (transitive) references must be
         // reported, not built forever. SolutionBuild schedules a complete, acyclic wave plan first, so
         // within a solution build this only ever trips on a genuine cycle; a single-project build
         // resolves its references on one thread, so re-entry here is always that same cycle.
-        if (!BuildsInProgress.TryAdd(fullPath, 0))
+        if (!BuildsInProgress.TryAdd(buildKey, 0))
             throw new InvalidOperationException(
                 $"Circular project reference detected: '{projectPath}' is already being built.");
 
         try
         {
-            return Core(projectPath);
+            return Core(projectPath, options);
         }
         catch (Exception ex)
         {
@@ -42,7 +44,7 @@ public static class ProjectBuild
         }
         finally
         {
-            BuildsInProgress.TryRemove(fullPath, out _);
+            BuildsInProgress.TryRemove(buildKey, out _);
         }
     }
 
@@ -50,7 +52,7 @@ public static class ProjectBuild
         new(StringComparer.OrdinalIgnoreCase);
 
     [HasSideEffects]
-    private static BuildResult Core(string projectPath)
+    private static BuildResult Core(string projectPath, BuildOptions options)
     {
         _ = Directory.Exists(projectPath)
             ? ""
@@ -59,7 +61,7 @@ public static class ProjectBuild
         var timer = Stopwatch.StartNew();
         var outputs = new List<string>();
 
-        var project = ProjectLoader.Load(projectPath);
+        var project = ProjectLoader.Load(projectPath, options);
 
         var dotNetAssemblyRefPath = AsemblyExtensions.ResolveSdkRefLocation;
 
@@ -144,16 +146,6 @@ public static class ProjectBuild
         if (nativePaths.Count > 0)
             WriteFiles(project.SharpBinFolderPath, nativePaths);
 
-        // Self-hosting: when the project being compiled consumes sharp itself (Sharp.Cli via
-        // its ProjectReference), the emitted assembly needs the embedded SDK payload. MSBuild embeds
-        // it when it publishes sharp, but there is no MSBuild in this loop, so sharp hands its own
-        // payload to the compiler it is producing - the same mechanism the generator/analyzer
-        // assemblies use via HintPath copy-local.
-        if (mergedDefaultReferences.Any(IsCompilerReference))
-        {
-            EmbeddedSdkRefs.WritePayloadTo(project.SharpBinFolderPath);
-        }
-
         if (produceDll.success)
             outputs.Add($"Compiled {project.ProjectName} successfully");
 
@@ -166,17 +158,6 @@ public static class ProjectBuild
             project,
             embeddedTexts,
             analyzerWarnings);
-    }
-
-    // True when a merged reference is sharp's own compiler library, i.e. the project being built
-    // consumes the compiler and therefore needs the embedded SDK payload propagated to its output.
-    [Pure]
-    private static bool IsCompilerReference(MetadataReference reference)
-    {
-        var display = reference.Display;
-        return !string.IsNullOrEmpty(display)
-               && Path.GetFileNameWithoutExtension(display)
-                   .Equals("Sharp", StringComparison.OrdinalIgnoreCase);
     }
 
     [HasSideEffects]

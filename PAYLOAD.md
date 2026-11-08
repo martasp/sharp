@@ -133,7 +133,7 @@ The runtime extracts it once into a keyed cache.
 |---|---|---|
 | `Sharp.csproj` | One `ProjectReference`; no Exec/EmbeddedResource | Carries the Exec + EmbeddedResource + stager args |
 | Resource lookup | Lives in one place (`Payloads`), cannot be re-implemented elsewhere | Spread through the compiler assembly |
-| Downside | An extra project and a **sidecar-copy path that must track where the payload is hosted** (this broke self-hosting once and was fixed in `EmbeddedSdkRefs.FindSidecarPayloadPath`) | — |
+| Downside | One extra project; when sharp compiles itself, `Output.WriteDll` must embed the payload resource into that project's assembly (it does) | — |
 
 #### G3. Resource name: versioned vs not — **chose versioned, discovered**
 
@@ -151,10 +151,9 @@ with "resource is missing".
 
 The fix is **not** to drop the version - it is to drop the *second copy*. `Payloads` looks up the one
 resource matching `embedded-refs.*.zip` in its own assembly, so whatever version the building SDK
-embedded is, by construction, the version the runtime asks for. A JIT-produced compiler (no embedded
-resource; no MSBuild in the loop) finds the same versioned payload as a `embedded-refs.*.zip` sidecar
-file beside its assembly. The production sidecar keeps the version; only the hand-written constant is
-gone.
+embedded is, by construction, the version the runtime asks for. When sharp compiles itself there is no
+MSBuild to embed the resource, so `Output.WriteDll` embeds the same versioned payload into the
+`Dotnet10Dependencies` assembly it emits. Only the hand-written constant is gone.
 
 #### G4. Runtime lookup: `typeof` vs `Assembly.Load` — **chose `typeof`**
 
@@ -184,6 +183,80 @@ which NuGet refuses as a `PackageReference` with `NU1213` — and DependencyMode
 the SDK shape. Only the reported SDK version is still taken from the building SDK, because
 `sharp --version` must match that machine's `dotnet` (see `UPGRADING.md`).
 
+## How the payload is embedded and read (JIT vs NativeAOT)
+
+The payload is not a file next to the compiler. It is a manifest resource inside
+`Dotnet10Dependencies.dll`, and both build paths and both runtime modes go through the same
+`Payloads.LoadZip()` API.
+
+### Production path 1: MSBuild (`dotnet build` / `dotnet publish`)
+
+1. The `StageEmbeddedRefsPayload` target in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
+   runs `tools/PayloadStager`, which writes `obj/payload/embedded-refs.<refpack>.zip`.
+2. The same target adds
+   `<EmbeddedResource Include="..." LogicalName="embedded-refs.<refpack>.zip" />`.
+3. Roslyn writes the zip into the PE manifest-resource table of `Dotnet10Dependencies.dll`.
+
+This is the path used by a normal `dotnet build`, by the release AOT seed, and by the test host.
+
+### Production path 2: sharp compiling itself
+
+Sharp does not execute MSBuild targets, so MSBuild cannot embed the resource when sharp rebuilds
+`Dotnet10Dependencies.csproj`. `src/Sharp/Emit/Output.cs` performs the equivalent step:
+
+1. It checks whether the project being emitted is the payload owner:
+   `AssemblyName == typeof(Payloads).Assembly.GetName().Name`.
+2. If so, it adds a `ResourceDescription` to the emit whose name is `Payloads.ZipResourceName` and
+   whose stream factory is `Payloads.LoadZip()`.
+3. `CSharpCompilation.Emit(..., manifestResources: ...)` writes that resource into the new
+   `Dotnet10Dependencies.dll`.
+
+The stream factory is evaluated during emit, so the running compiler copies its own already-embedded
+payload into the assembly it is producing. The new DLL grows by the size of the zip (about 8.9 MB for
+the current payload) and carries the same manifest resource as an MSBuild-built one.
+
+This is why a self-built compiler is self-sufficient: neither the produced
+`Dotnet10Dependencies.dll` nor the final AOT image needs a sibling `embedded-refs.*.zip` file.
+
+### Consumption path 1: JIT
+
+`Payloads.LoadZip()` calls
+`typeof(Payloads).Assembly.GetManifestResourceStream(Payloads.ZipResourceName)`. The JIT runtime reads
+the resource directly from the DLL's PE manifest. The name is discovered with
+`GetManifestResourceNames()` (the single `embedded-refs.*` entry), so the producer and consumer cannot
+disagree about the version. `EmbeddedSdkRefs.ReadEmbeddedPayload` copies the stream into memory, and
+`EnsureExtracted` extracts it once into the content-addressed cache.
+
+### Consumption path 2: NativeAOT
+
+`NativeAotPublisher` passes the self-built `Dotnet10Dependencies.dll` to `ilc` as a normal reference
+alongside the other application DLLs. ILC reads the manifest resources from that DLL and writes them
+into the native image. Two things make the lookup survive:
+
+- `typeof(Payloads)` roots `Dotnet10Dependencies`; `Assembly.Load("Dotnet10Dependencies")` would be
+  invisible to the trimmer, and the resource would be removed with the unreferenced assembly.
+- `Payloads.LoadZip()` is a direct call, so the resource read is reachable from `Main`.
+
+`Assembly.Location` is empty in a NativeAOT image, but that no longer matters: no code searches the
+filesystem for the payload. `GetManifestResourceStream` is served from the native image and feeds the
+same extraction cache as JIT.
+
+There is no sidecar in either production path or either consumption path. The build output contains no
+payload zip; the only payload is the manifest resource.
+
+### Failure mode to avoid
+
+An old AOT seed built before the self-host embedding path existed will compile `Dotnet10Dependencies`
+without the resource. The next generation then fails at startup with:
+
+```
+No 'embedded-refs.*.zip' payload resource is embedded in Dotnet10Dependencies.
+```
+
+After changing `Output.WriteDll` or the payload owner, rebuild the seed
+(`dotnet publish src/Sharp.Cli/Sharp.Cli.csproj -c Release -r linux-x64`) before running
+`BootstrapPipelineTests`.
+
 ## Where it lives
 
 | File | Role |
@@ -191,7 +264,8 @@ the SDK shape. Only the reported SDK version is still taken from the building SD
 | `tools/PayloadStager/Program.cs` | Builds the SDK-shaped tree, writes version stamps, zips it |
 | `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | Runs the stager, embeds the zip |
 | `src/Dotnet10Dependencies/Payloads.cs` | Resource-name discovery; the AOT-safe resource API |
-| `src/Sharp/EmbeddedSdkRefs.cs` | Extracts to the cache; version + sidecar resolution |
+| `src/Sharp/EmbeddedSdkRefs.cs` | Extracts to the cache; version resolution |
+| `src/Sharp/Emit/Output.cs` | Embeds the payload when sharp compiles its payload-owning project |
 
 ## Invariants and traps
 
@@ -210,9 +284,10 @@ the SDK shape. Only the reported SDK version is still taken from the building SD
    broke CI (G3).
 5. **The compiler TFM and the staged ref pack must move together.** A mismatch is invisible to
    `dotnet build` and only fails at runtime. See `UPGRADING.md`.
-6. **The sidecar fallback copies the payload next to the assembly that hosts it**, which is why the
-   host assembly matters (G2). A JIT-produced compiler finds its payload as a `embedded-refs.*.zip`
-   file beside its assembly; the glob, not the name, is what makes that work.
+6. **Self-hosting embeds the payload, never a sidecar.** When sharp compiles `Dotnet10Dependencies`
+   itself, `Output.WriteDll` adds the payload as a manifest resource using the name discovered from
+   the running compiler. The host assembly matters (G2): the resource must live in the assembly that
+   `Payloads` resolves through `typeof`.
 
 > Prototype figures above (Base64 source size, chunk counts, binary sizes) were measured in throwaway
 > experiments, not reproduced in this repository; they are directional. The design itself is enforced

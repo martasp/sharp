@@ -110,6 +110,9 @@ public class CliCommandParityTests
         ours.Output.Split('\n')
             .Single(line => line.Contains("Restore dependencies specified in a .NET project."))
             .ShouldEndWith("[implemented]");
+        ours.Output.Split('\n')
+            .Single(line => line.Contains("Publish a .NET project for deployment."))
+            .ShouldEndWith("[implemented]");
 
         await Verify(CliComparisonHelper.Normalize(ours.Output)).UseTextForParameters("help");
     }

@@ -88,7 +88,25 @@ public static class PackageExtractor
 
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             entry.ExtractToFile(target, overwrite: true);
+            PreserveExecutableBit(entry.FullName, target);
         }
+    }
+
+    // Zip entry attributes are not surfaced by ZipArchive, and NuGet's Linux tools (notably the
+    // NativeAOT compiler at tools/ilc) must stay executable after extraction.
+    private static void PreserveExecutableBit(string entryName, string target)
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        var normalized = entryName.Replace('\\', '/');
+        var executable = normalized.EndsWith(".sh", StringComparison.OrdinalIgnoreCase)
+            || (normalized.Contains("/tools/", StringComparison.OrdinalIgnoreCase)
+                && !Path.HasExtension(normalized));
+        if (!executable) return;
+
+        var mode = File.GetUnixFileMode(target);
+        File.SetUnixFileMode(target,
+            mode | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
     }
 
     // Guards against "../" traversal in an entry name. The full path is compared against the

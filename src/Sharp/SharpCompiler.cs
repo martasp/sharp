@@ -11,14 +11,18 @@ namespace Sharp;
 //   ProjectGraph, and the BuildProps/analyzer pipeline.
 public static class SharpCompiler
 {
-    public static BuildResult Build(string projectPath)
-        => ProjectBuild.Build(projectPath);
+    public static BuildResult Build(string projectPath, BuildOptions? options = null)
+        => ProjectBuild.Build(projectPath, options);
 
     public static BuildSolutionResult BuildSolution(string solutionPath)
         => SolutionBuild.Build(solutionPath);
 
     public static (bool success, string errors) Run(string projectPath)
         => Runtime.Run(projectPath);
+
+    [HasSideEffects]
+    public static PublishResult Publish(PublishOptions options)
+        => Publisher.Publish(options);
 
     // Library command surface for restore/clean (mirrors CLI commands so the core is usable as a
     // library without coupling to the CLI front-end).

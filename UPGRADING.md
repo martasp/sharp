@@ -22,12 +22,12 @@ compiler still on `net10.0` (or vice versa) resolves to a folder that does not e
 
 The resource name is `embedded-refs.<refpack>.zip` and carries the pinned ref pack version. Nothing has
 to keep it in step with the runtime: `Payloads.ZipResourceName` *discovers* the matching resource in
-its own assembly instead of comparing against a constant, and a JIT-produced compiler (no embedded
-resource) finds the same versioned payload as a `embedded-refs.*.zip` sidecar file. A first version of
-the design hardcoded the name and derived the embedded name from whatever SDK happened to build it, so
-any machine with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`) embedded the
-resource under its own version while the constant asked for the write-in one — the build stayed green
-and the compiler failed its run-time lookup.
+its own assembly instead of comparing against a constant, and a compiler sharp produces for itself
+embeds the same versioned payload into `Dotnet10Dependencies` through `Output.WriteDll`. A first
+version of the design hardcoded the name and derived the embedded name from whatever SDK happened to
+build it, so any machine with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`)
+embedded the resource under its own version while the constant asked for the write-in one — the build
+stayed green and the compiler failed its run-time lookup.
 
 ## Checklist
 
