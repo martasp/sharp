@@ -1,3 +1,4 @@
+using Dotnet10Dependencies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -34,6 +35,18 @@ public static class Output
                     () => File.OpenRead(resource.FilePath),
                     isPublic: true))
                 .ToList();
+
+            // Self-hosting: the payload-owning assembly gets the same embedded resource MSBuild would
+            // give it, so a compiler sharp produces carries its SDK payload inside the assembly too.
+            var payloadAssemblyName = typeof(Payloads).Assembly.GetName().Name;
+            var projectAssemblyName = project.GetProperty("AssemblyName") ?? project.ProjectName;
+            if (string.Equals(projectAssemblyName, payloadAssemblyName, StringComparison.Ordinal))
+            {
+                manifestResources.Add(new ResourceDescription(
+                    Payloads.ZipResourceName,
+                    () => Payloads.LoadZip(),
+                    isPublic: true));
+            }
 
             (bool success, string errors) result;
             using (var dllStream = File.Create(project.DllPathName))

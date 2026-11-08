@@ -136,7 +136,7 @@ public static class SourceGeneratorRunner
         {
             try
             {
-                var dll = ResolveAnalyzerProjectDll(csproj);
+                var dll = ResolveAnalyzerProjectDll(csproj, project.Options);
                 dlls.Add(dll);
             }
             catch (Exception ex)
@@ -158,13 +158,13 @@ public static class SourceGeneratorRunner
     // build the output is present and we just locate it; only a standalone build reaches the missing
     // case. The path comes from Project.GetOutputDllPath, which resolves TargetFramework the same way
     // compilation does, so the probe cannot drift from the emitted path.
-    private static string ResolveAnalyzerProjectDll(string csprojPath)
+    private static string ResolveAnalyzerProjectDll(string csprojPath, BuildOptions options)
     {
         var projectDir = Path.GetDirectoryName(csprojPath) ?? "";
-        var dll = Project.GetOutputDllPath(projectDir, csprojPath);
+        var dll = Project.GetOutputDllPath(projectDir, csprojPath, options.Configuration);
         if (File.Exists(dll)) return dll;
 
-        var result = SharpCompiler.Build(projectDir);
+        var result = SharpCompiler.Build(projectDir, options);
         if (!result.Success)
             throw new Exception($"Cant build analyzer project '{Path.GetFileName(csprojPath)}': {result.Errors}");
         return result.Project?.DllPathName

@@ -19,6 +19,12 @@ public sealed record RestoreProjectResult(
     int PackagesDownloaded,
     TimeSpan Duration);
 
+public sealed record PackageEnsureResult(
+    bool Success,
+    string GlobalPackagesFolder,
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> Warnings);
+
 // Walks the package graph for a project (or solution) and materialises it into the global
 // packages folder so the build-time lookup in NuGetPackage.FindPackagePath finds real files
 // instead of silently skipping.
@@ -87,6 +93,63 @@ public static class PackageRestorer
         {
             errors.Add($"Restore failed: {exception.Message}");
             return new RestoreResult(false, errors, warnings, Array.Empty<string>(), downloaded, cached, timer.Elapsed);
+        }
+    }
+
+    // Ensures an explicit set of packages (and their dependencies) is available without going
+    // through a project's PackageReference list. Used by the publish pipeline to acquire the
+    // NativeAOT compiler/runtime packs, which are implementation details rather than declared
+    // dependencies. Failures are returned instead of thrown so callers can render normal diagnostics.
+    public static async Task<PackageEnsureResult> EnsurePackagesAsync(
+        string projectDirectory,
+        IReadOnlyList<(string Id, string Version)> packages,
+        CancellationToken cancellationToken = default)
+    {
+        var errors = new List<string>();
+        var warnings = new List<string>();
+        var downloaded = new List<string>();
+
+        try
+        {
+            var config = NuGetConfig.Load(projectDirectory);
+            var globalPackagesFolder = NuGetConfig.ResolveGlobalPackagesFolder(
+                config.GlobalPackagesFolder, projectDirectory);
+
+            var state = new RestoreState(config, globalPackagesFolder, projectDirectory,
+                downloaded, warnings, cancellationToken);
+
+            CollectPackageReferences(projectDirectory, out var targetFramework);
+            state.TargetFramework = targetFramework;
+
+            foreach (var (id, version) in packages)
+            {
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(version))
+                {
+                    errors.Add("A package id and exact version are required.");
+                    continue;
+                }
+
+                await EnsurePackageAsync(id, version, state).ConfigureAwait(false);
+            }
+
+            errors.AddRange(state.GraphErrors);
+
+            foreach (var (id, version) in packages)
+            {
+                if (!PackageExtractor.IsExtracted(globalPackagesFolder, id, version))
+                    errors.Add($"Package '{id}' version '{version}' was not found in '{globalPackagesFolder}'.");
+            }
+
+            return new PackageEnsureResult(errors.Count == 0, globalPackagesFolder, errors, warnings);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            errors.Add($"Restore failed: {exception.Message}");
+            return new PackageEnsureResult(false, "", errors, warnings);
         }
     }
 

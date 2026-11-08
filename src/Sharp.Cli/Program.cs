@@ -26,7 +26,7 @@ var SdkCommands = new (string Name, string Description, bool Implemented)[]
     ("nuget", "Provides additional NuGet commands.", false),
     ("pack", "Create a NuGet package.", false),
     ("package", "Search for, add, remove, or list PackageReferences for a .NET project.", false),
-    ("publish", "Publish a .NET project for deployment.", false),
+    ("publish", "Publish a .NET project for deployment.", true),
     ("reference", "Add, remove, or list ProjectReferences for a .NET project.", false),
     ("restore", "Restore dependencies specified in a .NET project.", true),
     ("run", "Build and run a .NET project output.", true),
@@ -101,7 +101,7 @@ string HelpText()
 }
 
 var first = args.Length == 0 ? "help" : args[0];
-bool explicitCommand = first is "build" or "run" or "restore" or "clean" or "help" or "version"
+bool explicitCommand = first is "build" or "run" or "restore" or "clean" or "publish" or "help" or "version"
     or "--version" or "-h" or "--help";
 if (!explicitCommand)
 {
@@ -126,6 +126,8 @@ switch (first)
         return await RestoreCommandAsync(args.Skip(1).ToArray());
     case "clean":
         return CleanCommand(args.Skip(1).ToArray());
+    case "publish":
+        return PublishCommand(args.Skip(1).ToArray());
     default:
         throw new InvalidOperationException($"unreachable command {first}");
 }
@@ -240,6 +242,147 @@ int ErrorLineCount(string errors) => SplitLines(errors).Length;
 static string[] SplitLines(string text) => text
     .Replace("\r\n", "\n")
     .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+
+int PublishCommand(string[] args)
+{
+    string? pathArg = null;
+    var configuration = "Release";
+    string? runtimeIdentifier = null;
+    string? outputDirectory = null;
+    var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (TryOptionValue(arg, "-c", "--configuration", args, ref i, out var configurationValue))
+        {
+            configuration = configurationValue;
+            continue;
+        }
+        if (TryOptionValue(arg, "-r", "--runtime", args, ref i, out var ridValue))
+        {
+            runtimeIdentifier = ridValue;
+            continue;
+        }
+        if (TryOptionValue(arg, "-o", "--output", args, ref i, out var outputValue))
+        {
+            outputDirectory = outputValue;
+            continue;
+        }
+        if (TryProperty(arg, args, ref i, out var propertyName, out var propertyValue))
+        {
+            if (propertyName.Equals("Configuration", StringComparison.OrdinalIgnoreCase))
+                configuration = propertyValue;
+            else if (propertyName.Equals("RuntimeIdentifier", StringComparison.OrdinalIgnoreCase))
+                runtimeIdentifier = propertyValue;
+            else if (propertyName.Equals("PublishAot", StringComparison.OrdinalIgnoreCase))
+                properties[propertyName] = propertyValue;
+            else
+            {
+                WriteLine($"The MSBuild property '{propertyName}' is not supported by sharp publish yet.");
+                WriteLine("Run 'dotnet publish --help' for more information.");
+                return 1;
+            }
+            continue;
+        }
+        if (arg is "--no-restore" or "--no-build" or "--self-contained" or "--no-self-contained"
+            or "-f" or "--framework" or "-v" or "--verbosity" or "--nologo" or "--artifacts-path")
+        {
+            WriteLine($"The option '{arg}' is not supported by sharp publish yet.");
+            WriteLine("Run 'dotnet publish --help' for more information.");
+            return 1;
+        }
+        if (!arg.StartsWith("-") && pathArg is null)
+        {
+            pathArg = arg;
+            continue;
+        }
+
+        WriteLine($"Unknown option: {arg}");
+        WriteLine("Run 'dotnet publish --help' for more information.");
+        return 1;
+    }
+
+    var target = ResolveTargetOrFail(pathArg, checkRunnable: false);
+    if (target is null) return 1;
+
+    if (target.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+        target.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
+    {
+        WriteLine("Publishing a solution is not supported by sharp publish yet.");
+        return 1;
+    }
+
+    var result = SharpCompiler.Publish(new PublishOptions(
+        target, configuration, runtimeIdentifier, outputDirectory, properties));
+
+    if (result.Success)
+    {
+        var relativePath = result.PublishDirectory is null
+            ? ""
+            : Path.GetRelativePath(Directory.GetCurrentDirectory(), result.PublishDirectory);
+        WriteLine($"  {result.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target)} -> {relativePath}");
+        WriteLine();
+        WriteLine($"Publish succeeded in {result.Duration.TotalSeconds:0.0}s");
+        return 0;
+    }
+
+    var errors = SplitLines(result.Errors);
+    var name = result.Project?.ProjectName ?? Path.GetFileNameWithoutExtension(target);
+    WriteLine($"  {name} failed with {errors.Length} error(s) ({result.Duration.TotalSeconds:0.0}s)");
+    foreach (var line in errors) WriteLine($"    {line}");
+    WriteLine();
+    WriteLine($"Publish failed with {errors.Length} error(s) in {result.Duration.TotalSeconds:0.0}s");
+    return 1;
+}
+
+static bool TryOptionValue(string arg, string shortName, string longName, string[] args, ref int index, out string value)
+{
+    value = "";
+    if (arg == shortName || arg == longName)
+    {
+        if (index + 1 >= args.Length) return false;
+        value = args[++index];
+        return true;
+    }
+    if (arg.StartsWith(shortName + ":", StringComparison.Ordinal))
+    {
+        value = arg[(shortName.Length + 1)..];
+        return true;
+    }
+    if (arg.StartsWith(longName + "=", StringComparison.Ordinal))
+    {
+        value = arg[(longName.Length + 1)..];
+        return true;
+    }
+    return false;
+}
+
+static bool TryProperty(string arg, string[] args, ref int index, out string name, out string value)
+{
+    name = "";
+    value = "";
+    string? pair = null;
+    if (arg is "-p" or "--property")
+    {
+        if (index + 1 >= args.Length) return false;
+        pair = args[++index];
+    }
+    else if (arg.StartsWith("-p:", StringComparison.Ordinal))
+        pair = arg[3..];
+    else if (arg.StartsWith("--property:", StringComparison.Ordinal))
+        pair = arg["--property:".Length..];
+    else if (arg.StartsWith("--property=", StringComparison.Ordinal))
+        pair = arg["--property=".Length..];
+
+    if (pair is null) return false;
+    var separator = pair.IndexOf('=');
+    if (separator <= 0) return false;
+    name = pair[..separator];
+    value = pair[(separator + 1)..];
+    return true;
+}
 
 int RunCommand(string[] args)
 {

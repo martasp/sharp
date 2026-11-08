@@ -20,8 +20,11 @@ public class Project : IProject
     //public ProjectFile Appsettings { get; set; }
     public List<ProjectFile> CSFiles { get; set; }
     public string ProjectRootPath { get; set; }
+    public BuildOptions Options { get; init; } = BuildOptions.Default;
+    public string Configuration { get; set; } = "Debug";
+    public string? RuntimeIdentifierOverride { get; init; }
     public string PDBPathName => Path.Combine(SharpBinFolderPath, PDBName);
-    public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath, TargetFramework);
+    public string SharpBinFolderPath => GetSharpBinDirectory(ProjectRootPath, TargetFramework, Configuration);
     private XML.Project? _xmlProject;
     private XML.Project XMLProject => _xmlProject ??= DeserializeObject(CsProjFile.FilePath); //Dont leak xml structure
 
@@ -36,7 +39,48 @@ public class Project : IProject
     public string? TargetFramework => XMLProject.PropertyGroup?.FirstOrDefault()?.TargetFramework
                                       ?? BuildProps.TargetFramework;
 
-    public string? RuntimeIdentifier => XMLProject.PropertyGroup?.FirstOrDefault()?.RuntimeIdentifier;
+    public string? RuntimeIdentifier =>
+        RuntimeIdentifierOverride ?? XMLProject.PropertyGroup?.FirstOrDefault()?.RuntimeIdentifier;
+
+    // Property values used by the publish pipeline. CLI -p overrides win, then the project body,
+    // then the evaluated Directory.Build.props overlay for the few properties it models.
+    public string? GetProperty(string name)
+    {
+        var overridden = Options.GetProperty(name);
+        if (overridden is not null) return overridden;
+
+        var group = XMLProject.PropertyGroup?.FirstOrDefault();
+        return name switch
+        {
+            "PublishAot" => group?.PublishAot ?? (BuildProps.PublishAot ? "true" : null),
+            "PublishTrimmed" => group?.PublishTrimmed,
+            "SelfContained" => group?.SelfContained,
+            "DebugType" => group?.DebugType,
+            "DebugSymbols" => group?.DebugSymbols,
+            "StripSymbols" => group?.StripSymbols,
+            "OptimizationPreference" => group?.OptimizationPreference,
+            "ServerGarbageCollection" => group?.ServerGarbageCollection,
+            "EventSourceSupport" => group?.EventSourceSupport,
+            "InvariantGlobalization" => group?.InvariantGlobalization,
+            "UseSystemResourceKeys" => group?.UseSystemResourceKeys,
+            "UseSizeOptimizedLinq" => group?.UseSizeOptimizedLinq,
+            "UseSystemZlib" => group?.UseSystemZlib,
+            "UseSystemBrotli" => group?.UseSystemBrotli,
+            "StaticICULinking" => group?.StaticICULinking,
+            "StaticOpenSslLinking" => group?.StaticOpenSslLinking,
+            "UseSystemLibraries" => group?.UseSystemLibraries,
+            "NativeDebugSymbols" => group?.NativeDebugSymbols,
+            "StackTraceSupport" => group?.StackTraceSupport,
+            "DebuggerSupport" => group?.DebuggerSupport,
+            "ETWEventSourceSupport" => group?.ETWEventSourceSupport,
+            _ => null,
+        };
+    }
+
+    public bool GetBoolProperty(string name) =>
+        GetProperty(name)?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+
+    public bool PublishAot => GetBoolProperty("PublishAot");
 
     public bool AllowUnsafeBlocks =>
         (XMLProject.PropertyGroup?.FirstOrDefault()?.AllowUnsafeBlocks?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false)
@@ -144,6 +188,38 @@ public class Project : IProject
 
     public List<AssemblyAttributeItem> AssemblyAttributes =>
         XMLProject.ItemGroup.SelectMany(item => item.AssemblyAttributes).ToList();
+
+    public List<string> IlcArgs =>
+        XMLProject.ItemGroup.SelectMany(item => item.IlcArgs)
+            .Select(item => ExpandPublishItem(item.Include))
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToList();
+
+    public List<string> TrimmerRootDescriptors =>
+        XMLProject.ItemGroup.SelectMany(item => item.TrimmerRootDescriptors)
+            .Select(item => ExpandPublishItem(item.Include))
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToList();
+
+    // IlcArg/TrimmerRootDescriptor values are evaluated by MSBuild before they reach the compiler,
+    // so expand the property tokens projects commonly use for paths (the CLI's own csproj uses
+    // $(MSBuildProjectDirectory) for its analyzer-resource descriptor). On Unix, normalize the
+    // Windows separators that are common in csproj path literals.
+    private string ExpandPublishItem(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+
+        var expanded = value
+            .Replace("$(MSBuildProjectDirectory)", ProjectRootPath, StringComparison.OrdinalIgnoreCase)
+            .Replace("$(ProjectDir)", ProjectRootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            .Replace("$(Configuration)", Configuration, StringComparison.OrdinalIgnoreCase)
+            .Replace("$(TargetFramework)", TargetFramework ?? "", StringComparison.OrdinalIgnoreCase)
+            .Replace("$(RuntimeIdentifier)", RuntimeIdentifier ?? "", StringComparison.OrdinalIgnoreCase);
+
+        return OperatingSystem.IsWindows()
+            ? expanded
+            : expanded.Replace('\\', Path.DirectorySeparatorChar);
+    }
 
     public IEnumerable<string> InternalsVisibleToNames =>
         XMLProject.ItemGroup
@@ -261,7 +337,7 @@ public class Project : IProject
         return path;
     }
 
-    public static string GetSharpBinDirectory(string projectRootPath, string? targetFramework)
+    public static string GetSharpBinDirectory(string projectRootPath, string? targetFramework, string? configuration = null)
     {
         // SDK-mirroring output layout ("myc\Debug\<TFM>"). Root stays "myc" - the single tiny
         // difference from real `dotnet build` output ("bin") so this compiler's output never
@@ -269,7 +345,7 @@ public class Project : IProject
         // the DLLs match. `SHARP_OUTPUT_ROOT` overrides the root (e.g. "bin") for exact
         // path-parity runs.
         var root = Environment.GetEnvironmentVariable("SHARP_OUTPUT_ROOT") ?? "myc";
-        var path = Path.Combine(projectRootPath, root, "Debug", targetFramework ?? DefaultTargetFramework.Value);
+        var path = Path.Combine(projectRootPath, root, configuration ?? "Debug", targetFramework ?? DefaultTargetFramework.Value);
         CreateFolderIfNotExists(path);
         return path;
     }
@@ -278,14 +354,14 @@ public class Project : IProject
     // compilation does (csproj <TargetFramework>, then Directory.Build.props) so callers can skip a
     // build when the output is already present without risking a path that drifts from the one the
     // build actually writes.
-    public static string GetOutputDllPath(string projectRootPath, string csprojPath)
+    public static string GetOutputDllPath(string projectRootPath, string csprojPath, string? configuration = null)
     {
         string? targetFramework = null;
         try { targetFramework = XML.Project.Parse(csprojPath).PropertyGroup?.FirstOrDefault()?.TargetFramework; }
         catch { /* fall through to Directory.Build.props */ }
         targetFramework ??= BuildPropsEvaluator.Evaluate(projectRootPath).TargetFramework;
 
-        return Path.Combine(GetSharpBinDirectory(projectRootPath, targetFramework),
+        return Path.Combine(GetSharpBinDirectory(projectRootPath, targetFramework, configuration),
             Path.GetFileNameWithoutExtension(csprojPath) + ".dll");
     }
 
