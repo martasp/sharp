@@ -2,7 +2,7 @@ namespace Sharp;
 
 public class ProjectReferenceFinder
 {
-    public static string FindReferencedDLL(string projectFilePath, string projectPath)
+    public static string FindReferencedDLL(string projectFilePath, string projectPath, BuildOptions? options = null)
     {
         // ProjectReference Include values use Windows separators (backslashes) even on
         // Linux checkouts; normalize before any Path operation (Path.GetDirectoryName /
@@ -22,10 +22,11 @@ public class ProjectReferenceFinder
         // the output is present and we just locate it; only a standalone build reaches the missing
         // case. GetOutputDllPath resolves TargetFramework the same way compilation does, so the probe
         // cannot drift from the emitted path.
-        var dllPath = Project.GetOutputDllPath(Path.GetFullPath(referencedProjectDir), referencedProjectCsproj);
+        var dllPath = Project.GetOutputDllPath(
+            Path.GetFullPath(referencedProjectDir), referencedProjectCsproj, options?.Configuration);
         if (File.Exists(dllPath)) return dllPath;
 
-        var buildResult = SharpCompiler.Build(referencedProjectDir);
+        var buildResult = SharpCompiler.Build(referencedProjectDir, options);
         if (!buildResult.Success)
             throw new Exception($"Cant build {referencedProjectDir}: {buildResult.Errors}");
 

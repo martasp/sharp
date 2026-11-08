@@ -22,6 +22,7 @@ public sealed record BuildProps(
     bool UseAppHost,
     bool EnableRequestDelegateGenerator,
     bool EnableConfigurationBindingGenerator,
+    bool PublishAot,
     string? DefineConstants,
     IReadOnlyList<string> AnalyzerProjectReferences,
     string? InterceptorsNamespaces);
@@ -105,6 +106,7 @@ public static class BuildPropsEvaluator
                 useAppHost,
                 enableRdg,
                 enableConfigBinder,
+                publishAot,
                 EmptyToNull(Expand(props.GetValueOrDefault("DefineConstants"), props)),
                 analyzerRefs,
                 EmptyToNull(Expand(props.GetValueOrDefault("InterceptorsNamespaces") ??
@@ -117,7 +119,7 @@ public static class BuildPropsEvaluator
         }
     }
 
-    private static readonly BuildProps Default = new(null, false, null, null, false, true, false, false, null, Array.Empty<string>(), null);
+    private static readonly BuildProps Default = new(null, false, null, null, false, true, false, false, false, null, Array.Empty<string>(), null);
 
     // Resolves the assembly-identity properties for a project folder. Collects Directory.Build.props
     // (with its imports) then overlays the project's own <PropertyGroup> declarations, which override

@@ -134,9 +134,10 @@ behind.
 
 **Place artifacts.** The remaining stages mirror what `dotnet build` leaves in
 `bin`: the runtime dependency set, hint-path copy-local assemblies, a
-`*.deps.json` graph written by `DepsJsonWriter`, runtime-native assets, and — when
-the project consumes Sharp itself — the embedded SDK payload, so the compiler can
-reproduce itself without MSBuild.
+`*.deps.json` graph written by `DepsJsonWriter`, and runtime-native assets. When
+the project being emitted is the payload owner, `Output.WriteDll` also embeds the
+SDK payload as a manifest resource, so the compiler can reproduce itself without
+MSBuild (see `PAYLOAD.md`).
 
 A single-project build guards against reference cycles with an in-progress set
 and converts any resolution failure into a normal failed `BuildResult` instead of
@@ -245,7 +246,7 @@ flowchart TB
     F6 --> F6b["WriteRuntimeConfig → BuildRuntimeConfig [Pure]"]
     F6 --> F6c["WriteAppHost → BuildAppHost [Query]"]
     E3 --> F7["DepsJsonWriter.Write → WriteFiles"]
-    E3 --> F8["EmbeddedSdkRefs.WritePayloadTo (self-hosting)"]
+    F6 --> F8["Embed manifest payload resource (self-hosting)"]
 
     D4 --> E1
 ```

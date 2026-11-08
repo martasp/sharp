@@ -23,7 +23,7 @@ public static class SharpUtils
     [Pure]
     public static string GetGeneratedFileRoot(Project project) =>
         Path.Combine(project.ProjectRootPath, "obj",
-            BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath)?.Configuration ?? "Debug",
+            project.Configuration,
             project.TargetFramework ?? DefaultTargetFramework.Value);
 
     [Pure]
@@ -156,7 +156,8 @@ public static class SharpUtils
         if (!string.IsNullOrWhiteSpace(tfm))
             symbols.UnionWith(TargetFrameworkSymbols(tfm));
 
-        symbols.Add("DEBUG");
+        if (project.Configuration.Equals("Debug", StringComparison.OrdinalIgnoreCase))
+            symbols.Add("DEBUG");
         symbols.Add("TRACE");
 
         var constants = project.DefineConstants;
@@ -339,7 +340,8 @@ public static class SharpUtils
     {
         var referenceFiles = new HashSet<string>(
             CollectProjectReferences(project.ProjectRootPath, project.TargetFramework,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase), collectHintPathReferences: true),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase), collectHintPathReferences: true,
+                options: project.Options),
             StringComparer.OrdinalIgnoreCase);
 
         return referenceFiles
@@ -354,7 +356,7 @@ public static class SharpUtils
     // shipping an embedded copy of System.Text.Json clashing with the framework's own System.Text.Json).
     [Query]
     private static IEnumerable<string> CollectProjectReferences(string projectRootPath, string? targetTfm,
-        HashSet<string> visitedProjects, bool collectHintPathReferences)
+        HashSet<string> visitedProjects, bool collectHintPathReferences, BuildOptions? options)
     {
         var referenceFiles = new List<string>();
 
@@ -385,11 +387,12 @@ public static class SharpUtils
                 referenceFiles.AddRange(GetTransitiveNugetPackages(referencedCsproj, targetTfm));
 
                 referenceFiles.AddRange(CollectProjectReferences(
-                    referencedProjectDir, targetTfm, visitedProjects, collectHintPathReferences: false));
+                    referencedProjectDir, targetTfm, visitedProjects, collectHintPathReferences: false,
+                    options));
             }
 
             // Builds the referenced project on demand, then resolves its produced DLL.
-            referenceFiles.Add(ProjectReferenceFinder.FindReferencedDLL(include, projectRootPath));
+            referenceFiles.Add(ProjectReferenceFinder.FindReferencedDLL(include, projectRootPath, options));
         }
 
         return referenceFiles;
@@ -865,10 +868,14 @@ public static class SharpUtils
         // deterministic: true mirrors csc(/deterministic): binary-identical output for identical
         // input (reproducible PE timestamp, MVID and PDB id). HIGH_ENTROPY_VA (any CPU) is set
         // on EmitOptions in this Roslyn fork, not here.
+        var optimizationLevel = project.Configuration.Equals("Release", StringComparison.OrdinalIgnoreCase)
+            ? OptimizationLevel.Release
+            : OptimizationLevel.Debug;
+
         var DefaultCompilationOptions =
             new CSharpCompilationOptions(OutputKind, moduleName: project.ProjectName + ".dll",
                 deterministic: true)
-                .WithOptimizationLevel(OptimizationLevel.Debug)
+                .WithOptimizationLevel(optimizationLevel)
                 .WithUsings(DefaultNamespaces)
                 .WithAllowUnsafe(project.AllowUnsafeBlocks);
 
@@ -1079,7 +1086,8 @@ public static class SharpUtils
     }
 
     [Query]
-    public static Project GetProjectDetails(List<ProjectFile> projectFiles, string projectRootPath)
+    public static Project GetProjectDetails(
+        List<ProjectFile> projectFiles, string projectRootPath, BuildOptions? options = null)
     {
         var CsProjFile = projectFiles.FirstOrDefault(item => Path.GetExtension(item.FilePath) == ".csproj")
                          ?? throw new ArgumentException("Project does not have csproject file");
@@ -1087,7 +1095,12 @@ public static class SharpUtils
         var CSFiles = projectFiles.Where(item => Path.GetExtension(item.FilePath) == ".cs").ToList()
                       ?? throw new ArgumentException("Project does not have c sharp files");
 
-        var project = new Project(CsProjFile, CSFiles, projectRootPath);
+        options ??= BuildOptions.Default;
+        var project = new Project(CsProjFile, CSFiles, projectRootPath)
+        {
+            Options = options,
+            RuntimeIdentifierOverride = options.RuntimeIdentifier,
+        };
 
         // Web SDK projects import Microsoft.NET.Sdk.Web, which adds its own implicit usings
         // (Microsoft.AspNetCore.*) on top of the base net SDK set. Without them WebApplication
@@ -1138,7 +1151,8 @@ public static class SharpUtils
         // paths for the PDB documents too. Mirroring name + path keeps the PDB document set
         // (names and SHA-1 checksums) equal to `dotnet build` output.
         var identity = BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath);
-        var configuration = identity?.Configuration ?? "Debug";
+        var configuration = options.Configuration ?? identity?.Configuration ?? "Debug";
+        project.Configuration = configuration;
         var generatedRoot = GetGeneratedFileRoot(project, configuration);
 
         if (project.ImplicitUsings)

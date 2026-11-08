@@ -37,7 +37,7 @@ SDK commands:
   nuget             Provides additional NuGet commands.                                       [not implemented]
   pack              Create a NuGet package.                                                   [not implemented]
   package           Search for, add, remove, or list PackageReferences for a .NET project.    [not implemented]
-  publish           Publish a .NET project for deployment.                                    [not implemented]
+  publish           Publish a .NET project for deployment.                                    [implemented]
   reference         Add, remove, or list ProjectReferences for a .NET project.                [not implemented]
   restore           Restore dependencies specified in a .NET project.                         [implemented]
   run               Build and run a .NET project output.                                      [implemented]

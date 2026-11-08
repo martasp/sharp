@@ -110,6 +110,74 @@ public class PropertyGroup
     [XmlElement(ElementName = "InterceptorsPreviewNamespaces")]
     public string? InterceptorsPreviewNamespaces { get; set; }
 
+    [XmlElement(ElementName = "Configuration")]
+    public string? Configuration { get; set; }
+
+    // Publish/NativeAOT properties evaluated by Sharp.Publish. Unknown properties stay unsupported;
+    // these are the switches that change the emitted native image or the ILC/link arguments.
+    [XmlElement(ElementName = "PublishAot")]
+    public string? PublishAot { get; set; }
+
+    [XmlElement(ElementName = "PublishTrimmed")]
+    public string? PublishTrimmed { get; set; }
+
+    [XmlElement(ElementName = "SelfContained")]
+    public string? SelfContained { get; set; }
+
+    [XmlElement(ElementName = "DebugType")]
+    public string? DebugType { get; set; }
+
+    [XmlElement(ElementName = "DebugSymbols")]
+    public string? DebugSymbols { get; set; }
+
+    [XmlElement(ElementName = "StripSymbols")]
+    public string? StripSymbols { get; set; }
+
+    [XmlElement(ElementName = "OptimizationPreference")]
+    public string? OptimizationPreference { get; set; }
+
+    [XmlElement(ElementName = "ServerGarbageCollection")]
+    public string? ServerGarbageCollection { get; set; }
+
+    [XmlElement(ElementName = "EventSourceSupport")]
+    public string? EventSourceSupport { get; set; }
+
+    [XmlElement(ElementName = "InvariantGlobalization")]
+    public string? InvariantGlobalization { get; set; }
+
+    [XmlElement(ElementName = "UseSystemResourceKeys")]
+    public string? UseSystemResourceKeys { get; set; }
+
+    [XmlElement(ElementName = "UseSizeOptimizedLinq")]
+    public string? UseSizeOptimizedLinq { get; set; }
+
+    [XmlElement(ElementName = "UseSystemZlib")]
+    public string? UseSystemZlib { get; set; }
+
+    [XmlElement(ElementName = "UseSystemBrotli")]
+    public string? UseSystemBrotli { get; set; }
+
+    [XmlElement(ElementName = "StaticICULinking")]
+    public string? StaticICULinking { get; set; }
+
+    [XmlElement(ElementName = "StaticOpenSslLinking")]
+    public string? StaticOpenSslLinking { get; set; }
+
+    [XmlElement(ElementName = "UseSystemLibraries")]
+    public string? UseSystemLibraries { get; set; }
+
+    [XmlElement(ElementName = "NativeDebugSymbols")]
+    public string? NativeDebugSymbols { get; set; }
+
+    [XmlElement(ElementName = "StackTraceSupport")]
+    public string? StackTraceSupport { get; set; }
+
+    [XmlElement(ElementName = "DebuggerSupport")]
+    public string? DebuggerSupport { get; set; }
+
+    [XmlElement(ElementName = "ETWEventSourceSupport")]
+    public string? ETWEventSourceSupport { get; set; }
+
     // Razor SDK (Microsoft.NET.Sdk.Razor / Microsoft.NET.Sdk.Web). AddRazorSupportForMvc opts .cshtml
     // files into the MVC view pipeline; RazorLangVersion overrides the language version the Razor
     // source generator targets (defaults to the TFM's version, e.g. "10.0" for net10.0).
@@ -187,6 +255,12 @@ public class ItemGroup
 
     [XmlElement(ElementName = "BuildOutputInPackage")]
     public BuildOutputInPackage? BuildOutputInPackage { get; set; }
+
+    [XmlElement(ElementName = "IlcArg")]
+    public List<IncludeItem> IlcArgs { get; set; } = new();
+
+    [XmlElement(ElementName = "TrimmerRootDescriptor")]
+    public List<IncludeItem> TrimmerRootDescriptors { get; set; } = new();
 }
 
 [XmlRoot(ElementName = "PackageReference")]
@@ -251,6 +325,13 @@ public class AssemblyAttributeItem
 
 [XmlRoot(ElementName = "InternalsVisibleTo")]
 public class InternalsVisibleToItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+}
+
+[XmlRoot(ElementName = "IncludeItem")]
+public class IncludeItem
 {
     [XmlAttribute(AttributeName = "Include")]
     public string? Include { get; set; }
@@ -353,6 +434,28 @@ public class Project
         DefineConstants = ElementValue(element, "DefineConstants"),
         InterceptorsNamespaces = ElementValue(element, "InterceptorsNamespaces"),
         InterceptorsPreviewNamespaces = ElementValue(element, "InterceptorsPreviewNamespaces"),
+        Configuration = ElementValue(element, "Configuration"),
+        PublishAot = ElementValue(element, "PublishAot"),
+        PublishTrimmed = ElementValue(element, "PublishTrimmed"),
+        SelfContained = ElementValue(element, "SelfContained"),
+        DebugType = ElementValue(element, "DebugType"),
+        DebugSymbols = ElementValue(element, "DebugSymbols"),
+        StripSymbols = ElementValue(element, "StripSymbols"),
+        OptimizationPreference = ElementValue(element, "OptimizationPreference"),
+        ServerGarbageCollection = ElementValue(element, "ServerGarbageCollection"),
+        EventSourceSupport = ElementValue(element, "EventSourceSupport"),
+        InvariantGlobalization = ElementValue(element, "InvariantGlobalization"),
+        UseSystemResourceKeys = ElementValue(element, "UseSystemResourceKeys"),
+        UseSizeOptimizedLinq = ElementValue(element, "UseSizeOptimizedLinq"),
+        UseSystemZlib = ElementValue(element, "UseSystemZlib"),
+        UseSystemBrotli = ElementValue(element, "UseSystemBrotli"),
+        StaticICULinking = ElementValue(element, "StaticICULinking"),
+        StaticOpenSslLinking = ElementValue(element, "StaticOpenSslLinking"),
+        UseSystemLibraries = ElementValue(element, "UseSystemLibraries"),
+        NativeDebugSymbols = ElementValue(element, "NativeDebugSymbols"),
+        StackTraceSupport = ElementValue(element, "StackTraceSupport"),
+        DebuggerSupport = ElementValue(element, "DebuggerSupport"),
+        ETWEventSourceSupport = ElementValue(element, "ETWEventSourceSupport"),
         AddRazorSupportForMvc = ElementValue(element, "AddRazorSupportForMvc"),
         RazorLangVersion = ElementValue(element, "RazorLangVersion"),
         EnableDefaultRazorGenerateItems = ElementValue(element, "EnableDefaultRazorGenerateItems"),
@@ -405,6 +508,14 @@ public class Project
         BuildOutputInPackage = Children(element, "BuildOutputInPackage")
             .Select(item => new BuildOutputInPackage { Include = AttributeValue(item, "Include") })
             .FirstOrDefault(),
+        IlcArgs = Children(element, "IlcArg").Select(item => new IncludeItem
+        {
+            Include = AttributeValue(item, "Include"),
+        }).ToList(),
+        TrimmerRootDescriptors = Children(element, "TrimmerRootDescriptor").Select(item => new IncludeItem
+        {
+            Include = AttributeValue(item, "Include"),
+        }).ToList(),
     };
 
     private static AssemblyAttributeItem ParseAssemblyAttribute(XElement element)
