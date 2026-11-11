@@ -245,7 +245,7 @@ public static class SharpUtils
     private static LanguageVersion ResolveLanguageVersion(string? langVersion)
     {
         if (!string.IsNullOrWhiteSpace(langVersion) &&
-            Enum.TryParse(langVersion.Trim(), ignoreCase: true, out LanguageVersion resolved))
+            LanguageVersionFacts.TryParse(langVersion.Trim(), out var resolved))
             return resolved;
         return LanguageVersion.Latest;
     }
@@ -651,7 +651,7 @@ public static class SharpUtils
 
         var roots = ResolvedPackageRoots(xml.ItemGroup.SelectMany(ig => ig.PackageReferences), projectDirectory);
 
-        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm))
+        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm, projectDirectory))
             results.AddRange(NuGetPackage.FindPackageDLLs(packagePath, tfm));
 
         return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -665,7 +665,7 @@ public static class SharpUtils
 
         var roots = ResolvedPackageRoots(project.PackageReferences, project.ProjectRootPath);
 
-        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm))
+        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm, project.ProjectRootPath))
         {
             foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, tfm))
                 referenceFiles.Add(dll);
@@ -684,10 +684,12 @@ public static class SharpUtils
     // producing a runtime FileNotFoundException even though the correct dll had been collected.
     [Query]
     private static List<string> ResolveUnifiedPackagePaths(
-        IEnumerable<(string Id, string Version, string Path)> roots, string targetTfm)
+        IEnumerable<(string Id, string Version, string Path)> roots, string targetTfm, string projectRootPath)
     {
         var chosen = new Dictionary<string, (string Version, string Path)>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<(string Id, string Version, string Path)>(roots);
+        var centralVersions = NuGetPackage.ReadCentralPackageVersions(projectRootPath);
+        var transitivePinning = NuGetPackage.IsCentralPackageTransitivePinningEnabled(projectRootPath);
 
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         while (queue.Count > 0)
@@ -706,10 +708,16 @@ public static class SharpUtils
             {
                 if (dependency.Excluded || string.IsNullOrEmpty(dependency.Id)) continue;
 
-                var dependencyPath = NuGetPackage.FindPackagePath(dependency.Id, dependency.Version);
+                var dependencyVersion = dependency.Version;
+                if (transitivePinning &&
+                    centralVersions.TryGetValue(dependency.Id, out var pinnedVersion) &&
+                    !string.IsNullOrWhiteSpace(pinnedVersion))
+                    dependencyVersion = pinnedVersion;
+
+                var dependencyPath = NuGetPackage.FindPackagePath(dependency.Id, dependencyVersion);
                 if (string.IsNullOrEmpty(dependencyPath)) continue;
 
-                queue.Enqueue((dependency.Id, dependency.Version, dependencyPath));
+                queue.Enqueue((dependency.Id, dependencyVersion, dependencyPath));
             }
         }
 
@@ -739,7 +747,7 @@ public static class SharpUtils
     private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(
         IEnumerable<PackageReference> packages, string projectDirectory) =>
         ResolvePackageReferences(packages, projectDirectory)
-            .Where(reference => reference.Path is not null)
+            .Where(reference => !string.IsNullOrEmpty(reference.Path))
             .Select(reference => (reference.Id, reference.Version, reference.Path!))
             .ToList();
 
@@ -791,7 +799,7 @@ public static class SharpUtils
             var xml = XML.Project.Parse(csproj);
             var roots = ResolvedPackageRoots(xml.ItemGroup.SelectMany(ig => ig.PackageReferences), directory);
 
-            foreach (var packagePath in ResolveUnifiedPackagePaths(roots, targetTfm))
+            foreach (var packagePath in ResolveUnifiedPackagePaths(roots, targetTfm, directory))
                 packagePaths.Add(packagePath);
 
             foreach (var reference in xml.ItemGroup.SelectMany(ig => ig.ProjectReferences))
@@ -915,10 +923,22 @@ public static class SharpUtils
         var defaultItemsEnabled = !(xml.PropertyGroup?.FirstOrDefault()?.EnableDefaultItems
             ?.Trim().Equals("false", StringComparison.OrdinalIgnoreCase) ?? false);
 
+        // EmitCompilerGeneratedFiles writes generated sources under this directory. Projects that
+        // also check those files in (Spectre.Console) remove them from the compile set with
+        // <Compile Remove="$(CompilerGeneratedFilesOutputPath)/**/*.cs" />; leaving the token
+        // unexpanded compiles the checked-in copies alongside the freshly generated trees.
+        var compilerGeneratedPath = xml.PropertyGroup?
+            .Select(group => group.CompilerGeneratedFilesOutputPath)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        string ExpandProjectPath(string value) => string.IsNullOrWhiteSpace(compilerGeneratedPath)
+            ? value
+            : value.Replace("$(CompilerGeneratedFilesOutputPath)", compilerGeneratedPath,
+                StringComparison.OrdinalIgnoreCase);
+
         var compileIncludes = xml.ItemGroup.SelectMany(itemGroup => itemGroup.CompileItems)
-            .Select(item => item.Include).Where(include => !string.IsNullOrWhiteSpace(include)).Select(include => include!).ToList();
+            .Select(item => ExpandProjectPath(item.Include ?? "")).Where(include => !string.IsNullOrWhiteSpace(include)).ToList();
         var compileRemoves = xml.ItemGroup.SelectMany(itemGroup => itemGroup.CompileItems)
-            .Select(item => item.Remove).Where(remove => !string.IsNullOrWhiteSpace(remove)).Select(remove => remove!).ToList();
+            .Select(item => ExpandProjectPath(item.Remove ?? "")).Where(remove => !string.IsNullOrWhiteSpace(remove)).ToList();
         var noneIncludes = xml.ItemGroup.SelectMany(itemGroup => itemGroup.NoneItems)
             .Select(item => item.Include).Where(include => !string.IsNullOrWhiteSpace(include)).Select(include => include!).ToList();
 
@@ -958,7 +978,7 @@ public static class SharpUtils
             var full = Path.IsPathRooted(replaced)
                 ? Path.GetFullPath(replaced)
                 : Path.GetFullPath(Path.Combine(projectPath, replaced));
-            matchers.Add(full.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar);
+            matchers.Add(full);
         }
 
         return files.Where(file =>
@@ -1000,10 +1020,11 @@ public static class SharpUtils
     [Pure]
     private static bool GlobMatch(string path, string pattern)
     {
-        var target = (path + Path.DirectorySeparatorChar).Replace(Path.DirectorySeparatorChar, '/');
+        var target = path.Replace(Path.DirectorySeparatorChar, '/');
         var pat = pattern.Replace(Path.DirectorySeparatorChar, '/');
         var regex =
             "^" + System.Text.RegularExpressions.Regex.Escape(pat)
+                .Replace("\\*\\*/", "(?:.*/)?")
                 .Replace("\\*\\*", ".*")
                 .Replace("\\*", "[^/]*")
                 .Replace("\\?", "[^/]") + "$";
@@ -1085,6 +1106,34 @@ public static class SharpUtils
         return result.ToString();
     }
 
+    private static List<ProjectFile> GetPackageSourceFiles(Project project)
+    {
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
+        var seen = new HashSet<string>(project.CSFiles.Select(file => file.FilePath), StringComparer.OrdinalIgnoreCase);
+        var result = new List<ProjectFile>();
+
+        foreach (var packageItem in project.PackageReferences)
+        {
+            var packageName = packageItem.Include ?? "";
+            var packageVersion = packageItem.Version ??
+                NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
+            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
+
+            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
+            if (string.IsNullOrEmpty(packagePath))
+                packagePath = NuGetPackage.FindHighestPackagePath(packageName);
+            if (string.IsNullOrEmpty(packagePath)) continue;
+
+            foreach (var sourcePath in NuGetPackage.FindPackageSourceFiles(packagePath, tfm))
+            {
+                if (seen.Add(sourcePath))
+                    result.Add(new ProjectFile(sourcePath, File.ReadAllText(sourcePath)));
+            }
+        }
+
+        return result;
+    }
+
     [Query]
     public static Project GetProjectDetails(
         List<ProjectFile> projectFiles, string projectRootPath, BuildOptions? options = null)
@@ -1101,6 +1150,8 @@ public static class SharpUtils
             Options = options,
             RuntimeIdentifierOverride = options.RuntimeIdentifier,
         };
+
+        project.CSFiles.AddRange(GetPackageSourceFiles(project));
 
         // Web SDK projects import Microsoft.NET.Sdk.Web, which adds its own implicit usings
         // (Microsoft.AspNetCore.*) on top of the base net SDK set. Without them WebApplication

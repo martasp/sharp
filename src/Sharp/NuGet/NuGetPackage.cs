@@ -1,9 +1,19 @@
+using System.Collections.Concurrent;
 using System.Xml.Linq;
 
 namespace Sharp.NuGet;
 
 public static class NuGetPackage
 {
+    private sealed record CentralPackageInfo(
+        bool TransitivePinningEnabled, IReadOnlyDictionary<string, string> Versions);
+
+    private static readonly IReadOnlyDictionary<string, string> NoCentralVersions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly ConcurrentDictionary<string, CentralPackageInfo> CentralPackageCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     // ---------------------------------------------------------------------------
     // Feature: package buildTransitive/build <Using> items.
     // NuGet packages can ship .props files (e.g. Parlot's buildTransitive/Parlot.props) that
@@ -175,6 +185,28 @@ public static class NuGetPackage
         return candidates.ToArray();
     }
 
+    // Source-only packages (e.g. Wcwidth.Sources) ship compilable .cs under contentFiles. The SDK
+    // adds those as Compile items; Sharp must do the same or namespaces such as Wcwidth disappear.
+    public static string[] FindPackageSourceFiles(string packagePath, string targetTfm)
+    {
+        if (string.IsNullOrEmpty(packagePath) || !Directory.Exists(packagePath))
+            return Array.Empty<string>();
+
+        var contentRoot = Path.Combine(packagePath, "contentFiles");
+        if (!Directory.Exists(contentRoot)) return Array.Empty<string>();
+
+        var bestDirectory = BestContentDirectory(Path.Combine(contentRoot, "cs"), targetTfm);
+        if (bestDirectory is null)
+        {
+            var anyDirectory = Path.Combine(contentRoot, "any", "any");
+            if (Directory.Exists(anyDirectory)) bestDirectory = anyDirectory;
+        }
+
+        return bestDirectory is null
+            ? Array.Empty<string>()
+            : Directory.EnumerateFiles(bestDirectory, "*.cs", SearchOption.AllDirectories).ToArray();
+    }
+
     // A package's direct dependencies for one target framework, read from its .nuspec. Picks the
     // best-matching <group targetFramework> (or the ungrouped form), lowers bracket ranges to
     // their minimum, and reports exclude="All" so callers can keep the dependency out of the
@@ -230,23 +262,61 @@ public static class NuGetPackage
 
     // Resolves the version for a versionless <PackageReference> using central package management
     // (Directory.Packages.props). Returns an empty string when there is no central entry.
-    public static string ResolveCentralVersion(string packageName, string projectRootPath)
+    public static string ResolveCentralVersion(string packageName, string projectRootPath) =>
+        ReadCentralPackages(projectRootPath).Versions.GetValueOrDefault(packageName) ?? string.Empty;
+
+    // CentralPackageTransitivePinningEnabled promotes a central PackageVersion onto transitive
+    // dependencies, so every project in the graph agrees on one assembly version (OrchardCore uses
+    // this to keep Parlot 1.5.8 everywhere even though YesSql asks for 1.5.7).
+    public static IReadOnlyDictionary<string, string> ReadCentralPackageVersions(string projectRootPath) =>
+        ReadCentralPackages(projectRootPath).Versions;
+
+    public static bool IsCentralPackageTransitivePinningEnabled(string projectRootPath) =>
+        ReadCentralPackages(projectRootPath).TransitivePinningEnabled;
+
+    private static CentralPackageInfo ReadCentralPackages(string projectRootPath)
     {
         var propsFile = FindDirectoryPackagesProps(projectRootPath);
-        if (propsFile is null) return string.Empty;
+        if (propsFile is null) return new CentralPackageInfo(false, NoCentralVersions);
 
-        var doc = XDocument.Load(propsFile);
-        var packageVersion = doc.Descendants()
-            .FirstOrDefault(element => element.Name.LocalName == "PackageVersion" &&
-                (element.Attributes().FirstOrDefault(a => a.Name.LocalName == "Include")?.Value
-                    .Equals(packageName, StringComparison.OrdinalIgnoreCase) ?? false));
+        return CentralPackageCache.GetOrAdd(propsFile, path =>
+        {
+            try
+            {
+                var doc = XDocument.Load(path);
+                var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        return packageVersion?.Attributes().FirstOrDefault(a => a.Name.LocalName == "Version")?.Value ?? string.Empty;
+                foreach (var element in doc.Descendants())
+                {
+                    if (element.Name.LocalName != "PackageVersion") continue;
+
+                    var id = AttributeValue(element, "Include") ?? AttributeValue(element, "Update");
+                    var version = AttributeValue(element, "Version");
+                    if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(version))
+                        versions[id] = version;
+                }
+
+                var pinning = doc.Descendants()
+                    .Where(element => element.Name.LocalName == "CentralPackageTransitivePinningEnabled")
+                    .Select(element => element.Value.Trim())
+                    .LastOrDefault(value => value.Length > 0)
+                    ?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
+
+                return new CentralPackageInfo(pinning, versions);
+            }
+            catch
+            {
+                return new CentralPackageInfo(false, NoCentralVersions);
+            }
+        });
     }
 
     private static IReadOnlyList<(string Id, string Version, bool Excluded)> FindDependencies(
         string packagePath, string targetTfm)
     {
+        if (string.IsNullOrEmpty(packagePath) || !Directory.Exists(packagePath))
+            return Array.Empty<(string, string, bool)>();
+
         var nuspec = Directory.EnumerateFiles(packagePath, "*.nuspec", SearchOption.TopDirectoryOnly).FirstOrDefault();
         if (nuspec is null) return Array.Empty<(string, string, bool)>();
 
@@ -287,6 +357,18 @@ public static class NuGetPackage
 
         return Directory.EnumerateDirectories(libRoot)
             .Where(directory => EnumerateCompileDlls(directory).Any())
+            .OrderByDescending(directory => NuGetTfm.Score(Path.GetFileName(directory), targetTfm))
+            .ThenBy(directory => Path.GetFileName(directory), StringComparer.OrdinalIgnoreCase)
+            .Cast<string?>()
+            .FirstOrDefault();
+    }
+
+    private static string? BestContentDirectory(string contentRoot, string targetTfm)
+    {
+        if (!Directory.Exists(contentRoot)) return null;
+
+        return Directory.EnumerateDirectories(contentRoot)
+            .Where(directory => Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories).Any())
             .OrderByDescending(directory => NuGetTfm.Score(Path.GetFileName(directory), targetTfm))
             .ThenBy(directory => Path.GetFileName(directory), StringComparer.OrdinalIgnoreCase)
             .Cast<string?>()

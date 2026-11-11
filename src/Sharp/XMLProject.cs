@@ -98,6 +98,12 @@ public class PropertyGroup
     [XmlElement(ElementName = "LangVersion")]
     public string? LangVersion { get; set; }
 
+    [XmlElement(ElementName = "EmitCompilerGeneratedFiles")]
+    public string? EmitCompilerGeneratedFiles { get; set; }
+
+    [XmlElement(ElementName = "CompilerGeneratedFilesOutputPath")]
+    public string? CompilerGeneratedFilesOutputPath { get; set; }
+
     [XmlElement(ElementName = "Nullable")]
     public string? Nullable { get; set; }
 
@@ -224,6 +230,16 @@ public class NoneItem
     public string? Remove { get; set; }
 }
 
+[XmlRoot(ElementName = "AdditionalFiles")]
+public class AdditionalFileItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "Remove")]
+    public string? Remove { get; set; }
+}
+
 [XmlRoot(ElementName = "ItemGroup")]
 public class ItemGroup
 {
@@ -234,6 +250,9 @@ public class ItemGroup
 
     [XmlElement(ElementName = "None")]
     public List<NoneItem> NoneItems { get; set; } = new();
+
+    [XmlElement(ElementName = "AdditionalFiles")]
+    public List<AdditionalFileItem> AdditionalFiles { get; set; } = new();
 
     [XmlElement(ElementName = "PackageReference")]
     public List<PackageReference> PackageReferences { get; set; } = new();
@@ -430,6 +449,8 @@ public class Project
         EnableRequestDelegateGenerator = ElementValue(element, "EnableRequestDelegateGenerator"),
         EnableConfigurationBindingGenerator = ElementValue(element, "EnableConfigurationBindingGenerator"),
         LangVersion = ElementValue(element, "LangVersion"),
+        EmitCompilerGeneratedFiles = ElementValue(element, "EmitCompilerGeneratedFiles"),
+        CompilerGeneratedFilesOutputPath = ElementValue(element, "CompilerGeneratedFilesOutputPath"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),
         InterceptorsNamespaces = ElementValue(element, "InterceptorsNamespaces"),
@@ -475,6 +496,11 @@ public class Project
             Remove = AttributeValue(item, "Remove"),
         }).ToList(),
         NoneItems = Children(element, "None").Select(item => new NoneItem
+        {
+            Include = AttributeValue(item, "Include"),
+            Remove = AttributeValue(item, "Remove"),
+        }).ToList(),
+        AdditionalFiles = Children(element, "AdditionalFiles").Select(item => new AdditionalFileItem
         {
             Include = AttributeValue(item, "Include"),
             Remove = AttributeValue(item, "Remove"),

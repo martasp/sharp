@@ -6,11 +6,13 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
+using System.Text;
 using CustomCompiler;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 
 // ---------------------------------------------------------------------------
 // Feature: real Roslyn source-generator pipeline (GENERATOR_PIPELINE).
@@ -310,7 +312,12 @@ public static class SourceGeneratorRunner
             }
         }
 
-        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray(), RazorSupport.BuildAdditionalTexts(project));
+        var additionalTexts = RazorSupport.BuildAdditionalTexts(project);
+        if (project.AdditionalFiles.Count > 0)
+            additionalTexts = additionalTexts.AddRange(
+                project.AdditionalFiles.Select(path => (AdditionalText)new ProjectAdditionalText(path)));
+
+        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray(), additionalTexts);
     }
 
     // Shared driver: builds CSharpGeneratorDriver with the project's parse options (implicit TFM
@@ -525,7 +532,7 @@ public static class SourceGeneratorRunner
     private static LanguageVersion ResolveLanguageVersion(string? langVersion)
     {
         if (!string.IsNullOrWhiteSpace(langVersion) &&
-            Enum.TryParse(langVersion.Trim(), ignoreCase: true, out LanguageVersion resolved))
+            LanguageVersionFacts.TryParse(langVersion.Trim(), out var resolved))
             return resolved;
         return LanguageVersion.Latest;
     }
@@ -584,4 +591,17 @@ public static class SourceGeneratorRunner
             return value is not null;
         }
     }
+}
+
+internal sealed class ProjectAdditionalText : AdditionalText
+{
+    private readonly string _path;
+    private SourceText? _text;
+
+    public ProjectAdditionalText(string path) => _path = path;
+
+    public override string Path => _path;
+
+    public override SourceText GetText(CancellationToken cancellationToken = default) =>
+        _text ??= SourceText.From(File.ReadAllText(_path), Encoding.UTF8);
 }
