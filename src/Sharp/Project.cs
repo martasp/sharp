@@ -53,6 +53,7 @@ public class Project : IProject
         return name switch
         {
             "PublishAot" => group?.PublishAot ?? (BuildProps.PublishAot ? "true" : null),
+            "NativeLib" => group?.NativeLib,
             "PublishTrimmed" => group?.PublishTrimmed,
             "SelfContained" => group?.SelfContained,
             "DebugType" => group?.DebugType,
@@ -200,6 +201,11 @@ public class Project : IProject
 
     public List<AssemblyAttributeItem> AssemblyAttributes =>
         XMLProject.ItemGroup.SelectMany(item => item.AssemblyAttributes).ToList();
+
+    // Static <EmbeddedResource> items from the project body. Targets can also inject resources;
+    // those are handled by AssemblyAttributeEvaluator.GetEmbeddedResources.
+    public List<EmbeddedResourceItem> EmbeddedResources =>
+        XMLProject.ItemGroup.SelectMany(item => item.EmbeddedResources).ToList();
 
     public List<string> IlcArgs =>
         XMLProject.ItemGroup.SelectMany(item => item.IlcArgs)

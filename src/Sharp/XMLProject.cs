@@ -124,6 +124,9 @@ public class PropertyGroup
     [XmlElement(ElementName = "PublishAot")]
     public string? PublishAot { get; set; }
 
+    [XmlElement(ElementName = "NativeLib")]
+    public string? NativeLib { get; set; }
+
     [XmlElement(ElementName = "PublishTrimmed")]
     public string? PublishTrimmed { get; set; }
 
@@ -240,6 +243,16 @@ public class AdditionalFileItem
     public string? Remove { get; set; }
 }
 
+[XmlRoot(ElementName = "EmbeddedResource")]
+public class EmbeddedResourceItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "LogicalName")]
+    public string? LogicalName { get; set; }
+}
+
 [XmlRoot(ElementName = "ItemGroup")]
 public class ItemGroup
 {
@@ -253,6 +266,9 @@ public class ItemGroup
 
     [XmlElement(ElementName = "AdditionalFiles")]
     public List<AdditionalFileItem> AdditionalFiles { get; set; } = new();
+
+    [XmlElement(ElementName = "EmbeddedResource")]
+    public List<EmbeddedResourceItem> EmbeddedResources { get; set; } = new();
 
     [XmlElement(ElementName = "PackageReference")]
     public List<PackageReference> PackageReferences { get; set; } = new();
@@ -457,6 +473,7 @@ public class Project
         InterceptorsPreviewNamespaces = ElementValue(element, "InterceptorsPreviewNamespaces"),
         Configuration = ElementValue(element, "Configuration"),
         PublishAot = ElementValue(element, "PublishAot"),
+        NativeLib = ElementValue(element, "NativeLib"),
         PublishTrimmed = ElementValue(element, "PublishTrimmed"),
         SelfContained = ElementValue(element, "SelfContained"),
         DebugType = ElementValue(element, "DebugType"),
@@ -504,6 +521,11 @@ public class Project
         {
             Include = AttributeValue(item, "Include"),
             Remove = AttributeValue(item, "Remove"),
+        }).ToList(),
+        EmbeddedResources = Children(element, "EmbeddedResource").Select(item => new EmbeddedResourceItem
+        {
+            Include = AttributeValue(item, "Include"),
+            LogicalName = AttributeValue(item, "LogicalName"),
         }).ToList(),
         PackageReferences = Children(element, "PackageReference").Select(reference => new PackageReference
         {

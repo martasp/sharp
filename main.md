@@ -265,8 +265,16 @@ Implemented in `SourceGeneratorRunner.cs` — real `CSharpGeneratorDriver` runs,
    the generators that reference them. `Microsoft.CodeAnalysis.{CSharp.,}Analyzers` are excluded from
    the set (analyzer-only packages, they clash with / can't resolve against the host Roslyn).
 
+Under the AOT CLI, analyzer projects are instead published as NativeAOT shared libraries
+(`src/Sharp/AotAnalyzer`, `NativeLib=Shared`) exposing an unmanaged entry point. The host discovers
+`[Generator]` types from metadata, sends sources/references/options through a versioned blittable struct
+ABI over native memory (no JSON/file protocol), and merges the generated trees back into the consumer
+compilation. Plugins are cached in the system temp directory by runtime, analyzer, and protocol content
+hashes. Set `SHARP_TRACE_GENERATORS=1` to print plugin publish/cache timings.
+
 Milestones verified on the canary: `OrchardCore.SourceGenerators` (the generator itself) compiles,
-`OrchardCore.DisplayManagement` no longer fails, shadow-copied generators load and emit shapes.
+`OrchardCore.DisplayManagement` no longer fails, shadow-copied generators load and emit shapes, and the
+AOT CLI builds `OrchardCore.Cms.Web` with user generators enabled.
 
 **Remaining gap**: `OrchardCore.Navigation.Core` fails `CS9137` — OrchardCore's shape generator emits
 checksum-based `[InterceptsLocation(1, "<checksum>")]`; our parse-option interception opt-in makes the

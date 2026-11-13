@@ -81,6 +81,28 @@ public static class AssemblyAttributeEvaluator
     {
         var resources = new List<(string Name, string FilePath)>();
 
+        // Static <EmbeddedResource Include="..." LogicalName="..." /> items declared in the project
+        // body. These are the ordinary SDK form; target-injected resources are handled below.
+        foreach (var item in project.EmbeddedResources)
+        {
+            if (string.IsNullOrEmpty(item.Include)) continue;
+            var path = item.Include.Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar);
+            if (!Path.IsPathRooted(path)) path = Path.Combine(project.ProjectRootPath, path);
+            path = Path.GetFullPath(path);
+            if (!File.Exists(path)) continue;
+            if (string.Equals(Path.GetExtension(path), ".resx", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var name = item.LogicalName;
+            if (string.IsNullOrEmpty(name))
+            {
+                name = project.ProjectName + "." +
+                    Path.GetRelativePath(project.ProjectRootPath, path).Replace('\\', '.');
+            }
+
+            resources.Add((name, path));
+        }
+
         try
         {
             var cache = new Dictionary<string, Graph>(StringComparer.OrdinalIgnoreCase);

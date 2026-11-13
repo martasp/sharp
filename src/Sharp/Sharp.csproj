@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
     <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
@@ -24,6 +25,15 @@
        project carries a single reference and no payload configuration of its own. -->
   <ItemGroup>
     <ProjectReference Include="..\Dotnet10Dependencies\Dotnet10Dependencies.csproj" />
+  </ItemGroup>
+
+  <!-- The protocol is compiled normally and embedded verbatim for the generated plugin shim.
+       The plugin runtime is source-only: embedded for the shim, never compiled into Sharp. -->
+  <ItemGroup>
+    <EmbeddedResource Include="AotAnalyzer\AotAnalyzerProtocol.cs"
+                      LogicalName="Sharp.AotAnalyzer.Protocol.cs" />
+    <EmbeddedResource Include="..\AotAnalyzerPlugin\PluginRuntime.cs"
+                      LogicalName="Sharp.AotAnalyzer.PluginRuntime.cs" />
   </ItemGroup>
 
   <!-- Root System.SR::GetResourceString in analyzer assemblies so NativeAOT keeps their

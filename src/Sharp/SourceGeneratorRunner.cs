@@ -25,13 +25,11 @@ using Microsoft.CodeAnalysis.Text;
 // generated trees are merged into the compilation and generator diagnostics are
 // relayed as build errors. No hand-rolled code synthesis lives here. DELETABLE.
 //
-// DISABLED for the AOT experiment: the reflective/dynamic discovery below
-// (CollectGeneratorDlls + GeneratorAssemblyLoadContext + Activator) is JIT-only —
-// NativeAOT cannot load/reflect assemblies at runtime. BuildCore now routes the
-// whole pipeline through AnalyzerRunner, which feeds the statically linked
-// AnalyzerRegistry (SourceGeneratorRegistry + AnalyzerRegistry) to RunGeneratorDriver.
-// The JIT discovery helpers below are left in place as the reference implementation;
-// delete or comment out once the AOT static path is proven.
+// Under NativeAOT the reflective discovery below (CollectGeneratorDlls +
+// GeneratorAssemblyLoadContext + Activator) cannot run. The statically linked SDK
+// generator set still runs normally, while analyzer-project generators are built
+// into NativeAOT plugins and registered through AotAnalyzerHost/NativeGeneratorAdapter.
+// JIT builds continue to discover package/analyzer-project generators dynamically.
 // ---------------------------------------------------------------------------
 namespace Sharp;
 
@@ -111,6 +109,24 @@ public static class SourceGeneratorRunner
         // Razor projects pull their generator from the SDK's Microsoft.NET.Sdk.Razor component.
         dlls.UnionWith(RazorSupport.GeneratorDlls(project));
 
+        foreach (var csproj in CollectAnalyzerProjectCsprojs(project))
+        {
+            try
+            {
+                var dll = ResolveAnalyzerProjectDll(csproj, project.Options);
+                dlls.Add(dll);
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"Warning: cannot use analyzer project '{Path.GetFileNameWithoutExtension(csproj)}': {ex.Message}");
+            }
+        }
+
+        return (dlls.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), warnings);
+    }
+
+    private static List<string> CollectAnalyzerProjectCsprojs(Project project)
+    {
         // Analyzer project references (OutputItemType="Analyzer") ship generators from source
         // projects, e.g. OrchardCore.SourceGenerators (referenced from csproj XML by test
         // projects and injected into every project via the evaluated Commons.props import).
@@ -134,12 +150,19 @@ public static class SourceGeneratorRunner
             analyzerCsprojs.Add(csproj);
         }
 
-        foreach (var csproj in analyzerCsprojs.Distinct(StringComparer.OrdinalIgnoreCase))
+        return analyzerCsprojs.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static (List<(string Csproj, string Dll)> Projects, List<string> Warnings)
+        CollectAnalyzerProjectDlls(Project project)
+    {
+        var projects = new List<(string Csproj, string Dll)>();
+        var warnings = new List<string>();
+        foreach (var csproj in CollectAnalyzerProjectCsprojs(project))
         {
             try
             {
-                var dll = ResolveAnalyzerProjectDll(csproj, project.Options);
-                dlls.Add(dll);
+                projects.Add((csproj, ResolveAnalyzerProjectDll(csproj, project.Options)));
             }
             catch (Exception ex)
             {
@@ -147,7 +170,7 @@ public static class SourceGeneratorRunner
             }
         }
 
-        return (dlls.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList(), warnings);
+        return (projects, warnings);
     }
 
     // The OrchardCore generator is injected with a condition excluding itself; mirrors that here.
@@ -317,7 +340,32 @@ public static class SourceGeneratorRunner
             additionalTexts = additionalTexts.AddRange(
                 project.AdditionalFiles.Select(path => (AdditionalText)new ProjectAdditionalText(path)));
 
-        return RunGeneratorDriver(compilation, project, generators.ToImmutableArray(), additionalTexts);
+        var setupErrors = new List<string>();
+        if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+        {
+            var (analyzerProjects, analyzerWarnings) = CollectAnalyzerProjectDlls(project);
+            PrintWarnings(analyzerWarnings);
+            foreach (var (csproj, dll) in analyzerProjects)
+            {
+                try
+                {
+                    var adapter = AotAnalyzerHost.CreateGenerator(project, csproj, dll);
+                    if (adapter is not null) generators.Add(adapter);
+                }
+                catch (Exception ex)
+                {
+                    setupErrors.Add(
+                        $"AOT analyzer plugin for '{Path.GetFileNameWithoutExtension(csproj)}' failed: {ex.Message}");
+                }
+            }
+        }
+
+        var (result, errors) = RunGeneratorDriver(
+            compilation, project, generators.ToImmutableArray(), additionalTexts);
+        if (setupErrors.Count == 0) return (result, errors);
+
+        if (!string.IsNullOrEmpty(errors)) setupErrors.Add(errors);
+        return (result, string.Join("\n", setupErrors));
     }
 
     // Shared driver: builds CSharpGeneratorDriver with the project's parse options (implicit TFM
@@ -339,10 +387,7 @@ public static class SourceGeneratorRunner
         if (Environment.GetEnvironmentVariable("SHARP_TRACE_GENERATORS") == "1")
             Console.WriteLine($"[gens] running {generators.Length} generators for {project.ProjectName} ({additionalTexts.Length} additional files)");
 
-        var parseOptions = CSharpParseOptions.Default
-            .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
-            .WithPreprocessorSymbols(SharpUtils.GetSdkPreprocessorSymbols(project));
-        parseOptions = SharpUtils.ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
+        var parseOptions = GetParseOptions(project);
 
         if (Environment.GetEnvironmentVariable("SHARP_TRACE_GENERATORS") == "1")
             Console.WriteLine($"[gens] {project.ProjectName}: interceptors after seed='{SharpUtils.GetInterceptorsNamespacesOrEmpty(parseOptions)}'");
@@ -365,37 +410,53 @@ public static class SourceGeneratorRunner
 
         if (runResult.GeneratedTrees.Length > 0)
         {
-            // Re-parse generated trees with the project's parse options (TMF constants and
-            // interceptor namespaces apply to generated [InterceptsLocation] code too). Sources of
-            // interceptors also seed their own declared namespaces (e.g. the Configuration.Binder
-            // generator emits [InterceptsLocation] inside Microsoft.Extensions.Configuration.Binder.
-            // SourceGeneration, a namespace that the SDK injects through the package's build targets
-            // rather than any project property). Fold those in so generated interceptor callbacks
-            // are always opted in regardless of MSBuild wiring.
-            var seeding = parseOptions;
-            // Fold in namespaces that generated [InterceptsLocation] trees declare themselves on
-            // top of the project's configured interceptor namespaces.
-            var generatedNamespaces = new List<string>();
-            foreach (var tree in runResult.GeneratedTrees)
-            {
-                if (tree.ToString().IndexOf("InterceptsLocation", StringComparison.Ordinal) < 0) continue;
-                generatedNamespaces.AddRange(CollectDeclaredNamespaces(tree));
-            }
-            if (generatedNamespaces.Count > 0)
-            {
-                var combined = string.Join(";", generatedNamespaces.Distinct(StringComparer.Ordinal)
-                    .Append(project.InterceptorsNamespaces ?? ""));
-                seeding = SharpUtils.ApplyInterceptorsNamespaces(seeding, combined);
-            }
-            parseOptions = seeding;
-
-            var generatedTrees = runResult.GeneratedTrees.Select(tree =>
-                CSharpSyntaxTree.ParseText(tree.GetText(), parseOptions,
-                    Path.Combine(SharpUtils.GetGeneratedFileRoot(project), tree.FilePath)));
-            compilation = compilation.AddSyntaxTrees(generatedTrees);
+            compilation = AddGeneratedTrees(compilation, project,
+                runResult.GeneratedTrees.Select(tree => (tree.FilePath, tree.GetText())));
         }
 
         return (compilation, string.Join("\n", errors));
+    }
+
+    internal static CSharpParseOptions GetParseOptions(Project project)
+    {
+        var parseOptions = CSharpParseOptions.Default
+            .WithLanguageVersion(ResolveLanguageVersion(project.LangVersion))
+            .WithPreprocessorSymbols(SharpUtils.GetSdkPreprocessorSymbols(project));
+        return SharpUtils.ApplyInterceptorsNamespaces(parseOptions, project.InterceptorsNamespaces);
+    }
+
+    internal static CSharpCompilation AddGeneratedTrees(
+        CSharpCompilation compilation, Project project, IEnumerable<(string FilePath, SourceText Text)> generated)
+    {
+        var generatedList = generated.ToList();
+        if (generatedList.Count == 0) return compilation;
+
+        // Re-parse generated trees with the project's parse options (TMF constants and
+        // interceptor namespaces apply to generated [InterceptsLocation] code too). Sources of
+        // interceptors also seed their own declared namespaces (e.g. the Configuration.Binder
+        // generator emits [InterceptsLocation] inside Microsoft.Extensions.Configuration.Binder.
+        // SourceGeneration, a namespace that the SDK injects through the package's build targets
+        // rather than any project property). Fold those in so generated interceptor callbacks
+        // are always opted in regardless of MSBuild wiring.
+        var parseOptions = GetParseOptions(project);
+        var generatedNamespaces = new List<string>();
+        foreach (var (_, text) in generatedList)
+        {
+            if (text.ToString().IndexOf("InterceptsLocation", StringComparison.Ordinal) < 0) continue;
+            var tree = CSharpSyntaxTree.ParseText(text, parseOptions);
+            generatedNamespaces.AddRange(CollectDeclaredNamespaces(tree));
+        }
+        if (generatedNamespaces.Count > 0)
+        {
+            var combined = string.Join(";", generatedNamespaces.Distinct(StringComparer.Ordinal)
+                .Append(project.InterceptorsNamespaces ?? ""));
+            parseOptions = SharpUtils.ApplyInterceptorsNamespaces(parseOptions, combined);
+        }
+
+        var generatedTrees = generatedList.Select(item =>
+            CSharpSyntaxTree.ParseText(item.Text, parseOptions,
+                Path.Combine(SharpUtils.GetGeneratedFileRoot(project), item.FilePath)));
+        return compilation.AddSyntaxTrees(generatedTrees);
     }
 
     // The namespace(s) a generated tree declares (e.g. from the file that holds [InterceptsLocation]).
