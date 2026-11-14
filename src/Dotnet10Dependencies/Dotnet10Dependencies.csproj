@@ -107,6 +107,17 @@
     <Reference Include="Microsoft.AspNetCore.Http.RequestDelegateGenerator" Private="true">
       <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll</HintPath>
     </Reference>
+
+    <!-- The Razor MVC view/component compiler ships only inside the SDK's Microsoft.NET.Sdk.Razor
+         component, not in a reference pack or NuGet package. Referenced here so NativeAOT can root
+         its generator into the image; sharp expands $(MSBuildSDKsPath) to the embedded payload
+         during self-hosting (SharpUtils.CollectHintPathReferences). -->
+    <Reference Include="Microsoft.CodeAnalysis.Razor.Compiler" Private="true">
+      <HintPath>$(MSBuildSDKsPath)\Microsoft.NET.Sdk.Razor\source-generators\Microsoft.CodeAnalysis.Razor.Compiler.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.Razor.Utilities.Shared" Private="true">
+      <HintPath>$(MSBuildSDKsPath)\Microsoft.NET.Sdk.Razor\source-generators\Microsoft.AspNetCore.Razor.Utilities.Shared.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <!-- The stager takes no arguments: it reads this project's restore output (obj/project.assets.json)

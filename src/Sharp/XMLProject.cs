@@ -98,6 +98,12 @@ public class PropertyGroup
     [XmlElement(ElementName = "LangVersion")]
     public string? LangVersion { get; set; }
 
+    [XmlElement(ElementName = "EmitCompilerGeneratedFiles")]
+    public string? EmitCompilerGeneratedFiles { get; set; }
+
+    [XmlElement(ElementName = "CompilerGeneratedFilesOutputPath")]
+    public string? CompilerGeneratedFilesOutputPath { get; set; }
+
     [XmlElement(ElementName = "Nullable")]
     public string? Nullable { get; set; }
 
@@ -117,6 +123,9 @@ public class PropertyGroup
     // these are the switches that change the emitted native image or the ILC/link arguments.
     [XmlElement(ElementName = "PublishAot")]
     public string? PublishAot { get; set; }
+
+    [XmlElement(ElementName = "NativeLib")]
+    public string? NativeLib { get; set; }
 
     [XmlElement(ElementName = "PublishTrimmed")]
     public string? PublishTrimmed { get; set; }
@@ -224,6 +233,26 @@ public class NoneItem
     public string? Remove { get; set; }
 }
 
+[XmlRoot(ElementName = "AdditionalFiles")]
+public class AdditionalFileItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "Remove")]
+    public string? Remove { get; set; }
+}
+
+[XmlRoot(ElementName = "EmbeddedResource")]
+public class EmbeddedResourceItem
+{
+    [XmlAttribute(AttributeName = "Include")]
+    public string? Include { get; set; }
+
+    [XmlAttribute(AttributeName = "LogicalName")]
+    public string? LogicalName { get; set; }
+}
+
 [XmlRoot(ElementName = "ItemGroup")]
 public class ItemGroup
 {
@@ -234,6 +263,12 @@ public class ItemGroup
 
     [XmlElement(ElementName = "None")]
     public List<NoneItem> NoneItems { get; set; } = new();
+
+    [XmlElement(ElementName = "AdditionalFiles")]
+    public List<AdditionalFileItem> AdditionalFiles { get; set; } = new();
+
+    [XmlElement(ElementName = "EmbeddedResource")]
+    public List<EmbeddedResourceItem> EmbeddedResources { get; set; } = new();
 
     [XmlElement(ElementName = "PackageReference")]
     public List<PackageReference> PackageReferences { get; set; } = new();
@@ -430,12 +465,15 @@ public class Project
         EnableRequestDelegateGenerator = ElementValue(element, "EnableRequestDelegateGenerator"),
         EnableConfigurationBindingGenerator = ElementValue(element, "EnableConfigurationBindingGenerator"),
         LangVersion = ElementValue(element, "LangVersion"),
+        EmitCompilerGeneratedFiles = ElementValue(element, "EmitCompilerGeneratedFiles"),
+        CompilerGeneratedFilesOutputPath = ElementValue(element, "CompilerGeneratedFilesOutputPath"),
         Nullable = ElementValue(element, "Nullable"),
         DefineConstants = ElementValue(element, "DefineConstants"),
         InterceptorsNamespaces = ElementValue(element, "InterceptorsNamespaces"),
         InterceptorsPreviewNamespaces = ElementValue(element, "InterceptorsPreviewNamespaces"),
         Configuration = ElementValue(element, "Configuration"),
         PublishAot = ElementValue(element, "PublishAot"),
+        NativeLib = ElementValue(element, "NativeLib"),
         PublishTrimmed = ElementValue(element, "PublishTrimmed"),
         SelfContained = ElementValue(element, "SelfContained"),
         DebugType = ElementValue(element, "DebugType"),
@@ -478,6 +516,16 @@ public class Project
         {
             Include = AttributeValue(item, "Include"),
             Remove = AttributeValue(item, "Remove"),
+        }).ToList(),
+        AdditionalFiles = Children(element, "AdditionalFiles").Select(item => new AdditionalFileItem
+        {
+            Include = AttributeValue(item, "Include"),
+            Remove = AttributeValue(item, "Remove"),
+        }).ToList(),
+        EmbeddedResources = Children(element, "EmbeddedResource").Select(item => new EmbeddedResourceItem
+        {
+            Include = AttributeValue(item, "Include"),
+            LogicalName = AttributeValue(item, "LogicalName"),
         }).ToList(),
         PackageReferences = Children(element, "PackageReference").Select(reference => new PackageReference
         {

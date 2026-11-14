@@ -19,12 +19,15 @@ in-repo.
 
 ## User generators and analyzers under AOT
 
-The AOT compiler cannot currently load user-space source generators and analyzers. Candidate designs:
+The AOT compiler can now run user-space source generators by publishing each analyzer project as a
+NativeAOT shared library (`NativeLib=Shared`) with an unmanaged entry point. The host discovers
+`[Generator]` types from assembly metadata, passes sources/references/options through a versioned
+blittable struct ABI (UTF-8 spans over native memory, no JSON/file protocol), and merges the generated
+trees into the consumer compilation. Plugins are cached under the system temp directory by runtime,
+analyzer, and protocol content hashes.
 
-- register native generators at AOT-compile time;
-- run generators/analyzers through a Roslyn transformation and register the emitted `.g.cs` sources.
-
-The isolation and discovery story for user analyzers remains open.
+Remaining work: run diagnostic analyzers as well as generators, isolate or sandbox plugin execution,
+and add cache eviction. Analyzer-plugin builds currently re-enter `SharpCompiler.Publish`.
 
 ## Compiler bootstrap chain
 

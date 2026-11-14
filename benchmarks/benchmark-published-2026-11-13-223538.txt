@@ -1,0 +1,14 @@
+-------------- published AOT compiler vs dotnet build (Sharp.sln) --------------
+  commit: a52be1db8993-dirty
+  Sharp.Cli.exe  run1  wall 1.58s (exit 1)
+  Sharp.Cli.exe  run2  wall 1.43s (exit 1)   (no cache: always from scratch)
+  dotnet build           cold  wall 15.31s (incl. restore)
+  dotnet build           warm  wall 8.28s (incremental)
+  speed-up vs dotnet build cold: 9.67x
+---------------------------------------------------------------------
+  notes:
+  - ours is measured as the published signed native-AOT compiler (subprocess, wall clock)
+  - in-process JIT comparison lives in Compare_BuildSolution_Against_DotnetBuild
+  - ours has no incremental cache; dotnet build warm is incremental
+  - ours reports per-project FAIL for unsupported features (see main.md)
+  exe: src/Sharp.Cli/bin/Release/net10.0/linux-x64/publish/Sharp.Cli

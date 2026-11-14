@@ -128,6 +128,13 @@ namespace CustomCompiler
                 new Microsoft.AspNetCore.SourceGenerators.PublicProgramSourceGenerator().AsSourceGenerator()
                 );
 
+        // The Razor compiler that turns .cshtml/.razor AdditionalFiles into compiled MVC views and
+        // components. The SDK loads it dynamically from Microsoft.NET.Sdk.Razor, which NativeAOT
+        // cannot do; SourceGeneratorRunner adds this entry only for projects that actually have
+        // Razor inputs, so non-Razor builds pay only the assembly load.
+        public static ISourceGenerator GetRazorSourceGenerator()
+            => new Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator().AsSourceGenerator();
+
         // RequestDelegateGenerator is deliberately absent from both sets.
         //
         // The SDK keeps it OFF unless a project opts in with <EnableRequestDelegateGenerator>true</...>,
