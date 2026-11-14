@@ -132,16 +132,16 @@
   <Target Name="StageEmbeddedRefsPayload"
           BeforeTargets="AssignTargetPaths"
           Condition="'$(DesignTimeBuild)' != 'true'">
-    <!-- Restores, builds and runs the stager in one shot, so it is built exactly once. A
-         ProjectReference to the stager raced this Exec for the same obj/bin and failed intermittently
-         on a locked PayloadStager.deps.json; restore is a separate phase from build in
-         `dotnet build`, so the nested restore cannot contend with the outer one.
+    <!-- The stager project is also in Sharp.sln, so a solution build can compile it concurrently
+         with this Exec. Keep the nested restore, intermediate files and output in separate folders:
+         sharing obj/ or bin/ races the outer build (intermittently failing to copy apphost or
+         PayloadStager.deps.json).
 
          WorkingDirectory is load-bearing: it is what lets the stager open obj/project.assets.json
          without being told where it is. The child inherits the directory `dotnet build` was invoked
          from otherwise, which is the repo root, not this project. -->
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
-          Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile" />
+          Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)../../tools/PayloadStager/PayloadStager.csproj&quot; -c $(Configuration) --no-launch-profile -p:MSBuildProjectExtensionsPath=obj/stager/ -p:IntermediateOutputPath=obj/stager/ -p:OutputPath=bin/stager/" />
 
     <!-- The stager names the zip embedded-refs.<refpack>.zip; derive the embedded resource's logical
          name from the file, so this project never has to know the ref pack version. The name has to
