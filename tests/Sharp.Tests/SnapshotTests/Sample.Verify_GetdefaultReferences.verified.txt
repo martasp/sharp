@@ -44,8 +44,8 @@
     FilePath: ./Docker.DotNet.X509.dll
   },
   {
-    Display: ./Dotnet10Dependencies.dll,
-    FilePath: ./Dotnet10Dependencies.dll
+    Display: ./Dotnet11Dependencies.dll,
+    FilePath: ./Dotnet11Dependencies.dll
   },
   {
     Display: ./EmptyFiles.dll,
@@ -104,16 +104,8 @@
     FilePath: ./Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll
   },
   {
-    Display: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll,
-    FilePath: ./Microsoft.Extensions.DependencyInjection.Abstractions.dll
-  },
-  {
     Display: ./Microsoft.Extensions.DependencyModel.dll,
     FilePath: ./Microsoft.Extensions.DependencyModel.dll
-  },
-  {
-    Display: ./Microsoft.Extensions.Logging.Abstractions.dll,
-    FilePath: ./Microsoft.Extensions.Logging.Abstractions.dll
   },
   {
     Display: ./Microsoft.Extensions.Logging.Generators.dll,

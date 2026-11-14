@@ -60,7 +60,7 @@ await File.WriteAllBytesAsync(Path.Combine(outputDir, "MyApp.pdb"), pdbStream.To
 var runtimeConfig = $$"""
 {
   "runtimeOptions": {
-    "tfm": "net10.0",
+    "tfm": "net11.0",
     "framework": {
       "name": "Microsoft.NETCore.App",
       "version": "{{Environment.Version}}"

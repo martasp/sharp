@@ -63,7 +63,7 @@ public class ConfigurationBindingGeneratorTests
         File.WriteAllText(Path.Combine(root, "Lib", "Lib.csproj"), """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <OutputType>Library</OutputType>
               </PropertyGroup>
             </Project>
@@ -88,7 +88,7 @@ public class ConfigurationBindingGeneratorTests
         File.WriteAllText(Path.Combine(root, "App", "App.csproj"), $"""
             <Project Sdk="Microsoft.NET.Sdk.Web">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Nullable>enable</Nullable>
                 <ImplicitUsings>enable</ImplicitUsings>
                 {enable}

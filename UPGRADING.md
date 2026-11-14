@@ -7,13 +7,13 @@ version literals and names, not a redesign of the mechanism.
 ## The coupling
 
 Two things determine what the payload holds: the pinned version literals in
-`src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`, and the compiler TFM in the project files.
+`src/Dotnet11Dependencies/Dotnet11Dependencies.csproj`, and the compiler TFM in the project files.
 
 | Thing | Where | Example |
 |---|---|---|
-| Compiler's own TFM | every `.csproj` | `net10.0` |
-| Ref pack, runtime, host pack and DependencyModel the payload is staged from | pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | `10.0.11` |
-| ILLink analyzers | pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` | `10.0.12` |
+| Compiler's own TFM | every `.csproj` | `net11.0` |
+| Ref pack, runtime, host pack and DependencyModel the payload is staged from | pinned literal in `src/Dotnet11Dependencies/Dotnet11Dependencies.csproj` | `11.0.0` |
+| ILLink analyzers | pinned literal in `src/Dotnet11Dependencies/Dotnet11Dependencies.csproj` | `11.0.0` |
 
 `EmbeddedSdkRefs.FrameworkName` is `"net" + Environment.Version.Major + ".0"` — the compiler's *own*
 runtime major, not the target project's. A `net11.0` compiler therefore looks under
@@ -23,9 +23,9 @@ compiler still on `net10.0` (or vice versa) resolves to a folder that does not e
 The resource name is `embedded-refs.<refpack>.zip` and carries the pinned ref pack version. Nothing has
 to keep it in step with the runtime: `Payloads.ZipResourceName` *discovers* the matching resource in
 its own assembly instead of comparing against a constant, and a compiler sharp produces for itself
-embeds the same versioned payload into `Dotnet10Dependencies` through `Output.WriteDll`. A first
+embeds the same versioned payload into `Dotnet11Dependencies` through `Output.WriteDll`. A first
 version of the design hardcoded the name and derived the embedded name from whatever SDK happened to
-build it, so any machine with a different SDK patch (CI's `setup-dotnet` installs the newest `10.0.x`)
+build it, so any machine with a different SDK patch (CI's `setup-dotnet` installs the newest `11.0.x`)
 embedded the resource under its own version while the constant asked for the write-in one — the build
 stayed green and the compiler failed its run-time lookup.
 
@@ -33,67 +33,67 @@ stayed green and the compiler failed its run-time lookup.
 
 ### 1. Install the SDK
 - `~/.config/mise/config.toml` has `dotnet = "latest"`; pin it (e.g. `dotnet = "11.0.100"`) or install
-  .NET 11 directly. Only .NET 10 is present today.
+  .NET 11 directly. Only .NET 11 is present today.
 - `README.md` → `## Requirements` names the SDK version.
 
 ### 2. Payload pipeline
-- Bump the pinned version literals in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj` — the
-  ref pack, runtime, host pack and DependencyModel `10.0.11` and the ILLink `10.0.12` — plus the
+- Bump the pinned version literals in `src/Dotnet11Dependencies/Dotnet11Dependencies.csproj` — the
+  ref pack, runtime, host pack and DependencyModel `11.0.0` and the ILLink `11.0.0` — plus the
   compiler TFM in the step below. The runtime *discovers* `embedded-refs.<refpack>.zip` by name, so it
   needs no change of its own.
 - `tools/PayloadStager` needs no code change: it takes no arguments, reads the ref-pack version and
-  every pack folder back from `src/Dotnet10Dependencies/obj/project.assets.json`, and stamps
+  every pack folder back from `src/Dotnet11Dependencies/obj/project.assets.json`, and stamps
   `$(NETCoreSdkVersion)` from the SDK it runs under.
-- After a build, verify `src/Dotnet10Dependencies/obj/payload/embedded-refs.<refpack>.zip` exists and
+- After a build, verify `src/Dotnet11Dependencies/obj/payload/embedded-refs.<refpack>.zip` exists and
   carries the new version.
 
 ### 3. Compiler + first-party TFMs
-`<TargetFramework>net10.0</TargetFramework>` → `net11.0` in:
+`<TargetFramework>net11.0</TargetFramework>` (change to `net12.0` for the next major) in:
 - `src/Sharp/Sharp.csproj`
 - `src/Sharp.Cli/Sharp.Cli.csproj`
-- `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
+- `src/Dotnet11Dependencies/Dotnet11Dependencies.csproj`
 - `tools/PayloadStager/PayloadStager.csproj`
 - `tests/Sharp.Tests/Sharp.Tests.csproj`
-- `DotnetRuntime10/`, `DotnetRuntimeHostExe/`, `SimplePlayground/`
+- `DotnetRuntime11/`, `DotnetRuntimeHostExe/`, `SimplePlayground/`
 
-### 4. Fallback TFM literals
-None to touch - the ~14 `?? "net10.0"` fallbacks and the restored pack default are all
+### 4. Fallback TFM literal
+None to touch - the ~14 `?? "net11.0"` fallbacks and the restored pack default are all
 `DefaultTargetFramework.Value` in `src/Sharp/DefaultTargetFramework.cs`; bump that one line.
 It is the fragile one: nothing fails if it is missed for a net11 build, the out-of-date TFM is just
 silently assumed when the target does not state one.
 
 ### 5. Names carrying the major
 Only two, and they are cosmetic — rename only if you want the major gone:
-- `Dotnet10Dependencies` — project name, assembly name, `namespace Dotnet10Dependencies`, and the
+- `Dotnet11Dependencies` — project name, assembly name, `namespace Dotnet11Dependencies`, and the
   `using` in `EmbeddedSdkRefs.cs`. Referenced by `Sharp.csproj` and the solution.
-- `DotnetRuntime10` — test fixture project + `namespace DotnetRuntime10`, referenced by
+- `DotnetRuntime11` — test fixture project + `namespace DotnetRuntime11`, referenced by
   `Sharp.sln` and asserted in `SolutionTests.cs`.
 
-Note `Dotnet10Dependencies` now also appears in `SolutionTests.Parse_RootSolution_Snapshot.verified.txt`
+Note `Dotnet11Dependencies` now also appears in `SolutionTests.Parse_RootSolution_Snapshot.verified.txt`
 and `SnapshotTests/Sample.Verify_GetdefaultReferences.verified.txt`, so a rename regenerates those.
 
 ### 6. Package versions
-- `Microsoft.NET.ILLink.Tasks` — the pinned literal in `src/Dotnet10Dependencies/Dotnet10Dependencies.csproj`
-  (the only reference; `Sharp` gets ILLink through `Dotnet10Dependencies` and the SDK's own
+- `Microsoft.NET.ILLink.Tasks` — the pinned literal in `src/Dotnet11Dependencies/Dotnet11Dependencies.csproj`
+  (the only reference; `Sharp` gets ILLink through `Dotnet11Dependencies` and the SDK's own
   `PublishAot` bring-up).
-- `System.Reflection.MetadataLoadContext` `10.0.1`.
-- Roslyn `Microsoft.CodeAnalysis*` `5.9.0` — bump to whatever SDK 11 bundles (Roslyn's major is
+- `System.Reflection.MetadataLoadContext` `11.0.0`.
+- Roslyn `Microsoft.CodeAnalysis*` `5.12.0` — bump to whatever SDK 11 bundles (Roslyn's major is
   independent of the SDK major; verify against the installed SDK, do not assume `+1`).
 
 ### 7. Scripts
-`publish.bat`, `sign-test-outputs.bat`, `install.sh` hardcode `net10.0` paths.
+`publish.bat`, `sign-test-outputs.bat`, `install.sh` hardcode `net11.0` paths.
 
 ### 8. Fixtures and snapshots
 - ~16 project files under `tests/TestExampleProjects/`, `tests/PackageCacheFixtures/`, `testProjects/`.
-- 8 Verify snapshot files contain `net10.0`; the byte-parity snapshots (`CliComparisonTests`,
+- 8 Verify snapshot files contain `net11.0`; the byte-parity snapshots (`CliComparisonTests`,
   `CliCommandParityTests`) may also shift if the SDK changes its terminal-logger output. Regenerate
   rather than hand-edit.
 
 ## Validation
 
 ```
-dotnet test Sharp.sln -c Release          # expect 124/124
-bash publish.sh                                     # AOT CLI
+dotnet test Sharp.sln -c Release          # full suite passes
+bash publish.sh                           # AOT CLI
 # then compile a real project with the published binary and confirm the cache:
 #   ~/.cache/sharp/<hash>/sdk/<new-refpack>/
 ```
@@ -103,5 +103,5 @@ this locally — that path only runs in CI.
 
 ## Make this cheaper
 
-Done on this branch: the ~14 hand-written `net10.0` fallbacks are now the single
+Done on this branch: the ~14 hand-written `net11.0` fallbacks are now the single
 `DefaultTargetFramework.Value` constant, so the checklist above no longer has a literal-grep step.

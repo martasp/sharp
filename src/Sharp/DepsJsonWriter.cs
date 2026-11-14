@@ -51,7 +51,7 @@ public static class DepsJsonWriter
         }
     }
 
-    // LockFileTarget.TargetFramework.DotNetFrameworkName: "net10.0" -> ".NETCoreApp,Version=v10.0".
+    // LockFileTarget.TargetFramework.DotNetFrameworkName: "net11.0" -> ".NETCoreApp,Version=v11.0".
     private static string DotNetFrameworkName(string tfm)
     {
         if (tfm.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase))
@@ -497,7 +497,7 @@ public static class DepsJsonWriter
         }
 
         // Culture of a satellite resource asset, derived from its package-relative path:
-        // "lib/net10.0/fr/Foo.resources.dll" -> "fr". NuGet stamps the same value as "locale"
+        // "lib/net11.0/fr/Foo.resources.dll" -> "fr". NuGet stamps the same value as "locale"
         // on the lock file item, which is what the SDK writes into the resources node.
         private static string CultureOf(string relative)
         {
@@ -590,7 +590,7 @@ public static class DepsJsonWriter
             : null;
 
     // The minimum version carried by a lock dependency. Values are either a bare resolved version
-    // ("10.0.0") or a NuGet range ("[10.0.0, )") - the SDK uses VersionRange.MinVersion.
+    // ("11.0.0") or a NuGet range ("[11.0.0, )") - the SDK uses VersionRange.MinVersion.
     private static string MinVersion(string? range)
     {
         if (string.IsNullOrWhiteSpace(range)) return "0.0.0";

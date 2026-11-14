@@ -28,7 +28,7 @@ public class CleanTests
         Directory.Exists(Path.Combine(project.Root, "obj")).ShouldBeFalse();
 
         // Untouched.
-        Directory.Exists(Path.Combine(project.Root, "bin", "Debug", "net10.0")).ShouldBeTrue();
+        Directory.Exists(Path.Combine(project.Root, "bin", "Debug", "net11.0")).ShouldBeTrue();
         File.Exists(Path.Combine(project.Root, "app.csproj")).ShouldBeTrue();
         File.Exists(Path.Combine(project.Root, "Program.cs")).ShouldBeTrue();
     }
@@ -117,7 +117,7 @@ public class CleanTests
             File.WriteAllText(Path.Combine(Root, "app.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Exe</OutputType>
                   </PropertyGroup>
                 </Project>
@@ -127,9 +127,9 @@ public class CleanTests
 
         public void CreateBuildOutputs()
         {
-            CreateFile(Path.Combine(Root, "myc", "Debug", "net10.0", "app.dll"));
-            CreateFile(Path.Combine(Root, "obj", "Debug", "net10.0", "app.csproj.nuget.g.props"));
-            CreateFile(Path.Combine(Root, "bin", "Debug", "net10.0", "app.dll"));
+            CreateFile(Path.Combine(Root, "myc", "Debug", "net11.0", "app.dll"));
+            CreateFile(Path.Combine(Root, "obj", "Debug", "net11.0", "app.csproj.nuget.g.props"));
+            CreateFile(Path.Combine(Root, "bin", "Debug", "net11.0", "app.dll"));
         }
 
         private static void CreateFile(string path)

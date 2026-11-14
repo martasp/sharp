@@ -25,8 +25,8 @@ public static class NuGetTfm
         var candidate = Parse(candidateTfm);
         if (candidate.Kind == Kind.Unknown) return 0;
 
-        // A candidate that targets a specific platform (e.g. net10.0-ios26.0) is only usable by a
-        // target declaring the same platform. Without this a plain `net10.0` target would pick the
+        // A candidate that targets a specific platform (e.g. net11.0-ios26.0) is only usable by a
+        // target declaring the same platform. Without this a plain `net11.0` target would pick the
         // iOS/tvOS lib folder (whose platform suffix it otherwise ignores) over the compatible net8.0.
         if (candidate.Platform.Length > 0 &&
             !string.Equals(candidate.Platform, target.Platform, StringComparison.OrdinalIgnoreCase))
@@ -80,7 +80,7 @@ public static class NuGetTfm
     {
         if (string.IsNullOrWhiteSpace(tfm)) return default;
 
-        // Split "net10.0-windows7.0" into framework "net10.0" and platform "windows7.0".
+        // Split "net11.0-windows7.0" into framework "net11.0" and platform "windows7.0".
         var separator = tfm.IndexOf('-');
         var value = (separator < 0 ? tfm : tfm[..separator]).Trim().ToLowerInvariant();
         var platform = separator < 0 ? "" : PlatformName(tfm[(separator + 1)..]);
@@ -95,7 +95,7 @@ public static class NuGetTfm
         {
             var rest = value.Substring(3);
 
-            // "net6.0"/"net10.0" (.NET Core+, first segment >= 5) vs "net472"/"net48" (legacy .NET Framework).
+            // "net6.0"/"net11.0" (.NET Core+, first segment >= 5) vs "net472"/"net48" (legacy .NET Framework).
             if (rest.Contains('.') && ParseFirstSegment(rest) >= 5)
                 return ParseVersion(rest, "", Kind.Core, platform);
 

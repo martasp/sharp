@@ -1,5 +1,5 @@
 ﻿NATIVE build                                                                             | DOTNET build --nologo --no-restore --no-incremental                                     
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-HelloParityFixture net10.0 succeeded (<secs>) → bin/Debug/net10.0/HelloParityFixture.dll | HelloParityFixture net10.0 succeeded (<secs>) → bin/Debug/net10.0/HelloParityFixture.dll
+HelloParityFixture net11.0 succeeded (<secs>) → bin/Debug/net11.0/HelloParityFixture.dll | HelloParityFixture net11.0 succeeded (<secs>) → bin/Debug/net11.0/HelloParityFixture.dll
                                                                                          |                                                                                         
 Build succeeded in <secs>                                                                | Build succeeded in <secs>                                                               

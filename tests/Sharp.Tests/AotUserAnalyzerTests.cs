@@ -11,7 +11,7 @@ public class AotUserAnalyzerTests
 {
     private static readonly string Sharp = Path.Combine(
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..")),
-        "src", "Sharp.Cli", "bin", "Release", "net10.0",
+        "src", "Sharp.Cli", "bin", "Release", "net11.0",
         OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
         OperatingSystem.IsWindows() ? "Sharp.Cli.exe" : "Sharp.Cli");
 
@@ -34,10 +34,10 @@ public class AotUserAnalyzerTests
             File.WriteAllText(Path.Combine(root, "Generator", "Generator.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                   </PropertyGroup>
                   <ItemGroup>
-                    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+                    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
                   </ItemGroup>
                 </Project>
                 """);
@@ -74,7 +74,7 @@ public class AotUserAnalyzerTests
             File.WriteAllText(Path.Combine(root, "Consumer", "Consumer.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                   </PropertyGroup>
                   <ItemGroup>
                     <AdditionalFiles Include="probe.txt" />

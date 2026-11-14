@@ -41,7 +41,7 @@ public class PerformanceComparisonTests
     // override still wins for custom seeds.
     private static readonly string PublishedCompilerExe =
         Environment.GetEnvironmentVariable("SHARP_PUBLISHED_EXE")
-        ?? Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Release", "net10.0",
+        ?? Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Release", "net11.0",
             OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
             OperatingSystem.IsWindows() ? "Sharp.Cli.exe" : "Sharp.Cli");
 

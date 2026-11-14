@@ -103,9 +103,9 @@ jobs:
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
-          dotnet-version: "10.0.404"
+          dotnet-version: "11.0.100"
       - name: Verify .NET SDK
-        run: test "$(dotnet --version)" = "10.0.404"
+        run: test "$(dotnet --version)" = "11.0.100"
       - name: Publish
         run: dotnet publish "$PROJECT" -r linux-x64 -c Release -p:Version="${{ needs.plan.outputs.version }}" -o dist
       - name: Package
@@ -131,13 +131,13 @@ jobs:
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
-          dotnet-version: "10.0.404"
+          dotnet-version: "11.0.100"
       - name: Verify .NET SDK
         shell: pwsh
         run: |
           $version = dotnet --version
-          if ($version -ne "10.0.404") {
-            throw "Expected .NET SDK 10.0.404, got $version"
+          if ($version -ne "11.0.100") {
+            throw "Expected .NET SDK 11.0.100, got $version"
           }
       - name: Publish
         shell: pwsh
