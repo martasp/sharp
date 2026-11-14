@@ -25,10 +25,10 @@ public class SpectreConsoleSupportTests
             File.WriteAllText(Path.Combine(generatorDirectory, "Generator.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                   </PropertyGroup>
                   <ItemGroup>
-                    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+                    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
                   </ItemGroup>
                 </Project>
                 """);
@@ -87,7 +87,7 @@ public class SpectreConsoleSupportTests
             File.WriteAllText(Path.Combine(consumerDirectory, "Consumer.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <LangVersion>13</LangVersion>
                   </PropertyGroup>
                   <ItemGroup>
@@ -162,7 +162,7 @@ public class SpectreConsoleSupportTests
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
                     <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
                   </PropertyGroup>
@@ -215,7 +215,7 @@ public class SpectreConsoleSupportTests
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <DefineConstants>$(DefineConstants);EXTRA</DefineConstants>
                   </PropertyGroup>
                 </Project>
@@ -249,14 +249,14 @@ public class SpectreConsoleSupportTests
         try
         {
             WriteContentFile(root, "net8.0", "Net8.cs");
-            WriteContentFile(root, "net10.0", "Net10.cs");
+            WriteContentFile(root, "net11.0", "Net11.cs");
             WriteContentFile(root, "netstandard2.0", "NetStandard.cs");
 
-            var files = NuGetPackage.FindPackageSourceFiles(root, "net10.0");
+            var files = NuGetPackage.FindPackageSourceFiles(root, "net11.0");
 
             files.ShouldBe(new[]
             {
-                Path.Combine(root, "contentFiles", "cs", "net10.0", "Net10.cs")
+                Path.Combine(root, "contentFiles", "cs", "net11.0", "Net11.cs")
             });
         }
         finally
@@ -277,7 +277,7 @@ public class SpectreConsoleSupportTests
             var source = Path.Combine(sharedDirectory, "Shared.cs");
             File.WriteAllText(source, "internal static class Shared { }");
 
-            var files = NuGetPackage.FindPackageSourceFiles(root, "net10.0");
+            var files = NuGetPackage.FindPackageSourceFiles(root, "net11.0");
 
             files.ShouldBe(new[] { source });
         }
@@ -290,11 +290,11 @@ public class SpectreConsoleSupportTests
     [Fact]
     public void PackageLooks_UnguardedEmptyPaths_AreSafe()
     {
-        NuGetPackage.FindPackageSourceFiles("", "net10.0").ShouldBeEmpty();
-        NuGetPackage.FindPackageSourceFiles(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), "net10.0")
+        NuGetPackage.FindPackageSourceFiles("", "net11.0").ShouldBeEmpty();
+        NuGetPackage.FindPackageSourceFiles(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), "net11.0")
             .ShouldBeEmpty();
-        NuGetPackage.ReadDependencies("", "net10.0").ShouldBeEmpty();
-        NuGetPackage.ReadDependencies(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), "net10.0")
+        NuGetPackage.ReadDependencies("", "net11.0").ShouldBeEmpty();
+        NuGetPackage.ReadDependencies(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), "net11.0")
             .ShouldBeEmpty();
     }
 
@@ -302,7 +302,7 @@ public class SpectreConsoleSupportTests
         File.WriteAllText(projectPath, $"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <LangVersion>{langVersion}</LangVersion>
               </PropertyGroup>
             </Project>

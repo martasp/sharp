@@ -462,9 +462,23 @@ public static class SourceGeneratorRunner
         }
 
         var generatedTrees = generatedList.Select(item =>
-            CSharpSyntaxTree.ParseText(item.Text, parseOptions,
+            CSharpSyntaxTree.ParseText(NormalizeGeneratedText(item.Text), parseOptions,
                 Path.Combine(SharpUtils.GetGeneratedFileRoot(project), item.FilePath)));
         return compilation.AddSyntaxTrees(generatedTrees);
+    }
+
+    // Some targeting-pack generators (notably the ASP.NET Core minimal-API Program generator) embed
+    // platform line endings in their emitted literals. The analyzer NuGet package and the copy that
+    // ships inside the SDK can therefore differ only by CRLF vs LF, which changes the PDB document
+    // checksum even though the compiled code is identical. Normalize to the SDK's LF form so output
+    // stays byte-for-byte comparable across builds of the same generator version.
+    private static SourceText NormalizeGeneratedText(SourceText text)
+    {
+        var value = text.ToString();
+        if (value.IndexOf('\r') < 0) return text;
+
+        var normalized = value.Replace("\r\n", "\n").Replace('\r', '\n');
+        return SourceText.From(normalized, text.Encoding ?? Encoding.UTF8, text.ChecksumAlgorithm);
     }
 
     // The namespace(s) a generated tree declares (e.g. from the file that holds [InterceptsLocation]).

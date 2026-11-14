@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
-using Dotnet10Dependencies;
+using Dotnet11Dependencies;
 using Sharp;
 using Shouldly;
 using Xunit;
@@ -23,7 +23,7 @@ public class PublishTests
         var result = SharpCompiler.Publish(new PublishOptions(project.Root));
 
         result.Success.ShouldBeTrue(result.Errors);
-        var publishDir = Path.Combine(project.Root, "myc", "Release", "net10.0", "publish");
+        var publishDir = Path.Combine(project.Root, "myc", "Release", "net11.0", "publish");
         result.PublishDirectory.ShouldBe(publishDir);
         File.Exists(Path.Combine(publishDir, "app.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(publishDir, "app.runtimeconfig.json")).ShouldBeTrue();
@@ -93,14 +93,14 @@ public class PublishTests
     [Fact]
     public void SelfHostedPayloadOwner_EmbedsPayloadResource()
     {
-        using var project = new TempProject("Dotnet10Dependencies");
+        using var project = new TempProject("Dotnet11Dependencies");
         project.WriteProject(publishAot: false);
 
         var result = SharpCompiler.Build(project.Root);
 
         result.Success.ShouldBeTrue(result.Errors);
         var dll = Path.Combine(
-            project.Root, "myc", "Debug", "net10.0", "Dotnet10Dependencies.dll");
+            project.Root, "myc", "Debug", "net11.0", "Dotnet11Dependencies.dll");
         File.Exists(dll).ShouldBeTrue();
 
         var context = new AssemblyLoadContext("payload-owner-test", isCollectible: true);
@@ -148,7 +148,7 @@ public class PublishTests
 
         // Simulate a previous default publish under the build output. Its binary/.dbg must never be
         // copied back into the next publish (that recursed into linux-x64/publish/linux-x64/...).
-        var buildOutput = Path.Combine(project.Root, "myc", "Release", "net10.0");
+        var buildOutput = Path.Combine(project.Root, "myc", "Release", "net11.0");
         var stalePublish = Path.Combine(buildOutput, "linux-x64", "publish");
         Directory.CreateDirectory(stalePublish);
         File.WriteAllText(Path.Combine(stalePublish, "stale.txt"), "stale");
@@ -164,7 +164,7 @@ public class PublishTests
         File.Exists(Path.Combine(publishDir, "linux-x64", "publish", "stale.txt")).ShouldBeFalse();
 
         var responseFile = Path.Combine(
-            project.Root, "obj", "Release", "net10.0", "linux-x64", "native", "app.ilc.rsp");
+            project.Root, "obj", "Release", "net11.0", "linux-x64", "native", "app.ilc.rsp");
         var ilcArguments = File.ReadAllText(responseFile);
         ilcArguments.ShouldContain("--targetos:linux");
         ilcArguments.ShouldContain("--targetarch:x64");
@@ -243,7 +243,7 @@ public class PublishTests
             File.WriteAllText(ProjectPath, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Exe</OutputType>
                     <PublishAot>{publishAot.ToString().ToLowerInvariant()}</PublishAot>
                     {rid}

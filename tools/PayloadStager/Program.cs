@@ -13,12 +13,12 @@
 // "where is the root" answer changes - but the *sources* are packages, so the same `dotnet build`
 // produces the same payload anywhere.
 //
-// It takes no arguments. MSBuild runs it with the working directory set to Dotnet10Dependencies, so
+// It takes no arguments. MSBuild runs it with the working directory set to Dotnet11Dependencies, so
 // it reads that project's own restore output, obj/project.assets.json, to learn the NuGet
 // global-packages folder and which packs were downloaded, and derives everything else - the
 // reference-pack version, the RID-qualified pack folders, the SDK version, the target framework -
 // from that file and the environment. Keeping the decisions here rather than in the csproj is what
-// lets Dotnet10Dependencies.csproj stay a list of packages plus one Exec, with none of the path
+// lets Dotnet11Dependencies.csproj stay a list of packages plus one Exec, with none of the path
 // plumbing that used to mirror all of this as a dozen quoted command-line arguments.
 //
 // This is deliberately C# rather than an MSBuild target: the staging is real logic with real
@@ -351,7 +351,7 @@ file sealed class NuGetAssets
             string.Join(", ", _downloads.Keys.Order()));
     }
 
-    // downloadDependencies record a version range like "[10.0.11, 10.0.11]"; the lower bound is the
+    // downloadDependencies record a version range like "[11.0.0, 11.0.0]"; the lower bound is the
     // version restore actually used.
     private static string LowerBound(string range) => range.Trim('[', ']').Split(',')[0].Trim();
 

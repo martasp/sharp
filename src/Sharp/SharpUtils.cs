@@ -438,7 +438,7 @@ public static class SharpUtils
         }
 
     // The two sources of the analyzer assemblies the compiler links (mirrors the HintPath refs in
-    // Dotnet10Dependencies.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
+    // Dotnet11Dependencies.csproj): the SDK targeting-pack analyzers and the ILLink.Tasks package analyzers.
     private static readonly string[] RefPackAnalyzerFileNames =
     {
         "System.Text.RegularExpressions.Generator.dll",
@@ -447,15 +447,15 @@ public static class SharpUtils
         "Microsoft.Interop.LibraryImportGenerator.dll",
         "Microsoft.Interop.ComInterfaceGenerator.dll",
         "Microsoft.Interop.JavaScript.JSImportGenerator.dll",
+        "Microsoft.Extensions.Logging.Generators.dll",
+        "Microsoft.Extensions.Options.SourceGeneration.dll",
     };
 
-    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in Dotnet10Dependencies.csproj.
+    // The ASP.NET Core targeting-pack generators, mirroring the HintPath refs in Dotnet11Dependencies.csproj.
     // These live in a *different* payload directory than the NETCore set above.
     private static readonly string[] AspNetRefPackAnalyzerFileNames =
     {
         "Microsoft.AspNetCore.App.SourceGenerators.dll",
-        "Microsoft.Extensions.Logging.Generators.dll",
-        "Microsoft.Extensions.Options.SourceGeneration.dll",
         "Microsoft.Extensions.Validation.ValidationsGenerator.dll",
         "Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll",
         "Microsoft.AspNetCore.Http.RequestDelegateGenerator.dll",
@@ -573,8 +573,8 @@ public static class SharpUtils
         return names;
     }
 
-    // "net10.0", "net10.0-windows", "netcoreapp3.1" -> "10.0"/"3.1" so the matching installed
-    // shared framework version folder (e.g. "10.0.11") is selected.
+    // "net11.0", "net11.0-windows", "netcoreapp3.1" -> "11.0"/"3.1" so the matching installed
+    // shared framework version folder (e.g. "11.0.0") is selected.
     [Pure]
     private static bool FrameworkFolderMatches(string folderPath, string targetFramework)
     {
@@ -589,7 +589,7 @@ public static class SharpUtils
     private static bool MatchesTargetFramework(string assetFramework, string projectFramework)
     {
         if (string.Equals(assetFramework, projectFramework, StringComparison.OrdinalIgnoreCase)) return true;
-        // Asset entries can be fully-qualified (e.g. "net10.0"), while a project may multi-target;
+        // Asset entries can be fully-qualified (e.g. "net11.0"), while a project may multi-target;
         // match by the numeric version shape only as a fallback.
         return FrameworkFolderMatches(assetFramework + ".0", projectFramework);
     }
@@ -597,7 +597,7 @@ public static class SharpUtils
     // FEATURE: <Reference HintPath="..."> support. Real MSBuild resolves these (often property-driven,
     // e.g. `$(PkgMicrosoft_NET_ILLink_Tasks)\analyzers\...`); the native compiler previously only
     // handled ProjectReference/PackageReference items, so projects referencing DLLs by HintPath (like
-    // Dotnet10Dependencies.csproj, via the ILLink/Roslyn generator analyzers) failed to compile under
+    // Dotnet11Dependencies.csproj, via the ILLink/Roslyn generator analyzers) failed to compile under
     // self-hosting. Only the analyzer/SDK property tokens this codebase actually uses are expanded;
     // anything else is skipped rather than emulating MSBuild property evaluation.
     [Query]
@@ -1170,6 +1170,7 @@ public static class SharpUtils
         global using System.IO;
         global using System.Linq;
         global using System.Net.Http;
+        global using System.Net.Http.Json;
         global using System.Threading;
         global using System.Threading.Tasks;
         """;
@@ -1524,9 +1525,9 @@ public static class SharpUtils
         """;
     }
 
-    // The embedded SDK records the exact runtime it was built against (10.0.11 here), but the app
+    // The embedded SDK records the exact runtime it was built against (11.0.0 here), but the app
     // is compiled and run on some other machine, where that patch need not exist. The host only
-    // ever rolls *forward*, so asking for 10.0.11 on a machine whose newest patch is 10.0.10 dies
+    // ever rolls *forward*, so asking for 11.0.0 on a machine whose newest 11.x patch is older dies
     // with "Could not load file or assembly 'System.Runtime'" - which is how CI went red on this
     // while every local run passed. The SDK can use the exact version because it writes the one
     // installed on the machine doing the building; we have no such guarantee, so request the
@@ -1534,9 +1535,9 @@ public static class SharpUtils
     // An app can only run on a framework at least as new as the one it was compiled against, so the
     // framework named here has to come from the project's own TargetFramework. Taking it from the
     // SDK instead is wrong twice over: it ignores what the project actually targets, and it names a
-    // patch that need not be installed where the app runs. On CI that handed a net10.0 app a net9.0
-    // framework - the runner keeps 8.x, 9.x and 10.x side by side - and it aborted with "Could not
-    // load file or assembly 'System.Runtime, Version=10.0.0.0'".
+    // patch that need not be installed where the app runs. On CI that handed a net11.0 app a net9.0
+    // framework - the runner keeps older majors side by side - and it aborted with "Could not
+    // load file or assembly 'System.Runtime, Version=11.0.0.0'".
     //
     // The major.minor baseline plus rollForward lets any installed patch of that major.minor satisfy
     // the app, which is what makes a published binary portable across machines.
@@ -1554,8 +1555,8 @@ public static class SharpUtils
         // No usable TargetFramework on the project: fall back to the embedded SDK's runtime, still
         // reduced to a major.minor baseline rather than a specific patch.
         var embeddedParts = EmbeddedSdkRefs.RuntimeVersion.Split('.');
-        var tfm = embeddedParts.Length >= 2 ? $"net{embeddedParts[0]}.{embeddedParts[1]}" : "net10.0";
-        var baseline = embeddedParts.Length >= 2 ? $"{embeddedParts[0]}.{embeddedParts[1]}.0" : "10.0.0";
+        var tfm = embeddedParts.Length >= 2 ? $"net{embeddedParts[0]}.{embeddedParts[1]}" : "net11.0";
+        var baseline = embeddedParts.Length >= 2 ? $"{embeddedParts[0]}.{embeddedParts[1]}.0" : "11.0.0";
         return (tfm, baseline);
     }
 

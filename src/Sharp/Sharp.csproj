@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PublishAot>true</PublishAot>
@@ -12,19 +12,19 @@
     <EnableAotAnalyzer>true</EnableAotAnalyzer>
   </PropertyGroup>
 
-  <!-- Match the Roslyn 5.9.0 version used by the .NET 10 SDK analyzers -->
+  <!-- Match the Roslyn 5.12.0 version used by the .NET 11 SDK analyzers -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.12.0" />
   </ItemGroup>
 
   <!-- Every SDK dependency the compiler binds - the targeting packs, the source generators, the
        ILLink analyzers, the apphost template, Microsoft.Extensions.DependencyModel, and the
-       AnalyzerRegistry that statically constructs them - is owned by Dotnet10Dependencies. This
+       AnalyzerRegistry that statically constructs them - is owned by Dotnet11Dependencies. This
        project carries a single reference and no payload configuration of its own. -->
   <ItemGroup>
-    <ProjectReference Include="..\Dotnet10Dependencies\Dotnet10Dependencies.csproj" />
+    <ProjectReference Include="..\Dotnet11Dependencies\Dotnet11Dependencies.csproj" />
   </ItemGroup>
 
   <!-- The protocol is compiled normally and embedded verbatim for the generated plugin shim.
@@ -43,11 +43,11 @@
     <IlcArg Include="--descriptor=$(MSBuildProjectDirectory)\AotAnalyzerResources.xml" />
   </ItemGroup>
 
-  <!-- The compile-time payload lives in its own assembly; see the note in Dotnet10Dependencies.
+  <!-- The compile-time payload lives in its own assembly; see the note in Dotnet11Dependencies.
        `sharp` needs compile-time metadata (the targeting ref packs), the SDK source generators, the
        ILLink analyzers, the apphost template, and the *names* of the shared-framework assemblies. It
        used to read all of that from the installed SDK, so a machine without a .NET SDK could not use
-       the compiler at all. Dotnet10Dependencies stages that payload at build time (tools/PayloadStager)
+       the compiler at all. Dotnet11Dependencies stages that payload at build time (tools/PayloadStager)
        and embeds its zip as a manifest resource of its own assembly; EmbeddedSdkRefs.cs extracts it to
        a version-keyed cache on first use. -->
 

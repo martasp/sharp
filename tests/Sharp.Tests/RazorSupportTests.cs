@@ -89,7 +89,7 @@ public class RazorSupportTests
         Write(Path.Combine(root, "WebApp.csproj"), """
             <Project Sdk="Microsoft.NET.Sdk.Web">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Nullable>enable</Nullable>
                 <ImplicitUsings>enable</ImplicitUsings>
               </PropertyGroup>

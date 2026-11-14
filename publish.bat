@@ -6,8 +6,8 @@ rem so the published exe is signed with the local code-signing cert.
 
 set "SIGNTOOL=C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
 set "THUMBPRINT=63DE8A7D5283718D453AD7CCD825BB27842AD5F0"
-set "PUBLISHED=src\Sharp.Cli\bin\Release\net10.0\win-x64\publish\Sharp.Cli.exe"
-set "NATIVE=src\Sharp.Cli\bin\Release\net10.0\win-x64\native\Sharp.Cli.exe"
+set "PUBLISHED=src\Sharp.Cli\bin\Release\net11.0\win-x64\publish\Sharp.Cli.exe"
+set "NATIVE=src\Sharp.Cli\bin\Release\net11.0\win-x64\native\Sharp.Cli.exe"
 
 dotnet publish -r win-x64 -c Release
 if errorlevel 1 exit /b %errorlevel%

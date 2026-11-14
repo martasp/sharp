@@ -14,7 +14,7 @@ the raw `benchmarks/*.txt` captures and the JS tool can be removed.
 
 Compilation currently discovers reference assemblies from the NuGet cache and the installed .NET SDK,
 which couples builds to the host machine layout. Evaluate a more explicit model: vendor or embed the
-required .NET 10 assemblies, resolve them from a pinned source, or compile the needed SDK pieces
+required .NET 11 assemblies, resolve them from a pinned source, or compile the needed SDK pieces
 in-repo.
 
 ## User generators and analyzers under AOT

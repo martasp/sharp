@@ -51,7 +51,7 @@ public class FrameworkReferenceTests
         var build = SharpCompiler.Build(FixtureDir);
 
         build.Success.ShouldBeTrue(build.Errors);
-        File.Exists(Path.Combine(FixtureDir, "myc", "Debug", "net10.0", "FrameworkRefFixture.dll")).ShouldBeTrue();
+        File.Exists(Path.Combine(FixtureDir, "myc", "Debug", "net11.0", "FrameworkRefFixture.dll")).ShouldBeTrue();
     }
 
     public static string TransitiveFixtureDir =
@@ -63,7 +63,7 @@ public class FrameworkReferenceTests
         var build = SharpCompiler.Build(TransitiveFixtureDir);
 
         build.Success.ShouldBeTrue(build.Errors);
-        File.Exists(Path.Combine(TransitiveFixtureDir, "myc", "Debug", "net10.0", "TransitiveFrameworkRefFixture.dll"))
+        File.Exists(Path.Combine(TransitiveFixtureDir, "myc", "Debug", "net11.0", "TransitiveFrameworkRefFixture.dll"))
             .ShouldBeTrue();
     }
 }

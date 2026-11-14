@@ -1,5 +1,5 @@
-﻿LibA net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibA/bin/Debug/net10.0/LibA.dll
-LibB net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibB/bin/Debug/net10.0/LibB.dll
-SlnApp net10.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/SlnApp/bin/Debug/net10.0/SlnApp.dll
+﻿LibA net11.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibA/bin/Debug/net11.0/LibA.dll
+LibB net11.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/LibB/bin/Debug/net11.0/LibB.dll
+SlnApp net11.0 succeeded (<secs>) → tests/TestExampleProjects/SlnFixtures/SlnApp/bin/Debug/net11.0/SlnApp.dll
 
 Build succeeded in <secs>

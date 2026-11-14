@@ -14,7 +14,7 @@
        The stager stays a separate executable rather than becoming a private entry point: it has to
        run before this project compiles, so it cannot live in the assembly it produces. -->
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
@@ -23,9 +23,9 @@
 
   <!-- Roslyn, needed to compile AnalyzerRegistry (the static binding of every SDK analyzer). -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.12.0" />
   </ItemGroup>
 
   <!-- The Microsoft-published packages the payload is sourced from. DependencyModel is an ordinary
@@ -34,8 +34,8 @@
        exposes its root as $(Pkg...) for the analyzer <Reference> HintPaths below. The stager reads
        both package folders from the restore output, not from here. -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.11" />
-    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="11.0.0" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="11.0.0" GeneratePathProperty="true" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- The targeting, host and runtime packs cannot be PackageReference: they are packageType
@@ -44,11 +44,11 @@
        the .NET SDK itself uses to fetch packs during restore (Microsoft.NET.Sdk.FrameworkReference
        Resolution.targets), so it is the supported way to obtain them without their assets flowing. -->
   <ItemGroup>
-    <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[10.0.11]" />
-    <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[10.0.11]" />
-    <PackageDownload Include="Microsoft.NETCore.App.Host.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
-    <PackageDownload Include="Microsoft.NETCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
-    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[10.0.11]" />
+    <PackageDownload Include="Microsoft.NETCore.App.Ref" Version="[11.0.0]" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[11.0.0]" />
+    <PackageDownload Include="Microsoft.NETCore.App.Host.$(NETCoreSdkRuntimeIdentifier)" Version="[11.0.0]" />
+    <PackageDownload Include="Microsoft.NETCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[11.0.0]" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Runtime.$(NETCoreSdkRuntimeIdentifier)" Version="[11.0.0]" />
   </ItemGroup>
 
   <!-- Analyzer file locations, used both as compile-time <Reference> HintPaths here and rewritten to
@@ -56,8 +56,8 @@
        (SharpUtils.CollectHintPathReferences). The $(_Payload*) token names are the contract
        with that rewriter. -->
   <PropertyGroup>
-    <_PayloadNetCoreAnalyzersPath>$(NuGetPackageRoot)microsoft.netcore.app.ref/10.0.11/analyzers/dotnet/cs</_PayloadNetCoreAnalyzersPath>
-    <_PayloadAspNetAnalyzersPath>$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/10.0.11/analyzers/dotnet/cs</_PayloadAspNetAnalyzersPath>
+    <_PayloadNetCoreAnalyzersPath>$(NuGetPackageRoot)microsoft.netcore.app.ref/11.0.0/analyzers/dotnet/cs</_PayloadNetCoreAnalyzersPath>
+    <_PayloadAspNetAnalyzersPath>$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/11.0.0/analyzers/dotnet/cs</_PayloadAspNetAnalyzersPath>
   </PropertyGroup>
 
   <!-- Analyzer DLLs referenced at compile time so AnalyzerRegistry can statically construct their
@@ -89,14 +89,15 @@
     <Reference Include="Microsoft.Interop.JavaScript.JSImportGenerator" Private="true">
       <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Interop.JavaScript.JSImportGenerator.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
-      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
-    </Reference>
+    <!-- These two moved from the ASP.NET Core ref pack to the .NET ref pack in .NET 11. -->
     <Reference Include="Microsoft.Extensions.Logging.Generators" Private="true">
-      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Logging.Generators.dll</HintPath>
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Extensions.Logging.Generators.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Extensions.Options.SourceGeneration" Private="true">
-      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
+      <HintPath>$(_PayloadNetCoreAnalyzersPath)\Microsoft.Extensions.Options.SourceGeneration.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.AspNetCore.App.SourceGenerators" Private="true">
+      <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.AspNetCore.App.SourceGenerators.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Extensions.Validation.ValidationsGenerator" Private="true">
       <HintPath>$(_PayloadAspNetAnalyzersPath)\Microsoft.Extensions.Validation.ValidationsGenerator.dll</HintPath>

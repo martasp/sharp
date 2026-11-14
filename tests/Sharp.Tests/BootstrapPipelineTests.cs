@@ -34,7 +34,7 @@ public class BootstrapPipelineTests
     // RID produces Sharp.Cli.exe, the Linux RID Sharp.Cli. Pick the publish that
     // matches the current OS (produced by publish.bat / `dotnet publish -r <rid>`).
     private static readonly string PublishedSeedExe = Path.Combine(
-        RepoRoot, "src", "Sharp.Cli", "bin", "Release", "net10.0",
+        RepoRoot, "src", "Sharp.Cli", "bin", "Release", "net11.0",
         OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
         OperatingSystem.IsWindows() ? "Sharp.Cli.exe" : "Sharp.Cli");
 
@@ -63,7 +63,7 @@ public class BootstrapPipelineTests
         var sandbox = Path.Combine(Path.GetTempPath(), "sharp-bootstrap-" + Guid.NewGuid().ToString("N"));
         CopyTree(RepoRoot, sandbox);
         var sln = Path.Combine(sandbox, SolutionFile);
-        var jitOutput = Path.Combine(sandbox, "src", "Sharp.Cli", "myc", "Debug", "net10.0");
+        var jitOutput = Path.Combine(sandbox, "src", "Sharp.Cli", "myc", "Debug", "net11.0");
 
         File.WriteAllText(BootstrapReportPath, $"bootstrap report {DateTime.Now:O}{Environment.NewLine}{Environment.NewLine}");
         Log($"report file: {BootstrapReportPath}");

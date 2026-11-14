@@ -58,8 +58,8 @@ public class SolutionTests
         solution.Projects.ShouldContain(project => project.Name == "Sharp");
         solution.Projects.ShouldContain(project => project.Name == "Sharp.Cli");
         solution.Projects.ShouldContain(project => project.Name == "SimplePlayground");
-        solution.Projects.ShouldContain(project => project.Name == "DotnetRuntime10");
-        solution.Projects.ShouldContain(project => project.Name == "Dotnet10Dependencies");
+        solution.Projects.ShouldContain(project => project.Name == "DotnetRuntime11");
+        solution.Projects.ShouldContain(project => project.Name == "Dotnet11Dependencies");
         solution.Projects.ShouldContain(project => project.Name == "DotnetRuntimeHostExe");
         solution.Projects.ShouldContain(project => project.Name == "Sharp.Tests");
         solution.Projects.ShouldContain(project => project.Name == "PayloadStager");
@@ -126,7 +126,7 @@ public class SolutionTests
 
         result.Projects.All(project => project.Result.Success).ShouldBeTrue();
 
-        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net10.0");
+        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net11.0");
         Directory.Exists(sharpBin).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "SlnApp.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibB.dll")).ShouldBeTrue();
@@ -140,7 +140,7 @@ public class SolutionTests
 
         build.Success.ShouldBeTrue(build.Errors);
 
-        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net10.0");
+        var sharpBin = Path.Combine(SlnFixturesDir, "SlnApp", "myc", "Debug", "net11.0");
         File.Exists(Path.Combine(sharpBin, "SlnApp.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibB.dll")).ShouldBeTrue();
         File.Exists(Path.Combine(sharpBin, "LibA.dll")).ShouldBeTrue();

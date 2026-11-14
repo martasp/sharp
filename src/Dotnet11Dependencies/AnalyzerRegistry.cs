@@ -87,8 +87,8 @@ namespace CustomCompiler
                 // Generates optimized regex matchers ([GeneratedRegex])
                 new System.Text.RegularExpressions.Generator.RegexGenerator().AsSourceGenerator(),
 
-                // --- ASP.NET Core targeting-pack generators ---
-                // Linked from the embedded payload like the six above. The ones registered here are
+                // --- .NET targeting-pack generators ---
+                // Linked from the embedded payload like the generators above. The ones registered here are
                 // attribute-driven, so they no-op on a project that uses none of their attributes and
                 // leave output identical to the SDK.
 
@@ -97,6 +97,8 @@ namespace CustomCompiler
                 new Microsoft.Extensions.Logging.Generators.LoggerMessageGenerator().AsSourceGenerator(),
 
                 new Microsoft.Extensions.Options.Generators.OptionsValidatorGenerator().AsSourceGenerator(),
+
+                // --- ASP.NET Core targeting-pack generators ---
                 new Microsoft.Extensions.Validation.ValidationsGenerator().AsSourceGenerator()
 
                 );
@@ -139,7 +141,7 @@ namespace CustomCompiler
         //
         // The SDK keeps it OFF unless a project opts in with <EnableRequestDelegateGenerator>true</...>,
         // so not registering it is correct for every default project - verified by building a
-        // net10.0 Microsoft.NET.Sdk.Web project with the SDK, which emits no RDG output. Registering it
+        // net11.0 Microsoft.NET.Sdk.Web project with the SDK, which emits no RDG output. Registering it
         // unconditionally instead made sharp emit route-handler glue the SDK does not, adding twelve
         // assemblies to the produced app's reference set.
         //
