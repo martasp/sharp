@@ -253,6 +253,14 @@ public static class SourceGeneratorRunner
             generators.AddRange(AnalyzerRegistry.GetWebSourceGenerators());
         }
 
+        // Razor projects: under NativeAOT the dynamic discovery below cannot run, so the generator
+        // is statically linked. JIT keeps discovering it from the payload, which also means the
+        // static reference is never loaded in a JIT process (and tests need not carry the DLL).
+        if (project.RazorInputs.Count > 0 && !System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+        {
+            generators.Add(AnalyzerRegistry.GetRazorSourceGenerator());
+        }
+
         if (Environment.GetEnvironmentVariable("SHARP_TRACE_GENERATORS") == "1")
             Console.WriteLine($"[gens] {project.ProjectName}: IsWebSdk={project.IsWebSdk}, IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
 

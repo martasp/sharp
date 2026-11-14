@@ -622,6 +622,12 @@ public static class SharpUtils
                     .Replace("$(_PayloadNetCoreAnalyzersPath)", AsemblyExtensions.ResolveRefPackAnalyzersLocation)
                     .Replace("$(_PayloadAspNetAnalyzersPath)", AsemblyExtensions.ResolveAspNetRefPackAnalyzersLocation)
                     .Replace("$(PkgMicrosoft_NET_ILLink_Tasks)", EmbeddedSdkRefs.SdkDirectory)
+                    // The payload flattens the Razor SDK component to sdk/<version>/razor-source-generators
+                    // rather than mirroring MSBuild's Sdks/Microsoft.NET.Sdk.Razor/source-generators layout.
+                    .Replace(@"$(MSBuildSDKsPath)\Microsoft.NET.Sdk.Razor\source-generators",
+                        EmbeddedSdkRefs.RazorSourceGenerators)
+                    .Replace("$(MSBuildSDKsPath)/Microsoft.NET.Sdk.Razor/source-generators",
+                        EmbeddedSdkRefs.RazorSourceGenerators)
                     .Replace("$(MSBuildSDKsPath)", AsemblyExtensions.ResolveSdkMsBuildSdksPath)
                     .Replace('\\', Path.DirectorySeparatorChar)
                     .Replace('/', Path.DirectorySeparatorChar);
