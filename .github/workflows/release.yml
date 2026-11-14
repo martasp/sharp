@@ -100,8 +100,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.404"
+      - name: Verify .NET SDK
+        run: test "$(dotnet --version)" = "10.0.404"
       - name: Publish
         run: dotnet publish "$PROJECT" -r linux-x64 -c Release -p:Version="${{ needs.plan.outputs.version }}" -o dist
       - name: Package
@@ -124,8 +128,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.404"
+      - name: Verify .NET SDK
+        shell: pwsh
+        run: |
+          $version = dotnet --version
+          if ($version -ne "10.0.404") {
+            throw "Expected .NET SDK 10.0.404, got $version"
+          }
       - name: Publish
         shell: pwsh
         run: dotnet publish $env:PROJECT -r win-x64 -c Release -p:Version=${{ needs.plan.outputs.version }} -o dist

@@ -53,6 +53,7 @@ public class Project : IProject
         return name switch
         {
             "PublishAot" => group?.PublishAot ?? (BuildProps.PublishAot ? "true" : null),
+            "NativeLib" => group?.NativeLib,
             "PublishTrimmed" => group?.PublishTrimmed,
             "SelfContained" => group?.SelfContained,
             "DebugType" => group?.DebugType,
@@ -116,8 +117,20 @@ public class Project : IProject
 
     public string? LangVersion => XMLProject.PropertyGroup?.FirstOrDefault()?.LangVersion ?? BuildProps.LangVersion;
 
-    public string? DefineConstants => XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants
-                                      ?? BuildProps.DefineConstants;
+    public string? DefineConstants
+    {
+        get
+        {
+            var declared = XMLProject.PropertyGroup?.FirstOrDefault()?.DefineConstants;
+            if (declared is null) return BuildProps.DefineConstants;
+
+            // MSBuild seeds DefineConstants with the SDK's DEBUG/TRACE defaults, so csproj files
+            // append with $(DefineConstants). Sharp only has the props-chain value; replace the
+            // token instead of passing a literal "$(DefineConstants)TRACE" to Roslyn.
+            return declared.Replace("$(DefineConstants)", BuildProps.DefineConstants ?? "",
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     // Interceptor namespaces (SDK <InterceptorsNamespaces>/<InterceptorsPreviewNamespaces>) that
     // opt generated [InterceptsLocation] code in for csc parity (OrchardCore's shape generator).
@@ -188,6 +201,11 @@ public class Project : IProject
 
     public List<AssemblyAttributeItem> AssemblyAttributes =>
         XMLProject.ItemGroup.SelectMany(item => item.AssemblyAttributes).ToList();
+
+    // Static <EmbeddedResource> items from the project body. Targets can also inject resources;
+    // those are handled by AssemblyAttributeEvaluator.GetEmbeddedResources.
+    public List<EmbeddedResourceItem> EmbeddedResources =>
+        XMLProject.ItemGroup.SelectMany(item => item.EmbeddedResources).ToList();
 
     public List<string> IlcArgs =>
         XMLProject.ItemGroup.SelectMany(item => item.IlcArgs)
@@ -276,6 +294,19 @@ public class Project : IProject
             generateEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorGenerateItems),
             componentEnabled: !IsPropertyFalse(XMLProject.PropertyGroup?.FirstOrDefault()?.EnableDefaultRazorComponentItems))
         : Array.Empty<RazorInput>();
+
+    // <AdditionalFiles> inputs handed to source generators (e.g. Spectre.Console's JSON data files).
+    // Razor inputs are separate; this covers the general MSBuild item every generator can read.
+    private IReadOnlyList<string>? _additionalFiles;
+    public IReadOnlyList<string> AdditionalFiles => _additionalFiles ??= XMLProject.ItemGroup
+        .SelectMany(item => item.AdditionalFiles)
+        .Select(item => ExpandPublishItem(item.Include))
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Select(value => Path.IsPathRooted(value) ? value : Path.Combine(ProjectRootPath, value))
+        .Select(Path.GetFullPath)
+        .Where(File.Exists)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
     private static bool IsPropertyFalse(string? value) =>
         value?.Trim().Equals("false", StringComparison.OrdinalIgnoreCase) ?? false;

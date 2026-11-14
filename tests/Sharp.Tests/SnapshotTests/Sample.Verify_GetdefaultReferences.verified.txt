@@ -76,6 +76,10 @@
     FilePath: ./Microsoft.AspNetCore.App.SourceGenerators.dll
   },
   {
+    Display: ./Microsoft.AspNetCore.Razor.Utilities.Shared.dll,
+    FilePath: ./Microsoft.AspNetCore.Razor.Utilities.Shared.dll
+  },
+  {
     Display: ./Microsoft.Bcl.AsyncInterfaces.dll,
     FilePath: ./Microsoft.Bcl.AsyncInterfaces.dll
   },
@@ -86,6 +90,10 @@
   {
     Display: ./Microsoft.CodeAnalysis.dll,
     FilePath: ./Microsoft.CodeAnalysis.dll
+  },
+  {
+    Display: ./Microsoft.CodeAnalysis.Razor.Compiler.dll,
+    FilePath: ./Microsoft.CodeAnalysis.Razor.Compiler.dll
   },
   {
     Display: ./Microsoft.CodeAnalysis.Workspaces.dll,

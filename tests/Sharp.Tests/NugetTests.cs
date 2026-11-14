@@ -101,6 +101,82 @@ public class NuGetTests
         NuGetPackage.ResolveCentralVersion("DemoPkg", root).ShouldBeEmpty();
     }
 
+    [Fact]
+    public void ReadCentralPackages_ReadsTransitivePinningFlagAndVersions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "CentralPinningTest", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+                    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <PackageVersion Include="Parlot" Version="1.5.8" />
+                  </ItemGroup>
+                </Project>
+                """);
+
+            NuGetPackage.ReadCentralPackageVersions(root)["Parlot"].ShouldBe("1.5.8");
+            NuGetPackage.IsCentralPackageTransitivePinningEnabled(root).ShouldBeTrue();
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void GetdefaultNugetReferences_AppliesCentralTransitivePinning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "CentralPinGraphTest", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            File.WriteAllText(Path.Combine(root, "Directory.Packages.props"), """
+                <Project>
+                  <PropertyGroup>
+                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+                    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <PackageVersion Include="YesSql.Filters.Abstractions" Version="6.0.0" />
+                    <PackageVersion Include="Parlot" Version="1.5.8" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, "Fixture.csproj"), """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>net10.0</TargetFramework>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <PackageReference Include="YesSql.Filters.Abstractions" />
+                  </ItemGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(root, "Program.cs"), "// placeholder\n");
+
+            var project = SharpUtils.GetProjectDetails(
+                SharpUtils.ReadAllFilesInMemory(SharpUtils.ReadAllProjectFilesPath(root)), root);
+            var references = SharpUtils.GetdefaultNugetReferences(project);
+
+            references.ShouldContain(reference =>
+                reference.Display != null &&
+                reference.Display.Replace('\\', '/').Contains("/parlot/1.5.8/", StringComparison.OrdinalIgnoreCase));
+            references.ShouldNotContain(reference =>
+                reference.Display != null &&
+                reference.Display.Replace('\\', '/').Contains("/parlot/1.5.7/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     // ---------------------------------------------------------------------------
     // Feature re-apply check: package buildTransitive <Using> global usings + Web SDK
     // implicit usings (see SharpUtils.GetProjectDetails / BuildPackageUsingStatements).
