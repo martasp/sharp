@@ -14,8 +14,16 @@ public static class NativeAotPublisher
     [HasSideEffects]
     public static List<string> Publish(Project project, string publishDirectory, BuildOptions options)
     {
-        if (project.ResolvedProjectOutputKind() != OutputKind.ConsoleApplication)
-            throw new NotSupportedException("NativeAOT publish currently supports executable projects only.");
+        var outputKind = project.ResolvedProjectOutputKind();
+        var nativeLib = project.GetProperty("NativeLib");
+        if (outputKind == OutputKind.DynamicallyLinkedLibrary && string.IsNullOrWhiteSpace(nativeLib))
+            nativeLib = "Shared";
+
+        var isShared = string.Equals(nativeLib, "Shared", StringComparison.OrdinalIgnoreCase);
+        if (!isShared && outputKind != OutputKind.ConsoleApplication)
+            throw new NotSupportedException("NativeAOT publish currently supports executable and shared-library projects only.");
+        if (!string.IsNullOrWhiteSpace(nativeLib) && !isShared)
+            throw new NotSupportedException("Static NativeAOT libraries are not supported yet.");
         if (project.GetBoolProperty("StaticICULinking") || project.GetBoolProperty("StaticOpenSslLinking"))
             throw new NotSupportedException("Static NativeAOT linking is not supported yet.");
 
@@ -51,7 +59,7 @@ public static class NativeAotPublisher
 
         var appName = project.ProjectName;
         var nativeObject = Path.Combine(intermediate, appName + ".o");
-        var nativeBinary = Path.Combine(intermediate, appName);
+        var nativeBinary = Path.Combine(intermediate, isShared ? appName + ".so" : appName);
         var exportsFile = Path.Combine(intermediate, appName + ".exports");
         var responseFile = Path.Combine(intermediate, appName + ".ilc.rsp");
 
@@ -112,6 +120,11 @@ public static class NativeAotPublisher
 
         ilcArgs.Add("--targetos:linux");
         ilcArgs.Add("--targetarch:x64");
+        if (isShared)
+        {
+            ilcArgs.Add("--nativelib");
+            ilcArgs.Add("--export-unmanaged-entrypoints");
+        }
         ilcArgs.Add("--dehydrate");
         ilcArgs.Add($"--exportsfile:{exportsFile}");
         ilcArgs.Add(debuggerSupport
@@ -216,7 +229,7 @@ public static class NativeAotPublisher
         nativeLibraries.Add(NativeFile("libSystem.IO.Compression.Native.a"));
         nativeLibraries.Add(NativeFile("libSystem.Net.Security.Native.a"));
         nativeLibraries.Add(NativeFile("libSystem.Security.Cryptography.Native.OpenSsl.a"));
-        nativeLibraries.Add(NativeFile("libbootstrapper.o"));
+        nativeLibraries.Add(NativeFile(isShared ? "libbootstrapperdll.o" : "libbootstrapper.o"));
         nativeLibraries.Add(NativeFile(serverGc ? "libRuntime.ServerGC.a" : "libRuntime.WorkstationGC.a"));
         nativeLibraries.Add(NativeFile(eventSourceSupport ? "libeventpipe-enabled.a" : "libeventpipe-disabled.a"));
         nativeLibraries.Add(NativeFile(vxSort));
@@ -263,8 +276,16 @@ public static class NativeAotPublisher
             linkArgs.Add("-lbrotlidec");
             linkArgs.Add("-lbrotlicommon");
         }
-        linkArgs.Add("-pie");
-        linkArgs.Add("-Wl,-pie");
+        if (isShared)
+        {
+            linkArgs.Add("-shared");
+            linkArgs.Add("-Wl,-e,0x0");
+        }
+        else
+        {
+            linkArgs.Add("-pie");
+            linkArgs.Add("-Wl,-pie");
+        }
         linkArgs.Add("-Wl,-z,relro");
         linkArgs.Add("-Wl,-z,now");
         linkArgs.Add("-Wl,--eh-frame-hdr");
@@ -289,9 +310,18 @@ public static class NativeAotPublisher
         var destination = Path.GetFullPath(publishDirectory);
         Directory.CreateDirectory(destination);
 
-        var outputBinary = Path.Combine(destination, appName);
+        var outputBinary = Path.Combine(destination, Path.GetFileName(nativeBinary));
         File.Copy(nativeBinary, outputBinary, overwrite: true);
-        EnsureExecutable(outputBinary);
+        if (isShared)
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(outputBinary, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+                    UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        }
+        else
+        {
+            EnsureExecutable(outputBinary);
+        }
 
         var outputs = new List<string> { outputBinary };
         var debugOutput = nativeBinary + ".dbg";

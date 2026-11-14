@@ -327,9 +327,14 @@ foreach (var configured in sources)
             var csproj = FindProjectFile(directory);
             if (csproj is null) continue;
 
-            var files = SharpUtils.ReadAllProjectFilesPath(directory);
-            var details = SharpUtils.GetProjectDetails(
-                SharpUtils.ReadAllFilesInMemory(files), directory);
+            // Restore only needs the XML item lists and the root TFM. Building the full Project
+            // model here (SharpUtils.GetProjectDetails) reads every source file, resolves package
+            // source files, walks package usings, and evaluates assembly attributes for each
+            // project - hundreds of redundant package-directory scans on a large solution.
+            var details = new Project(
+                new ProjectFile(csproj, File.ReadAllText(csproj)),
+                new List<ProjectFile>(),
+                directory);
 
             // The root project's TFM decides which nuspec dependency group is selected for the
             // whole graph; referenced projects normally agree.
