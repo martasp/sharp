@@ -4,7 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
-using Dotnet10Dependencies;
+using Dotnet11Dependencies;
 using Shouldly;
 using Xunit;
 
@@ -47,8 +47,8 @@ public class EmbeddedPayloadTests
 
         // The ref pack version keys the extraction cache. It has to match the versions baked into the
         // staged paths, or the cache is written once under a version and never found again - and a
-        // mismatch between refpack and runtime is what made net10.0 apps ask for a net9.0 framework
-        // and die on a missing System.Runtime, Version=10.0.0.0.
+        // mismatch between refpack and runtime is what made net11.0 apps ask for a net9.0 framework
+        // and die on a missing System.Runtime, Version=11.0.0.0.
         refPack.ShouldBe(runtime);
         SemVer(refPack).ShouldNotBeNullOrEmpty();
         SemVer(sdk).ShouldNotBeNullOrEmpty();
@@ -67,16 +67,24 @@ public class EmbeddedPayloadTests
         aspRef.ShouldNotBeEmpty("no ASP.NET Core reference assemblies: a web app would fail to compile");
         aspRef.ShouldContain("Microsoft.AspNetCore.Http.Abstractions.dll");
 
-        // Load-bearing for output parity, and each one is a separate way a web app can silently
-        // diverge from `dotnet build`: SourceGenerators emits the public partial Program minimal APIs
-        // get, Logging emits the [LoggerMessage] callbacks, and the options/validation/config
-        // generators shape the emitted surface.
+        // Load-bearing for output parity, and each one is a separate way an app can silently
+        // diverge from `dotnet build`: Logging emits the [LoggerMessage] callbacks, the options
+        // generator shapes validation, SourceGenerators emits the public partial Program minimal
+        // APIs get, and the validation/config generators shape the emitted surface. Logging and
+        // options moved to the .NET ref pack in .NET 11.
+        var netGenerators = Names(Under(entries, $"{netPack}/analyzers/dotnet/cs/"));
         var aspGenerators = Names(Under(entries, $"{aspPack}/analyzers/dotnet/cs/"));
         foreach (var generator in new[]
                  {
-                     "Microsoft.AspNetCore.App.SourceGenerators.dll",
                      "Microsoft.Extensions.Logging.Generators.dll",
                      "Microsoft.Extensions.Options.SourceGeneration.dll",
+                 })
+        {
+            netGenerators.ShouldContain(generator);
+        }
+        foreach (var generator in new[]
+                 {
+                     "Microsoft.AspNetCore.App.SourceGenerators.dll",
                      "Microsoft.Extensions.Validation.ValidationsGenerator.dll",
                      "Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll",
                  })
@@ -95,22 +103,22 @@ public class EmbeddedPayloadTests
         apphosts.ShouldContain(entry => entries.Contains(entry), "no apphost template, so no apphost output");
 
         // Names only, never the 106 MB of framework DLLs. These drive copy-local suppression, and
-        // they cannot be derived from the ref packs: the AspNetCore ref pack omits
-        // System.Security.Cryptography.Pkcs.dll, which the shared framework does ship.
+        // they cannot be derived from the ref packs: the shared runtime ships implementation
+        // assemblies such as System.Private.CoreLib.dll that the ref pack omits.
         var netCoreNames = ReadTextLines(payload, "frameworks/Microsoft.NETCore.App.txt");
         var aspNetNames = ReadTextLines(payload, "frameworks/Microsoft.AspNetCore.App.txt");
 
         netCoreNames.ShouldNotBeEmpty();
         netCoreNames.ShouldContain("System.Runtime.dll");
+        netCoreNames.ShouldContain("System.Private.CoreLib.dll");
         aspNetNames.ShouldNotBeEmpty();
         aspNetNames.ShouldContain("Microsoft.AspNetCore.Http.Abstractions.dll");
 
         // The whole point of the asymmetry above: the name list is a *different* set from the ref
-        // pack. This one assembly ships in the ASP.NET Core shared framework but not in the
-        // ASP.NET Core ref pack, so copy-local suppression cannot be derived from the refs. A payload
-        // that quietly substituted the ref pack file list would still pass every other assertion here.
-        aspNetNames.ShouldContain("System.Security.Cryptography.Pkcs.dll");
-        Names(aspRef).ShouldNotContain("System.Security.Cryptography.Pkcs.dll");
+        // pack. This implementation assembly ships in the shared runtime but not in the ref pack,
+        // so copy-local suppression cannot be derived from the refs. A payload that quietly
+        // substituted the ref pack file list would still pass every other assertion here.
+        Names(netRef).ShouldNotContain("System.Private.CoreLib.dll");
 
         // A staged directory rather than a staged file would extract as an empty file.
         foreach (var entry in payload.Entries.Where(entry => !entry.FullName.EndsWith('/')))
@@ -178,9 +186,9 @@ public class EmbeddedPayloadTests
     public void Payload_Resource_Is_Discovered_From_The_Versioned_Name()
     {
         // The payload resource is embedded under the name MSBuild derives for the SDK in use, e.g.
-        // embedded-refs.10.0.11.zip. Payloads discovers that name rather than hardcoding it, so the
+        // embedded-refs.11.0.0.zip. Payloads discovers that name rather than hardcoding it, so the
         // lookup can never disagree with what was embedded - a hardcoded second copy broke on CI,
-        // where setup-dotnet installs a newer 10.0.x patch than the developer's SDK, and the build
+        // where setup-dotnet installs a newer 11.0.x patch than the developer's SDK, and the build
         // stayed green while every payload-dependent test failed at run time.
         var assembly = typeof(Payloads).Assembly;
 

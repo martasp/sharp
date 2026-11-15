@@ -28,7 +28,7 @@ public class DirectoryBuildPropsTests
             File.WriteAllText(Path.Combine(root, "props", "TargetFrameworks.props"), """
                 <Project>
                   <PropertyGroup>
-                    <DefaultTargetFramework>net10.0</DefaultTargetFramework>
+                    <DefaultTargetFramework>net11.0</DefaultTargetFramework>
                     <CommonTargetFrameworks>$(DefaultTargetFramework)</CommonTargetFrameworks>
                   </PropertyGroup>
                 </Project>
@@ -51,7 +51,7 @@ public class DirectoryBuildPropsTests
 
             var result = BuildPropsEvaluator.Evaluate(projectDir);
 
-            result.TargetFramework.ShouldBe("net10.0");
+            result.TargetFramework.ShouldBe("net11.0");
             result.ImplicitUsings.ShouldBeTrue();
             result.Nullable.ShouldBe("enable");
             result.LangVersion.ShouldBe("12.0");
@@ -113,7 +113,7 @@ public class DirectoryBuildPropsTests
             File.WriteAllText(Path.Combine(root, "PropsOnly.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Library</OutputType>
                   </PropertyGroup>
                 </Project>
@@ -141,7 +141,7 @@ public class DirectoryBuildPropsTests
             var build = SharpCompiler.Build(root);
 
             build.Success.ShouldBeTrue(build.Errors);
-            File.Exists(Path.Combine(root, "myc", "Debug", "net10.0", "PropsOnly.dll")).ShouldBeTrue();
+            File.Exists(Path.Combine(root, "myc", "Debug", "net11.0", "PropsOnly.dll")).ShouldBeTrue();
         }
         finally
         {

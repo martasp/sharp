@@ -25,9 +25,16 @@ public static class CliComparisonHelper
             .Replace('\\', '/')
             .Replace(GetRepoRootPrefixed(), SolutionToken + '/');
 
+    private static string GetRepoRoot() =>
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."));
+
     private static string GetRepoRootPrefixed() =>
-        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", ".."))
-            .Replace('\\', '/') + '/';
+        GetRepoRoot().Replace('\\', '/') + '/';
+
+    // Sharp's build version is the VERSION file for local test builds. It must be normalized
+    // separately from the SDK version so a side-by-side snapshot cannot accidentally hide a
+    // mismatch between the two.
+    public static string SharpVersion => File.ReadAllText(Path.Combine(GetRepoRoot(), "VERSION")).Trim();
 
     // Shared normalization for any our-vs-dotnet comparison, so behavior parity is asserted on
     // identical text regardless of which command produced it. Wall-clock and restore banners add
@@ -45,14 +52,16 @@ public static class CliComparisonHelper
             // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
             // never overwrites real SDK output in bin\; map it to the canonical SDK layout. The path
             // may be absolute (".../myc/Debug/...") or relative from the CWD ("myc/Debug/...").
-            .Replace("myc/Debug/net10.0/", "bin/Debug/net10.0/")
+            .Replace("myc/Debug/net11.0/", "bin/Debug/net11.0/")
             // Terminal-logger durations ("succeeded (0.4s)", "in 1.2s") are wall-clock noise that
             // varies per run; collapse any "x.xs" to a token so parity is asserted on structure.
             .ReplaceRegex(@"\d+\.\d+s", "<secs>")
-            // The SDK patch version is not ours to pin: CI resolves '10.0.x' to whatever is
-            // current, so a snapshot containing 10.0.401 fails against a 10.0.400 laptop. The only
-            // three-part version these outputs contain is the SDK's own (no package or TFM
-            // versions are printed), so this cannot mask a real behavioural difference.
+            // Sharp's own version is not the SDK's; tokenize it first so the SDK patch normalization
+            // below cannot make the two indistinguishable in a side-by-side snapshot.
+            .Replace(SharpVersion, "<sharpver>")
+            // The SDK patch version is not ours to pin: CI resolves '11.0.x' to whatever is
+            // current, so a snapshot containing one patch fails against a laptop with another. No
+            // package or TFM versions are printed, so this cannot mask a real behavioural difference.
             .ReplaceRegex(@"\d+\.\d+\.\d+(?=[^\d])", "<sdkver>");
 
         return string.Join("\n", normalized.Split('\n')

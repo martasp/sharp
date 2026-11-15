@@ -6,8 +6,8 @@ This repository is a self-hosting .NET compiler and CLI built on Roslyn. The pro
 
 ### Required SDK
 
-- Use .NET SDK 10 (`10.0.400`), matching the repo's compatibility target.
-- CI provisions `.NET 10` and builds the solution in Debug mode before running tests.
+- Use .NET SDK 11 (`11.0.100`), matching the repo's compatibility target.
+- CI provisions `.NET 11` and builds the solution in Debug mode before running tests.
 
 ### Restore and build
 
@@ -22,7 +22,7 @@ The repo also publishes the AOT-compiled CLI with:
 bash publish.sh
 ```
 
-This produces the self-contained CLI under `src/Sharp.Cli/bin/Release/net10.0/.../publish/`.
+This produces the self-contained CLI under `src/Sharp.Cli/bin/Release/net11.0/.../publish/`.
 
 ### Test suite
 
@@ -86,13 +86,13 @@ There is no separate lint target in this repo; build + test validation is the st
 
 ## Repo-specific conventions and practices
 
-- Preserve `dotnet` parity. This repo’s core contract is that `sharp` behaves like the .NET SDK in the same scenarios, including command routing, help text, error codes, project selection, and output format.
+- Preserve `dotnet` parity. This repo’s core contract is that `sharp` behaves like the .NET SDK in the same scenarios, including command routing, help text, error codes, project selection, and output format. The documented exception is that `help`/`--version` also report Sharp's own version alongside the SDK version.
 - When touching build output semantics, verify the relevant parity tests in `tests/Sharp.Tests/` rather than assuming the change is isolated.
 - `Directory.Build.props` and eval-driven project references are part of the dependency graph; don’t treat an analyzer or generator reference as “invisible” just because it is not in the raw `.csproj` file.
 - Solution builds are purposely ordered into dependency waves; keep build-order assumptions consistent with the graph logic in `SolutionBuild`.
 - Build output folders for projects are intentionally shaped to mimic the `dotnet` SDK output layout (`myc/Debug/<tfm>/...`) and not a custom arbitrary location.
 - Use the test fixtures and parity snapshots as the ground truth for expected behavior; many tests are designed around exact CLI comparisons and Verify snapshots.
-- Keep changes compatible with .NET 10 and the repo’s embedded SDK/runtime payload expectations; update docs or migration guidance when version bumps are involved.
+- Keep changes compatible with .NET 11 and the repo’s embedded SDK/runtime payload expectations; update docs or migration guidance when version bumps are involved.
 
 ## Practical guidance for future Copilot sessions
 

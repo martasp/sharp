@@ -1,4 +1,4 @@
 ﻿NATIVE --version                         | DOTNET --version                        
 -----------------------------------------------------------------------------------
-<sdkver>                                 | <sdkver>                                
+Sharp <sharpver> (.NET SDK <sdkver>)     | <sdkver>                                
                                          |                                         

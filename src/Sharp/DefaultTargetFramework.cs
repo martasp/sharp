@@ -7,5 +7,5 @@ namespace Sharp;
 /// </summary>
 public static class DefaultTargetFramework
 {
-    public const string Value = "net10.0";
+    public const string Value = "net11.0";
 }

@@ -70,7 +70,7 @@ public class ConsoleAppTestsSelf
         var csprojFolderPath = WebApiWorking;
         var result = SharpCompiler.Build(csprojFolderPath);
         result.Success.ShouldBeTrue(result.Errors);
-        var outputDir = Path.Combine(csprojFolderPath, "myc", "Debug", "net10.0");
+        var outputDir = Path.Combine(csprojFolderPath, "myc", "Debug", "net11.0");
         File.Exists(Path.Combine(outputDir, "WebApiWorking.dll")).ShouldBeTrue("dll not Exists");
         var appHost = "WebApiWorking" + (OperatingSystem.IsWindows() ? ".exe" : "");
         File.Exists(Path.Combine(outputDir, appHost)).ShouldBeTrue("apphost not Exists");

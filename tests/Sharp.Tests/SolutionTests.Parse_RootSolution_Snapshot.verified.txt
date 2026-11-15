@@ -1,15 +1,15 @@
 ﻿[
   {
-    Name: Dotnet10Dependencies,
+    Name: Dotnet11Dependencies,
     ProjectTypeGuid: Guid_1,
-    ProjectRelativePath: src\Dotnet10Dependencies\Dotnet10Dependencies.csproj,
-    FlatPath: {SolutionDirectory}src/Dotnet10Dependencies/Dotnet10Dependencies.csproj
+    ProjectRelativePath: src\Dotnet11Dependencies\Dotnet11Dependencies.csproj,
+    FlatPath: {SolutionDirectory}src/Dotnet11Dependencies/Dotnet11Dependencies.csproj
   },
   {
-    Name: DotnetRuntime10,
+    Name: DotnetRuntime11,
     ProjectTypeGuid: Guid_1,
-    ProjectRelativePath: DotnetRuntime10\DotnetRuntime10.csproj,
-    FlatPath: {SolutionDirectory}DotnetRuntime10/DotnetRuntime10.csproj
+    ProjectRelativePath: DotnetRuntime11\DotnetRuntime11.csproj,
+    FlatPath: {SolutionDirectory}DotnetRuntime11/DotnetRuntime11.csproj
   },
   {
     Name: DotnetRuntimeHostExe,

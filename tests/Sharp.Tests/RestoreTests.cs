@@ -30,7 +30,7 @@ internal sealed class LocalFeed : IDisposable
     }
 
     // Adds a package. `dependencies` are nuspec dependency lines for the given group.
-    public LocalFeed WithPackage(string id, string version, string targetFramework = "net10.0",
+    public LocalFeed WithPackage(string id, string version, string targetFramework = "net11.0",
         string? libDllName = null, params (string Id, string Version)[] dependencies)
     {
         var directory = Path.Combine(Root, id.ToLowerInvariant(), version);
@@ -203,7 +203,7 @@ public class RestoreTests
             <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
               <metadata><id>Sample</id><version>1.0.0</version></metadata>
               <dependencies>
-                <group targetFramework="net10.0">
+                <group targetFramework="net11.0">
                   <dependency id="Modern.Dep" version="2.0.0" />
                 </group>
                 <group targetFramework="net472">
@@ -213,7 +213,7 @@ public class RestoreTests
             </package>
             """);
 
-        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net10.0");
+        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net11.0");
 
         dependencies.ShouldHaveSingleItem();
         dependencies[0].Id.ShouldBe("Modern.Dep");
@@ -229,7 +229,7 @@ public class RestoreTests
             <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
               <metadata><id>Sample</id><version>1.0.0</version></metadata>
               <dependencies>
-                <group targetFramework="net10.0">
+                <group targetFramework="net11.0">
                   <dependency id="Flows" version="1.0.0" />
                   <dependency id="Stops" version="1.0.0" exclude="All" />
                 </group>
@@ -237,7 +237,7 @@ public class RestoreTests
             </package>
             """);
 
-        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net10.0");
+        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net11.0");
 
         dependencies.ShouldContain(dependency => dependency.Id == "Flows");
         dependencies.ShouldContain(dependency => dependency.Id == "Stops" && dependency.Excluded);
@@ -252,14 +252,14 @@ public class RestoreTests
             <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
               <metadata><id>Sample</id><version>1.0.0</version></metadata>
               <dependencies>
-                <group targetFramework="net10.0">
+                <group targetFramework="net11.0">
                   <dependency id="Ranged" version="[1.2.3, )" />
                 </group>
               </dependencies>
             </package>
             """);
 
-        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net10.0");
+        var dependencies = NuGetPackage.ReadDependencies(workspace.PackageDirectory, "net11.0");
 
         dependencies.ShouldHaveSingleItem();
         dependencies[0].Version.ShouldBe("1.2.3");
@@ -424,7 +424,7 @@ public class RestoreTests
         using var workspace = new TempWorkspace();
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Definitely.Missing" Version="1.0.0" />
               </ItemGroup>
@@ -452,7 +452,7 @@ public class RestoreTests
         using var workspace = new TempWorkspace();
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Floating.Pkg" Version="1.0.*" />
               </ItemGroup>
@@ -487,7 +487,7 @@ public class RestoreTests
             """);
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Root.Pkg" Version="2.0.0" />
               </ItemGroup>
@@ -535,7 +535,7 @@ public class RestoreTests
             """);
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Ranged.Pkg" Version="[1.0.0, )" />
               </ItemGroup>
@@ -571,7 +571,7 @@ public class RestoreTests
             """);
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Absent.Pkg" Version="1.0.0" />
               </ItemGroup>
@@ -597,7 +597,7 @@ public class RestoreTests
             """);
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <PackageReference Include="Central.Pkg" />
               </ItemGroup>
@@ -617,7 +617,7 @@ public class RestoreTests
         using var workspace = new TempWorkspace();
         workspace.WriteFile("app.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
-              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>
             </Project>
             """);
 

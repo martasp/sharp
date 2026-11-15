@@ -189,7 +189,7 @@ public class PropertyGroup
 
     // Razor SDK (Microsoft.NET.Sdk.Razor / Microsoft.NET.Sdk.Web). AddRazorSupportForMvc opts .cshtml
     // files into the MVC view pipeline; RazorLangVersion overrides the language version the Razor
-    // source generator targets (defaults to the TFM's version, e.g. "10.0" for net10.0).
+    // source generator targets (defaults to the TFM's version, e.g. "11.0" for net11.0).
     [XmlElement(ElementName = "AddRazorSupportForMvc")]
     public string? AddRazorSupportForMvc { get; set; }
 
