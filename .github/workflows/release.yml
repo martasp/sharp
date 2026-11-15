@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to stamp into the binaries (e.g. v0.1.0). Manual runs build artifacts only."
+        description: "Version to stamp into the binaries (e.g. v0.3.0). Manual runs build artifacts only."
         required: false
         default: ""
 

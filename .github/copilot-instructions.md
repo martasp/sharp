@@ -86,7 +86,7 @@ There is no separate lint target in this repo; build + test validation is the st
 
 ## Repo-specific conventions and practices
 
-- Preserve `dotnet` parity. This repo’s core contract is that `sharp` behaves like the .NET SDK in the same scenarios, including command routing, help text, error codes, project selection, and output format.
+- Preserve `dotnet` parity. This repo’s core contract is that `sharp` behaves like the .NET SDK in the same scenarios, including command routing, help text, error codes, project selection, and output format. The documented exception is that `help`/`--version` also report Sharp's own version alongside the SDK version.
 - When touching build output semantics, verify the relevant parity tests in `tests/Sharp.Tests/` rather than assuming the change is isolated.
 - `Directory.Build.props` and eval-driven project references are part of the dependency graph; don’t treat an analyzer or generator reference as “invisible” just because it is not in the raw `.csproj` file.
 - Solution builds are purposely ordered into dependency waves; keep build-order assumptions consistent with the graph logic in `SolutionBuild`.

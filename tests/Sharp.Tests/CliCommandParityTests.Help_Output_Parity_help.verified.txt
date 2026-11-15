@@ -1,4 +1,4 @@
-﻿.NET SDK (<sdkver>)
+﻿Sharp <sharpver> (.NET SDK <sdkver>)
 Usage: dotnet [runtime-options] [path-to-application] [arguments]
 
 Execute a .NET application.

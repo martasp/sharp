@@ -10,11 +10,12 @@ using static VerifyXunit.Verifier;
 
 namespace Sharp.Tests;
 
-// CLI command parity with the .NET SDK. Every command our CLI advertises (`build`, `run`, `help`,
-// `--version`) is executed against the fixture and the captured output is compared byte-for-byte with
-// the matching `dotnet` invocation after shared normalization (path tokens + restore/time noise).
-// The captured outputs are also rendered side-by-side into a Verify snapshot, so any drift is visible
-// in review. This is the contract: where our CLI says it behaves like `dotnet`, it must match.
+// CLI command parity with the .NET SDK. `build` and `run` are executed against the fixture and the
+// captured output is compared byte-for-byte with the matching `dotnet` invocation after shared
+// normalization (path tokens + restore/time noise). `help` and `--version` intentionally add Sharp's
+// own version alongside the matching SDK version. The captured outputs are also rendered
+// side-by-side into a Verify snapshot, so any drift is visible in review. This is the contract:
+// where our CLI says it behaves like `dotnet`, it must match, except for the documented additions.
 //
 // These build the checked-in HelloParityFixture/FailingFixture/SlnFixtures directories through the SDK
 // and the CLI - the same fixtures CliComparisonTests and SolutionTests build. The sequential collection
@@ -87,18 +88,36 @@ public class CliCommandParityTests
             $"run --project \"{FailingFixtureDir}\" --no-restore");
 
     [Fact]
-    public Task Version_Output_Parity()
-        => Compare("version", "--version", "--version");
+    public async Task Version_Output()
+    {
+        var ours = await RunAsync("dotnet", $"\"{CliDll}\" --version");
+        var sdk = await RunAsync("dotnet", "--version");
+        var sdkVersion = sdk.Output.Trim();
+        var sharpVersion = CliComparisonHelper.SharpVersion;
+
+        ours.ExitCode.ShouldBe(0);
+        ours.Output.Trim().ShouldBe($"Sharp {sharpVersion} (.NET SDK {sdkVersion})");
+
+        var nativeOutput = CliComparisonHelper.Normalize(ours.Output);
+        var sdkOutput = CliComparisonHelper.Normalize(sdk.Output);
+        string comparisonResult = CliComparisonHelper.GenerateSideBySide(
+            nativeOutput, sdkOutput,
+            "NATIVE --version",
+            "DOTNET --version");
+
+        await Verify(comparisonResult).UseTextForParameters("version");
+    }
 
     [Fact]
     public async Task Help_Output_Parity()
     {
         var ours = await RunAsync("dotnet", $"\"{CliDll}\" help");
         var sdkVersion = (await RunAsync("dotnet", "--version")).Output.Trim();
+        var sharpVersion = CliComparisonHelper.SharpVersion;
 
         ours.ExitCode.ShouldBe(0);
-        // Version line is derived from the hosting SDK, never hardcoded.
-        ours.Output.ShouldStartWith($".NET SDK ({sdkVersion})");
+        // The header reports both Sharp's build version and the hosting SDK version.
+        ours.Output.ShouldStartWith($"Sharp {sharpVersion} (.NET SDK {sdkVersion})");
 
         // Implemented commands are annotated from the command registry.
         ours.Output.Split('\n')

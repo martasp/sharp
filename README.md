@@ -21,12 +21,12 @@ irm https://raw.githubusercontent.com/martasp/sharp/main/install.ps1 | iex
 ```
 
 Both installers fetch the latest stable GitHub release, verify the SHA-256 checksum, and put `sharp`
-on your PATH. Pin a release with `SHARP_VERSION` (for example `v0.1.0`) and change the destination
+on your PATH. Pin a release with `SHARP_VERSION` (for example `v0.3.0`) and change the destination
 with `SHARP_INSTALL_DIR`.
 
 Stable releases come from the `VERSION` file when a PR merges to `main`. Pull requests publish
 prerelease previews tagged `v<VERSION>-preview.<PR>`; install one with
-`SHARP_VERSION=v0.1.0-preview.12`. See [Releases](https://github.com/martasp/sharp/releases).
+`SHARP_VERSION=v0.3.0-preview.12`. See [Releases](https://github.com/martasp/sharp/releases).
 
 The Windows binary is currently unsigned, so SmartScreen may show a warning on first launch.
 
@@ -57,8 +57,8 @@ sharp <command> [target] [-- app args]
 |---|---|
 | `build` | compiles the target; identical output/exit code to `dotnet build` |
 | `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
-| `version` / `--version` | prints the hosting SDK version (e.g. `11.0.100`) |
-| `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the version line comes from the hosting SDK |
+| `version` / `--version` | prints Sharp's version and the hosting SDK version (e.g. `Sharp 0.3.0 (.NET SDK 11.0.100)`) |
+| `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the header includes Sharp's version plus the hosting SDK version |
 | `sharp <target>` | legacy form, routed to `build` |
 
 `<target>` may be:
@@ -148,9 +148,9 @@ Build failed with 1 error(s) in 1.2s     # $? = 1
 
 ```
 $ sharp --version
-11.0.100                  # the hosting SDK version, matching `dotnet --version`
+Sharp 0.3.0 (.NET SDK 11.0.100)   # Sharp's version; SDK version matches `dotnet --version`
 $ sharp help
-.NET SDK (11.0.100)       # correct SDK version, never hardcoded
+Sharp 0.3.0 (.NET SDK 11.0.100)   # Sharp and SDK versions are stamped at build time
 ...
 SDK commands:
   build             Build a .NET project.                                                     [implemented]
@@ -167,9 +167,9 @@ token. Single-project output is compared byte-for-byte; solution output is compa
 deterministic surface only (exit code plus the `Build succeeded`/`Build failed` verdict), because
 the SDK's own solution rendering is build-state dependent — it drops per-project lines and the
 summary's timing clause when every project is up-to-date. Our full solution layout is pinned by
-Verify snapshots. `help` and `--version`
-deliberately add value: `--version` echoes the hosting SDK version and `help` annotates the
-command list with `[implemented]`/`[not implemented]`, both derived at runtime rather than
+Verify snapshots. `help` and `--version` deliberately add value: both report Sharp's own version
+(kept in sync with `VERSION`) alongside the hosting SDK version, and `help` annotates the command
+list with `[implemented]`/`[not implemented]`, derived from the command registry rather than
 hardcoded. The parity is enforced by `CliCommandParityTests` and `CliComparisonTests`
 (side-by-side Verify snapshots for `build`, `run`, `--version`, `help`, and `build` over
 `.sln` / `.slnx` / `.csproj`, with and without a path).

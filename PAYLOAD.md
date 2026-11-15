@@ -180,8 +180,9 @@ The payload *contents* are copied from pinned Microsoft-published NuGet packages
 runtime and host packs are obtained with `PackageDownload` — they are packageType `DotnetPlatform`,
 which NuGet refuses as a `PackageReference` with `NU1213` — and DependencyModel / ILLink with
 `PackageReference`. The stager reads them out of the NuGet global packages folder and lays them out in
-the SDK shape. Only the reported SDK version is still taken from the building SDK, because
-`sharp --version` must match that machine's `dotnet` (see `UPGRADING.md`).
+the SDK shape. Only the reported SDK version is still taken from the building SDK, because the
+SDK version in `sharp --version` must match that machine's `dotnet` (see `UPGRADING.md`). Sharp's
+own version is stamped separately from the CLI project's `Version`, kept in sync with `VERSION`.
 
 ## How the payload is embedded and read (JIT vs NativeAOT)
 

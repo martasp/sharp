@@ -21,10 +21,11 @@ When no target is given the current directory is searched for a single `.csproj`
 exactly like `dotnet build`/`dotnet run` (missing -> MSB1003 / "Couldn't find a project to
 run"; ambiguous -> MSB1011). `run` launches the freshly built app (apphost when present,
 else `dotnet <dll>`), propagates the app exit code, and forwards everything after `--` as
-application arguments. `--version` prints the hosting SDK version; `help` prints the SDK's
-general help text, with the SDK command list annotated `[implemented]`/`[not implemented]`
-(derived from the command registry, not hardcoded) and the version line taken from the hosting
-SDK. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
+application arguments. `--version` prints Sharp's version and the hosting SDK version; `help`
+prints the SDK's general help text, with the SDK command list annotated
+`[implemented]`/`[not implemented]` (derived from the command registry, not hardcoded) and a
+header pairing Sharp's build version with the hosting SDK version. Like `dotnet`, flags the
+compiler does not act on (`--no-restore`,
 `--no-incremental`, `--nologo`, `-v`, ...) are accepted and ignored.
 
 ## Examples
@@ -106,7 +107,7 @@ sharp help       # full dotnet help text
 
 ### Scripts
 - `install.sh` / `install.ps1` – install a prebuilt release (Linux x64 / Windows x64)
-- `VERSION` – stable release version used by the release workflow
+- `VERSION` – stable release version used by the release workflow and kept in sync with the CLI project's `Version`
 - `.github/workflows/release.yml` – publish PR previews and VERSION-based stable releases (Linux x64 / Windows x64)
 - `publish.bat` – `dotnet publish` win-x64 Release
 - `publish.sh`  – `dotnet publish` linux-x64 Release (needs Linux/WSL for the AOT native toolchain)
@@ -126,8 +127,8 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 | `run` (success) | application output only, rc=0 | same (incl. `--no-restore`) | identical |
 | `run` (failure) | `error CS0103 (...)` + `The build failed. Fix the build errors and run again.`, rc=1 | same | identical |
 | `run -- <app args>` | args forwarded to the app | same | identical |
-| `--version` / `version` | `11.0.100` (hosting SDK) | `11.0.100` | identical |
-| `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, version line from the hosting SDK | plain SDK command list | intentionally annotated (byte-identical otherwise) |
+| `--version` / `version` | `Sharp 0.3.0 (.NET SDK 11.0.100)` | `11.0.100` | intentionally adds Sharp's version; SDK version matches |
+| `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, header with Sharp and SDK versions | plain SDK command list | intentionally annotated (byte-identical otherwise) |
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
 | `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |

@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/martasp/sharp/main/install.sh | bash
 #
 # Environment:
-#   SHARP_VERSION       release tag to install (default: latest), e.g. v0.1.0
+#   SHARP_VERSION       release tag to install (default: latest), e.g. v0.3.0
 #   SHARP_INSTALL_DIR   destination directory (default: ~/.local/bin)
 set -euo pipefail
 
