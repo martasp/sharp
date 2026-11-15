@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimplePlayground", "SimpleP
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntimeHostExe", "DotnetRuntimeHostExe\DotnetRuntimeHostExe.csproj", "{3B06D313-389D-4A72-8B3B-992491813507}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntime10", "DotnetRuntime10\DotnetRuntime10.csproj", "{DADA7AEC-98D3-4CF9-A3A5-E38902619802}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotnetRuntime11", "DotnetRuntime11\DotnetRuntime11.csproj", "{DADA7AEC-98D3-4CF9-A3A5-E38902619802}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
 EndProject
@@ -21,7 +21,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayloadStager", "tools\Payl
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dotnet10Dependencies", "src\Dotnet10Dependencies\Dotnet10Dependencies.csproj", "{64516C54-DF8C-463C-8B79-C62BD11842F4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dotnet11Dependencies", "src\Dotnet11Dependencies\Dotnet11Dependencies.csproj", "{64516C54-DF8C-463C-8B79-C62BD11842F4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

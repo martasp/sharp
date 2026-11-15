@@ -74,7 +74,7 @@ public class OutputParityTests
             foreach (var pack in Directory.EnumerateDirectories(root))
                 foreach (var version in Directory.EnumerateDirectories(pack))
                 {
-                    var refDir = Path.Combine(version, "ref", "net10.0");
+                    var refDir = Path.Combine(version, "ref", "net11.0");
                     if (Directory.Exists(refDir))
                         paths.AddRange(Directory.EnumerateFiles(refDir, "*.dll"));
                 }
@@ -85,11 +85,11 @@ public class OutputParityTests
     public static IEnumerable<object[]> Projects()
     {
         yield return new object[] { "console", "ParityConsole.csproj",
-            "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n",
+            "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net11.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n",
             "Program.cs",
             "Console.WriteLine(\"Hello from ParityConsole!\");\nConsole.WriteLine($\"two plus two is {2 + 2}\");\n" };
         yield return new object[] { "webapi", "ParityWebApi.csproj",
-            "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n",
+            "<Project Sdk=\"Microsoft.NET.Sdk.Web\">\n  <PropertyGroup>\n    <TargetFramework>net11.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n    <Nullable>enable</Nullable>\n  </PropertyGroup>\n</Project>\n",
             "Program.cs",
             "var builder = WebApplication.CreateBuilder(args);\nvar app = builder.Build();\napp.MapGet(\"/\", () => \"Hello from ParityWebApi\");\napp.MapGet(\"/sum/{a:int}/{b:int}\", (int a, int b) => a + b);\napp.Run();\n" };
     }
@@ -108,9 +108,9 @@ public class OutputParityTests
             var sdk = Run("dotnet", $"build \"{root}\" -c Debug");
             sdk.exit.ShouldBe(0, $"dotnet build failed:\n{sdk.output}");
             var assemblyName = Path.GetFileNameWithoutExtension(csprojName);
-            var outputDir = Path.Combine(root, "bin", "Debug", "net10.0");
+            var outputDir = Path.Combine(root, "bin", "Debug", "net11.0");
             var sdkDll = Path.Combine(outputDir, assemblyName + ".dll");
-            File.Exists(sdkDll).ShouldBeTrue("SDK build did not produce bin/Debug/net10.0/<name>.dll");
+            File.Exists(sdkDll).ShouldBeTrue("SDK build did not produce bin/Debug/net11.0/<name>.dll");
 
             var snapshotDir = Path.Combine(root, ".snapshot");
             Directory.CreateDirectory(snapshotDir);
@@ -122,13 +122,13 @@ public class OutputParityTests
 
             // 2. Ours: same project, same folder layout. The one tiny, deliberate difference is the output
             // root: "myc" instead of "bin", so we never overwrite SDK output. The relative layout
-            // (Debug\net10.0\<name>.dll) must mirror the SDK's exactly.
+            // (Debug\net11.0\<name>.dll) must mirror the SDK's exactly.
             var result = SharpCompiler.Build(root);
             result.Success.ShouldBeTrue($"compile failed: {result.Errors}");
-            var relLayout = Path.Combine("myc", "Debug", "net10.0", assemblyName + ".dll");
+            var relLayout = Path.Combine("myc", "Debug", "net11.0", assemblyName + ".dll");
             var ourDll = Path.Combine(root, relLayout);
             File.Exists(ourDll).ShouldBeTrue($"our output missing at {ourDll}");
-            var sdkRelLayout = Path.Combine("bin", "Debug", "net10.0", assemblyName + ".dll");
+            var sdkRelLayout = Path.Combine("bin", "Debug", "net11.0", assemblyName + ".dll");
             var sdkSegments = sdkRelLayout.Split(Path.DirectorySeparatorChar);
             var ourSegments = relLayout.Split(Path.DirectorySeparatorChar);
             ourSegments.Length.ShouldBe(sdkSegments.Length);
@@ -163,7 +163,7 @@ public class OutputParityTests
             // 3b. PDB document parity: the document set (path, hash algorithm, content checksum)
             // must be identical to the SDK's. Only the PdbId (a content-derived GUID) differs by
             // construction, so a full doc-set equality assert is the right gate.
-            var ourPdb = Path.Combine(root, "myc", "Debug", "net10.0", assemblyName + ".pdb");
+            var ourPdb = Path.Combine(root, "myc", "Debug", "net11.0", assemblyName + ".pdb");
             PdbDocumentSummaries(ourPdb).ShouldBe(
                 PdbDocumentSummaries(snapshotPdb), "PDB document set parity (paths + SHA-256 checksums)");
             PdbTextDump(ourPdb).ShouldBe(PdbTextDump(snapshotPdb)
@@ -223,9 +223,9 @@ public class OutputParityTests
             }
 
             var table = new StringBuilder();
-            table.AppendLine($"| {assemblyName} (Debug, net10.0) | SDK build | our build |");
+            table.AppendLine($"| {assemblyName} (Debug, net11.0) | SDK build | our build |");
             table.AppendLine("|---|-:|-:|");
-            table.AppendLine($"| output (root differs by design) | bin\\\\Debug\\\\net10.0\\\\{assemblyName}.dll | myc\\\\Debug\\\\net10.0\\\\{assemblyName}.dll |");
+            table.AppendLine($"| output (root differs by design) | bin\\\\Debug\\\\net11.0\\\\{assemblyName}.dll | myc\\\\Debug\\\\net11.0\\\\{assemblyName}.dll |");
             table.AppendLine($"| size (bytes) | {sdkSize} | {new FileInfo(ourDll).Length} |");
             table.AppendLine($"| sha256 | {Sha256(snapshotDll)} | {Sha256(ourDll)} |");
             table.AppendLine($"| diffoscope | - | {verdict} |");
@@ -261,8 +261,8 @@ public class OutputParityTests
             var ours = SharpCompiler.Build(root);
             ours.Success.ShouldBeTrue($"our build failed: {ours.Errors}");
 
-            var sdkDir = Path.Combine(root, "bin", "Debug", "net10.0");
-            var ourDir = Path.Combine(root, "myc", "Debug", "net10.0");
+            var sdkDir = Path.Combine(root, "bin", "Debug", "net11.0");
+            var ourDir = Path.Combine(root, "myc", "Debug", "net11.0");
             var sdkFiles = RelativeFiles(sdkDir);
             var ourFiles = RelativeFiles(ourDir);
 
@@ -277,12 +277,15 @@ public class OutputParityTests
             unexpected.ShouldBeEmpty(
                 $"our output tree ships files the SDK never produces (shared-framework or analyzer assemblies?): {string.Join(", ", unexpected)}");
 
-            // SDK-only files are the documented ones: the dependency graph we deliberately do not
-            // emit, and the Web SDK's assets manifest.
+            // SDK-only files are the documented ones: the dependency graph and dev-time
+            // runtimeconfig we deliberately do not emit, and the Web SDK's static-assets manifests.
             foreach (var file in sdkOnly)
             {
                 var allowed = file == assemblyName + ".deps.json"
-                              || (kind == "webapi" && file == assemblyName + ".staticwebassets.endpoints.json");
+                              || file == assemblyName + ".runtimeconfig.dev.json"
+                              || (kind == "webapi"
+                                  && (file == assemblyName + ".staticwebassets.endpoints.json"
+                                      || file == assemblyName + ".staticwebassets.runtime.json"));
                 allowed.ShouldBeTrue($"SDK-only file '{file}' has no equivalent in our tree: {string.Join(", ", sdkOnly)}");
             }
 
@@ -323,26 +326,26 @@ public class OutputParityTests
     [Fact]
     public void Console_Output_Runs_From_Sdk_Relative_Path()
     {
-        // The produced console DLL is runnable straight from our myc\Debug\net10.0 output layout.
+        // The produced console DLL is runnable straight from our myc\Debug\net11.0 output layout.
         var root = TempRoot("opencode-parity-run");
         try
         {
             File.WriteAllText(Path.Combine(root, "ParityConsole.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net10.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n  </PropertyGroup>\n</Project>\n");
+                "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net11.0</TargetFramework>\n    <ImplicitUsings>enable</ImplicitUsings>\n  </PropertyGroup>\n</Project>\n");
             File.WriteAllText(Path.Combine(root, "Program.cs"),
                 "Console.WriteLine(\"PARITY-RUN-OK\");\n");
 
             var result = SharpCompiler.Build(root);
             result.Success.ShouldBeTrue(result.Errors);
 
-            var dll = Path.Combine(root, "myc", "Debug", "net10.0", "ParityConsole.dll");
+            var dll = Path.Combine(root, "myc", "Debug", "net11.0", "ParityConsole.dll");
             File.Exists(dll).ShouldBeTrue();
 
             // Parse the runtimeconfig before running it. A malformed one still ran on the machine
             // that produced it - the host recovered - but on CI the same file left the app with no
             // resolvable framework and it aborted with "Could not load file or assembly
             // 'System.Runtime'". Running it is not a sufficient check.
-            var runtimeConfigPath = Path.Combine(root, "myc", "Debug", "net10.0", "ParityConsole.runtimeconfig.json");
+            var runtimeConfigPath = Path.Combine(root, "myc", "Debug", "net11.0", "ParityConsole.runtimeconfig.json");
             File.Exists(runtimeConfigPath).ShouldBeTrue();
             var runtimeConfigText = File.ReadAllText(runtimeConfigPath);
             Should.NotThrow(() => JsonDocument.Parse(runtimeConfigText).Dispose(),

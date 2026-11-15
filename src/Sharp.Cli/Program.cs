@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using static System.Console;
 
 // CLI command parity with the .NET SDK: `build`, `run`, `help`, `version`/`--version`.
@@ -40,7 +41,8 @@ var SdkCommands = new (string Name, string Description, bool Implemented)[]
 };
 
 // SDK-independent spine of the help output, mirroring `dotnet help`. The version line (top) and the
-// SDK command list are generated with live values.
+// SDK command list are generated with live values: Sharp's version comes from the build, the SDK
+// version from the embedded payload.
 const string HelpPreamble = """
 Usage: dotnet [runtime-options] [path-to-application] [arguments]
 
@@ -89,7 +91,7 @@ const int SdkCommandAnnotationColumn = 94;
 string HelpText()
 {
     var text = new System.Text.StringBuilder();
-    text.AppendLine($".NET SDK ({SdkVersion()})");
+    text.AppendLine($"Sharp {SharpVersion()} (.NET SDK {SdkVersion()})");
     text.Append(HelpPreamble);
     text.AppendLine();
     foreach (var (name, description, implemented) in SdkCommands)
@@ -116,7 +118,7 @@ switch (first)
         PrintHelp();
         return 0;
     case "version" or "--version":
-        WriteLine(SdkVersion());
+        WriteLine($"Sharp {SharpVersion()} (.NET SDK {SdkVersion()})");
         return 0;
     case "build":
         return BuildCommand(explicitCommand ? args.Skip(1).ToArray() : args);
@@ -686,6 +688,19 @@ static string WithProjectSuffix(string errors, string? projectFile)
 // It comes from the payload embedded in the binary rather than by running `dotnet --version`, so it
 // still works on a machine with no .NET SDK installed.
 static string SdkVersion() => EmbeddedSdkRefs.SdkVersion;
+
+// Sharp's own release version, stamped into the CLI assembly at build time. The project default is
+// kept in sync with VERSION; the release workflow overrides it with -p:Version. Build metadata after
+// '+' is not part of the user-facing version.
+static string SharpVersion()
+{
+    var informational = (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+    if (string.IsNullOrEmpty(informational)) return "unknown";
+
+    int metadata = informational.IndexOf('+');
+    return metadata >= 0 ? informational[..metadata] : informational;
+}
 
 void PrintHelp()
 {

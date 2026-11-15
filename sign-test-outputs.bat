@@ -5,8 +5,8 @@ rem unsigned binaries (see publish.bat), so every `dotnet build` re-writes these
 rem unsigned and they must be re-signed before `dotnet test` runs the parity suite.
 set "SIGNTOOL=C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
 set "THUMBPRINT=63DE8A7D5283718D453AD7CCD825BB27842AD5F0"
-set "CLI=src\Sharp.Cli\bin\Debug\net10.0\Sharp.Cli.dll"
-set "LIB=src\Sharp.Cli\bin\Debug\net10.0\Sharp.dll"
+set "CLI=src\Sharp.Cli\bin\Debug\net11.0\Sharp.Cli.dll"
+set "LIB=src\Sharp.Cli\bin\Debug\net11.0\Sharp.dll"
 
 if not exist "%CLI%" (
     echo Sharp.Cli is not built - run `dotnet build Sharp.sln` first. 1>&2

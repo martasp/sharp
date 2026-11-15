@@ -3,7 +3,7 @@
 #   irm https://raw.githubusercontent.com/martasp/sharp/main/install.ps1 | iex
 #
 # Environment:
-#   SHARP_VERSION       release tag to install (default: latest), e.g. v0.1.0
+#   SHARP_VERSION       release tag to install (default: latest), e.g. v0.3.0
 #   SHARP_INSTALL_DIR   destination directory (default: %LOCALAPPDATA%\Sharp\bin)
 
 $ErrorActionPreference = 'Stop'

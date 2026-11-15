@@ -33,7 +33,7 @@ public class CliComparisonTests
         Path.Combine(RepoRoot, "tests", "TestExampleProjects", "FailingFixture");
 
     static string CliDll =>
-        Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net10.0", "Sharp.Cli.dll");
+        Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net11.0", "Sharp.Cli.dll");
 
     // The parity must exercise the current compiler CLI. It is NOT rebuilt from inside the test:
     // the test host keeps src\Sharp\bin assemblies mapped, so a subprocess `dotnet build`

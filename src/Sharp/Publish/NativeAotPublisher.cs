@@ -184,7 +184,7 @@ public static class NativeAotPublisher
         if (serverGc)
             ilcArgs.Add("--runtimeopt:gcServer=1");
         if (stackTraceSupport)
-            ilcArgs.Add("--stacktracedata");
+            ilcArgs.Add("--stacktracedata:frames");
         ilcArgs.Add("--scanreflection");
 
         var methodBodyFolding = !optimize

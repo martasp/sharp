@@ -1,4 +1,4 @@
-using Dotnet10Dependencies;
+using Dotnet11Dependencies;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;

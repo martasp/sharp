@@ -21,10 +21,11 @@ When no target is given the current directory is searched for a single `.csproj`
 exactly like `dotnet build`/`dotnet run` (missing -> MSB1003 / "Couldn't find a project to
 run"; ambiguous -> MSB1011). `run` launches the freshly built app (apphost when present,
 else `dotnet <dll>`), propagates the app exit code, and forwards everything after `--` as
-application arguments. `--version` prints the hosting SDK version; `help` prints the SDK's
-general help text, with the SDK command list annotated `[implemented]`/`[not implemented]`
-(derived from the command registry, not hardcoded) and the version line taken from the hosting
-SDK. Like `dotnet`, flags the compiler does not act on (`--no-restore`,
+application arguments. `--version` prints Sharp's version and the hosting SDK version; `help`
+prints the SDK's general help text, with the SDK command list annotated
+`[implemented]`/`[not implemented]` (derived from the command registry, not hardcoded) and a
+header pairing Sharp's build version with the hosting SDK version. Like `dotnet`, flags the
+compiler does not act on (`--no-restore`,
 `--no-incremental`, `--nologo`, `-v`, ...) are accepted and ignored.
 
 ## Examples
@@ -36,7 +37,7 @@ SDK side-by-side output live in **`README.md`**.
 ```
 # build a single project by folder or .csproj file (terminal-logger summary w/ seconds, path relative to CWD)
 cd <repo> && sharp build tests/TestExampleProjects/HelloParityFixture
-  HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+  HelloParityFixture net11.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net11.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
 ```
@@ -44,9 +45,9 @@ Build succeeded in 1.2s
 ```
 # build a solution (.sln/.slnx use the terminal-logger grammar: per-project timing lines + summary)
 sharp build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
-  LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
-  LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
-  SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
+  LibA net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net11.0/LibA.dll
+  LibB net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net11.0/LibB.dll
+  SlnApp net11.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net11.0/SlnApp.dll
 
 Build succeeded in 0.4s
 ```
@@ -66,7 +67,7 @@ Hello from Sharp!
 ```
 # a failing build reports errors (one indented line per error) and exits 1
 cd <repo> && sharp build tests/TestExampleProjects/FailingFixture
-  FailingFixture net10.0 failed with 1 error(s) (0.6s)
+  FailingFixture net11.0 failed with 1 error(s) (0.6s)
     <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
 Build failed with 1 error(s) in 1.2s
@@ -75,7 +76,7 @@ Build failed with 1 error(s) in 1.2s
 
 ```
 # version and help mirror the host SDK
-sharp version    # prints the SDK version, e.g. 10.0.400
+sharp version    # prints the SDK version, e.g. 11.0.100
 sharp help       # full dotnet help text
 ```
 
@@ -106,7 +107,7 @@ sharp help       # full dotnet help text
 
 ### Scripts
 - `install.sh` / `install.ps1` – install a prebuilt release (Linux x64 / Windows x64)
-- `VERSION` – stable release version used by the release workflow
+- `VERSION` – stable release version used by the release workflow and kept in sync with the CLI project's `Version`
 - `.github/workflows/release.yml` – publish PR previews and VERSION-based stable releases (Linux x64 / Windows x64)
 - `publish.bat` – `dotnet publish` win-x64 Release
 - `publish.sh`  – `dotnet publish` linux-x64 Release (needs Linux/WSL for the AOT native toolchain)
@@ -126,8 +127,8 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 | `run` (success) | application output only, rc=0 | same (incl. `--no-restore`) | identical |
 | `run` (failure) | `error CS0103 (...)` + `The build failed. Fix the build errors and run again.`, rc=1 | same | identical |
 | `run -- <app args>` | args forwarded to the app | same | identical |
-| `--version` / `version` | `10.0.400` (hosting SDK) | `10.0.400` | identical |
-| `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, version line from the hosting SDK | plain SDK command list | intentionally annotated (byte-identical otherwise) |
+| `--version` / `version` | `Sharp 0.3.0 (.NET SDK 11.0.100)` | `11.0.100` | intentionally adds Sharp's version; SDK version matches |
+| `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, header with Sharp and SDK versions | plain SDK command list | intentionally annotated (byte-identical otherwise) |
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
 | `run` with no runnable project | `Couldn't find a project to run. Ensure a project exists in <dir>, or pass the path to the project using --project.` | same | identical |
@@ -187,7 +188,7 @@ and our `BuildSolution` both pass on the solution.
 ## Future work
 
 ### OrchardCore canary
-`OrchardCore.slnx` (239 projects, .NET 10, ASP.NET Core CMS) is the external stress test. Fresh clone +
+`OrchardCore.slnx` (239 projects, .NET 11, ASP.NET Core CMS) is the external stress test. Fresh clone +
 `dotnet restore` (warms the NuGet cache), then `sharp OrchardCore.slnx`. Baseline
 measurement: **3 OK / 236 FAIL** (42.3s) vs `dotnet build OrchardCore.slnx --no-restore` (149.4s, exit 0).
 Pilot led to real fixes (`.slnx` parsing, CLI routing) and this prioritized gap list:

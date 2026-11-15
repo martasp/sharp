@@ -29,7 +29,7 @@ public class NoDotnetSdkTests
     // Matches BootstrapPipelineTests / PerformanceComparisonTests: the AOT publish for this OS.
     private static readonly string Sharp = Path.Combine(
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..")),
-        "src", "Sharp.Cli", "bin", "Release", "net10.0",
+        "src", "Sharp.Cli", "bin", "Release", "net11.0",
         OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "publish",
         OperatingSystem.IsWindows() ? "Sharp.Cli.exe" : "Sharp.Cli");
 
@@ -84,7 +84,7 @@ public class NoDotnetSdkTests
 
             // /src is a bind mount of `root`, so the output is right here on the host. No need to
             // re-enter the sandbox to look at it.
-            string bin(string project) => Path.Combine(root, project, "myc", "Debug", "net10.0");
+            string bin(string project) => Path.Combine(root, project, "myc", "Debug", "net11.0");
             File.Exists(Path.Combine(bin("Domain"), "Domain.dll")).ShouldBeTrue();
 
             foreach (var app in new[] { "Cli", "Api" })
@@ -100,7 +100,7 @@ public class NoDotnetSdkTests
 
                 // The runtime version comes from the embedded SDK manifest, not from a probe.
                 var runtimeConfig = File.ReadAllText(Path.Combine(bin(app), $"{app}.runtimeconfig.json"));
-                runtimeConfig.ShouldContain("\"version\": \"10.0");
+                runtimeConfig.ShouldContain("\"version\": \"11.0");
             }
 
             // The web app must declare the ASP.NET Core shared framework or it cannot serve.
@@ -169,8 +169,8 @@ public class NoDotnetSdkTests
             // together pin both directions of the minimal-API public-Program generator.
             foreach (var project in new[] { "Cli", "Api" })
             {
-                var ours = Path.Combine(root, project, "myc", "Debug", "net10.0", project + ".dll");
-                var sdkDll = Path.Combine(root, project, "bin", "Debug", "net10.0", project + ".dll");
+                var ours = Path.Combine(root, project, "myc", "Debug", "net11.0", project + ".dll");
+                var sdkDll = Path.Combine(root, project, "bin", "Debug", "net11.0", project + ".dll");
                 File.Exists(ours).ShouldBeTrue($"AOT output missing at {ours}");
 
                 var ourSurface = ReadSurface(ours);
@@ -185,11 +185,11 @@ public class NoDotnetSdkTests
             }
 
             // Spelled out as well, so the intent survives a future edit that weakens the loop above.
-            ReadSurface(Path.Combine(root, "Api", "myc", "Debug", "net10.0", "Api.dll"))
+            ReadSurface(Path.Combine(root, "Api", "myc", "Debug", "net11.0", "Api.dll"))
                 .PublicTypes.ShouldContain("Program",
                     "minimal-API web app must expose a public Program; the SDK's public-Program " +
                     "generator is registry-only under AOT");
-            ReadSurface(Path.Combine(root, "Cli", "myc", "Debug", "net10.0", "Cli.dll"))
+            ReadSurface(Path.Combine(root, "Cli", "myc", "Debug", "net11.0", "Cli.dll"))
                 .PublicTypes.ShouldNotContain("Program",
                     "console app must keep an internal Program; the public-Program generator must " +
                     "stay gated on IsWebSdk");
@@ -340,7 +340,7 @@ public class NoDotnetSdkTests
         Write("Domain", "Domain.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Nullable>enable</Nullable>
                 <ImplicitUsings>enable</ImplicitUsings>
               </PropertyGroup>
@@ -384,7 +384,7 @@ public class NoDotnetSdkTests
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
                 <OutputType>Exe</OutputType>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Nullable>enable</Nullable>
                 <ImplicitUsings>enable</ImplicitUsings>
               </PropertyGroup>
@@ -425,7 +425,7 @@ public class NoDotnetSdkTests
         Write("Api", "Api.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
               <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <Nullable>enable</Nullable>
                 <ImplicitUsings>enable</ImplicitUsings>
               </PropertyGroup>

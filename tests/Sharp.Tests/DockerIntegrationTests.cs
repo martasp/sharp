@@ -27,7 +27,7 @@ public class DockerIntegrationTests
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <OutputType>Exe</OutputType>
-            <TargetFramework>net10.0</TargetFramework>
+            <TargetFramework>net11.0</TargetFramework>
             <ImplicitUsings>enable</ImplicitUsings>
             <Nullable>enable</Nullable>
           </PropertyGroup>
@@ -54,7 +54,7 @@ public class DockerIntegrationTests
         }
 
         await using var container = new ContainerBuilder()
-            .WithImage("mcr.microsoft.com/dotnet/sdk:10.0")
+            .WithImage("mcr.microsoft.com/dotnet/sdk:11.0")
             .WithEntrypoint("/bin/bash", "-c")
             .WithCommand("while true; do sleep 1000; done")
             .WithResourceMapping(SrcDir, "/src/src")
@@ -77,23 +77,23 @@ public class DockerIntegrationTests
         build.ExitCode.ShouldBe(0, $"Build failed.\n{build.Stdout}\n{build.Stderr}");
         build.Stdout.ShouldContain("Build succeeded");
 
-        // Microsoft compiler (real SDK): /app/hello -> bin\Debug\net10.0\hello.dll
+        // Microsoft compiler (real SDK): /app/hello -> bin\Debug\net11.0\hello.dll
         var msBuild = await container.ExecAsync(
             new[] { "dotnet", "build", "/app/hello" });
         msBuild.ExitCode.ShouldBe(0, $"Microsoft build failed.\n{msBuild.Stdout}\n{msBuild.Stderr}");
         var msRun = await container.ExecAsync(
-            new[] { "dotnet", "/app/hello/bin/Debug/net10.0/hello.dll" });
+            new[] { "dotnet", "/app/hello/bin/Debug/net11.0/hello.dll" });
         msRun.ExitCode.ShouldBe(0, $"Microsoft run failed.\n{msRun.Stderr}");
         msRun.Stdout.Trim().ShouldBe("Hello from Sharp!");
 
-        // Our compiler: /app/hello -> myc\Debug\net10.0\hello.dll (own tree, never touches bin\)
+        // Our compiler: /app/hello -> myc\Debug\net11.0\hello.dll (own tree, never touches bin\)
         var compile = await container.ExecAsync(
-            new[] { "dotnet", "/src/src/Sharp.Cli/bin/Release/net10.0/Sharp.Cli.dll", "/app/hello" });
+            new[] { "dotnet", "/src/src/Sharp.Cli/bin/Release/net11.0/Sharp.Cli.dll", "/app/hello" });
         compile.ExitCode.ShouldBe(0, $"Compilation failed.\n{compile.Stdout}\n{compile.Stderr}");
         compile.Stdout.ShouldContain("Build succeeded");
 
         var run = await container.ExecAsync(
-            new[] { "dotnet", "/app/hello/myc/Debug/net10.0/hello.dll" });
+            new[] { "dotnet", "/app/hello/myc/Debug/net11.0/hello.dll" });
         run.ExitCode.ShouldBe(0, $"Run failed.\n{run.Stderr}");
         run.Stdout.Trim().ShouldBe("Hello from Sharp!");
     }
@@ -108,7 +108,7 @@ public class DockerIntegrationTests
         }
 
         await using var container = new ContainerBuilder()
-            .WithImage("mcr.microsoft.com/dotnet/sdk:10.0-nanoserver-ltsc2022")
+            .WithImage("mcr.microsoft.com/dotnet/sdk:11.0-nanoserver-ltsc2022")
             .WithEntrypoint("cmd", "/c")
             .WithCommand("ping -t 127.0.0.1")
             .WithResourceMapping(SrcDir, "C:\\src\\src")
@@ -129,23 +129,23 @@ public class DockerIntegrationTests
         build.ExitCode.ShouldBe(0, $"Build failed.\n{build.Stdout}\n{build.Stderr}");
         build.Stdout.ShouldContain("Build succeeded");
 
-        // Microsoft compiler (real SDK): C:\app\hello -> bin\Debug\net10.0\hello.dll
+        // Microsoft compiler (real SDK): C:\app\hello -> bin\Debug\net11.0\hello.dll
         var msBuild = await container.ExecAsync(
             new[] { "dotnet", "build", "C:\\app\\hello" });
         msBuild.ExitCode.ShouldBe(0, $"Microsoft build failed.\n{msBuild.Stdout}\n{msBuild.Stderr}");
         var msRun = await container.ExecAsync(
-            new[] { "dotnet", "C:\\app\\hello\\bin\\Debug\\net10.0\\hello.dll" });
+            new[] { "dotnet", "C:\\app\\hello\\bin\\Debug\\net11.0\\hello.dll" });
         msRun.ExitCode.ShouldBe(0, $"Microsoft run failed.\n{msRun.Stderr}");
         msRun.Stdout.Trim().ShouldBe("Hello from Sharp!");
 
-        // Our compiler: C:\app\hello -> myc\Debug\net10.0\hello.dll (own tree, never touches bin\)
+        // Our compiler: C:\app\hello -> myc\Debug\net11.0\hello.dll (own tree, never touches bin\)
         var compile = await container.ExecAsync(
-            new[] { "dotnet", "C:\\src\\src\\Sharp.Cli\\bin\\Release\\net10.0\\Sharp.Cli.dll", "C:\\app\\hello" });
+            new[] { "dotnet", "C:\\src\\src\\Sharp.Cli\\bin\\Release\\net11.0\\Sharp.Cli.dll", "C:\\app\\hello" });
         compile.ExitCode.ShouldBe(0, $"Compilation failed.\n{compile.Stdout}\n{compile.Stderr}");
         compile.Stdout.ShouldContain("Build succeeded");
 
         var run = await container.ExecAsync(
-            new[] { "dotnet", "C:\\app\\hello\\myc\\Debug\\net10.0\\hello.dll" });
+            new[] { "dotnet", "C:\\app\\hello\\myc\\Debug\\net11.0\\hello.dll" });
         run.ExitCode.ShouldBe(0, $"Run failed.\n{run.Stderr}");
         run.Stdout.Trim().ShouldBe("Hello from Sharp!");
     }
