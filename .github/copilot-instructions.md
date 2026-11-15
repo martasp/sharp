@@ -6,8 +6,8 @@ This repository is a self-hosting .NET compiler and CLI built on Roslyn. The pro
 
 ### Required SDK
 
-- Use .NET SDK 10 (`10.0.400`), matching the repo's compatibility target.
-- CI provisions `.NET 10` and builds the solution in Debug mode before running tests.
+- Use .NET SDK 11 (`11.0.100`), matching the repo's compatibility target.
+- CI provisions `.NET 11` and builds the solution in Debug mode before running tests.
 
 ### Restore and build
 
@@ -22,7 +22,7 @@ The repo also publishes the AOT-compiled CLI with:
 bash publish.sh
 ```
 
-This produces the self-contained CLI under `src/Sharp.Cli/bin/Release/net10.0/.../publish/`.
+This produces the self-contained CLI under `src/Sharp.Cli/bin/Release/net11.0/.../publish/`.
 
 ### Test suite
 
@@ -92,7 +92,7 @@ There is no separate lint target in this repo; build + test validation is the st
 - Solution builds are purposely ordered into dependency waves; keep build-order assumptions consistent with the graph logic in `SolutionBuild`.
 - Build output folders for projects are intentionally shaped to mimic the `dotnet` SDK output layout (`myc/Debug/<tfm>/...`) and not a custom arbitrary location.
 - Use the test fixtures and parity snapshots as the ground truth for expected behavior; many tests are designed around exact CLI comparisons and Verify snapshots.
-- Keep changes compatible with .NET 10 and the repo’s embedded SDK/runtime payload expectations; update docs or migration guidance when version bumps are involved.
+- Keep changes compatible with .NET 11 and the repo’s embedded SDK/runtime payload expectations; update docs or migration guidance when version bumps are involved.
 
 ## Practical guidance for future Copilot sessions
 
