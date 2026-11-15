@@ -33,7 +33,7 @@ The Windows binary is currently unsigned, so SmartScreen may show a warning on f
 ## Requirements
 
 - **Prebuilt binary:** Linux x64 or Windows x64; the installer needs `curl` or PowerShell.
-- **Building from source:** .NET SDK 10 (`10.0.400`), which supplies both Roslyn and the framework
+- **Building from source:** .NET SDK 11 (`11.0.100`), which supplies both Roslyn and the framework
   ref packs. The NativeAOT publish path needs the native toolchain on Linux/WSL or Windows.
 
 ## Build
@@ -41,7 +41,7 @@ The Windows binary is currently unsigned, so SmartScreen may show a warning on f
 ```
 dotnet build Sharp.sln            # debug compiler + native libs + tests
 bash publish.sh                            # AOT self-contained CLI at
-                                           #   src/Sharp.Cli/bin/Release/net10.0/linux-x64/publish/Sharp.Cli
+                                           #   src/Sharp.Cli/bin/Release/net11.0/linux-x64/publish/Sharp.Cli
 ```
 
 The test suite is `dotnet test tests/Sharp.Tests --nologo` (58 tests, incl. byte-for-byte
@@ -57,7 +57,7 @@ sharp <command> [target] [-- app args]
 |---|---|
 | `build` | compiles the target; identical output/exit code to `dotnet build` |
 | `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
-| `version` / `--version` | prints the hosting SDK version (e.g. `10.0.400`) |
+| `version` / `--version` | prints the hosting SDK version (e.g. `11.0.100`) |
 | `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the version line comes from the hosting SDK |
 | `sharp <target>` | legacy form, routed to `build` |
 
@@ -86,7 +86,7 @@ Uses the SDK terminal-logger summary, seconds included, path relative to the cur
 
 ```
 $ cd <repo> && sharp build tests/TestExampleProjects/HelloParityFixture
-  HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+  HelloParityFixture net11.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net11.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
 ```
@@ -100,9 +100,9 @@ project; info-severity diagnostics stay hidden, exactly like the SDK at default 
 
 ```
 $ sharp build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
-  LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
-  LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
-  SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
+  LibA net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net11.0/LibA.dll
+  LibB net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net11.0/LibB.dll
+  SlnApp net11.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net11.0/SlnApp.dll
 
 Build succeeded in 0.4s
 ```
@@ -118,7 +118,7 @@ Xs` where the SDK would say `Build succeeded with N warning(s) in Xs`.
 
 ```
 $ cd <repo>/tests/TestExampleProjects/HelloParityFixture && sharp build
-  HelloParityFixture net10.0 succeeded (0.4s) → myc/Debug/net10.0/HelloParityFixture.dll
+  HelloParityFixture net11.0 succeeded (0.4s) → myc/Debug/net11.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
 
@@ -138,7 +138,7 @@ Hello from Sharp!
 
 ```
 $ sharp build <repo>/tests/TestExampleProjects/FailingFixture
-  FailingFixture net10.0 failed with 1 error(s) (0.6s)
+  FailingFixture net11.0 failed with 1 error(s) (0.6s)
     <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
 Build failed with 1 error(s) in 1.2s     # $? = 1
@@ -148,9 +148,9 @@ Build failed with 1 error(s) in 1.2s     # $? = 1
 
 ```
 $ sharp --version
-10.0.400                  # the hosting SDK version, matching `dotnet --version`
+11.0.100                  # the hosting SDK version, matching `dotnet --version`
 $ sharp help
-.NET SDK (10.0.400)       # correct SDK version, never hardcoded
+.NET SDK (11.0.100)       # correct SDK version, never hardcoded
 ...
 SDK commands:
   build             Build a .NET project.                                                     [implemented]

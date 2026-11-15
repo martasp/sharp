@@ -45,13 +45,13 @@ public static class CliComparisonHelper
             // Our compiler emits its artifacts under a dedicated "myc" tree (myc\Debug\<TFM>) so it
             // never overwrites real SDK output in bin\; map it to the canonical SDK layout. The path
             // may be absolute (".../myc/Debug/...") or relative from the CWD ("myc/Debug/...").
-            .Replace("myc/Debug/net10.0/", "bin/Debug/net10.0/")
+            .Replace("myc/Debug/net11.0/", "bin/Debug/net11.0/")
             // Terminal-logger durations ("succeeded (0.4s)", "in 1.2s") are wall-clock noise that
             // varies per run; collapse any "x.xs" to a token so parity is asserted on structure.
             .ReplaceRegex(@"\d+\.\d+s", "<secs>")
-            // The SDK patch version is not ours to pin: CI resolves '10.0.x' to whatever is
-            // current, so a snapshot containing 10.0.401 fails against a 10.0.400 laptop. The only
-            // three-part version these outputs contain is the SDK's own (no package or TFM
+            // The SDK patch version is not ours to pin: CI resolves '11.0.x' to whatever is
+            // current, so a snapshot containing one patch fails against a laptop with another. The
+            // only three-part version these outputs contain is the SDK's own (no package or TFM
             // versions are printed), so this cannot mask a real behavioural difference.
             .ReplaceRegex(@"\d+\.\d+\.\d+(?=[^\d])", "<sdkver>");
 

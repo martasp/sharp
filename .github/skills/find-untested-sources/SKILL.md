@@ -85,8 +85,8 @@ pairing beats the polyglot engine's identifier overlap.
 
 ### Prerequisites
 
-- .NET SDK that supports file-based apps (`dotnet run script.cs`). Pinned in the
-  repo's `global.json` (SDK 11 preview or later).
+- .NET SDK that supports file-based apps (`dotnet run script.cs`). This repo
+  targets SDK 11 (`11.0.100`) or later and pins it in CI.
 - No internet access required beyond the initial NuGet restore of
   `Microsoft.CodeAnalysis.CSharp` on first run.
 

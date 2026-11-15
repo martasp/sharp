@@ -1,0 +1,11 @@
+-------------- speed comparison (Sharp.sln) --------------
+  commit: adbf32d6c5e7-dirty
+  our BuildSolution  run1  wall   3.26s   (sum of per-project 4.99s, 8/8 OK)
+  our BuildSolution  run2  wall   3.09s   (no cache: always from scratch)
+  dotnet build       cold  wall 11.44s (incl. restore)
+  dotnet build       warm  wall 7.47s (incremental)
+  speed-up vs dotnet build cold: 3.51x
+---------------------------------------------------------------------
+  notes:
+  - ours has no incremental cache; dotnet build warm is incremental
+  - ours reports per-project FAIL for unsupported features (see main.md)

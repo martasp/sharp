@@ -32,7 +32,7 @@ public class DllSnapshotTests
     [Fact]
     public async Task TypeDefinitionUsage()
     {
-        var msCompilerDll = Path.Combine(MSCompiler, "myc", "Debug", "net10.0", "MSCompiler.dll");
+        var msCompilerDll = Path.Combine(MSCompiler, "myc", "Debug", "net11.0", "MSCompiler.dll");
         // The golden MSCompiler.dll used to be a checked-out artifact (Windows machine). Make the
         // test self-contained: build it on first run so a fresh checkout has a reference to compare.
         if (!File.Exists(msCompilerDll))
@@ -46,7 +46,7 @@ public class DllSnapshotTests
         var buildDetails = SharpCompiler.Build(MyCompiler);
         Assert.True(buildDetails.Success, $"Build failed with errors: {buildDetails.Errors}");
 
-        var MyCompilerDllMetadata = ExtractAll(Path.Combine(MyCompiler, "myc", "Debug", "net10.0", "MSCompiler.dll")); // MyCompiler produces an MSCompiler.exe
+        var MyCompilerDllMetadata = ExtractAll(Path.Combine(MyCompiler, "myc", "Debug", "net11.0", "MSCompiler.dll")); // MyCompiler produces an MSCompiler.exe
 
         var MsCompilerDllMetadataJson = JsonSerializer.Serialize(MsCompilerDllMetadata, new JsonSerializerOptions
         {

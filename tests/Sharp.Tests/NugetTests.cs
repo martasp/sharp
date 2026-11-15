@@ -28,27 +28,27 @@ public class NuGetTests
     [Fact]
     public void FindPackageDLLs_ScoringPrefersExactCoreTfmOverNetStandard()
     {
-        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("netstandard2.0", "net10.0"));
-        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("net472", "net10.0"));
-        NuGetTfm.Score("net10.0", "net10.0").ShouldBeGreaterThan(NuGetTfm.Score("net8.0", "net10.0"));
+        NuGetTfm.Score("net8.0", "net11.0").ShouldBeGreaterThan(NuGetTfm.Score("netstandard2.0", "net11.0"));
+        NuGetTfm.Score("net8.0", "net11.0").ShouldBeGreaterThan(NuGetTfm.Score("net472", "net11.0"));
+        NuGetTfm.Score("net11.0", "net11.0").ShouldBeGreaterThan(NuGetTfm.Score("net8.0", "net11.0"));
     }
 
-    // A platform-specific lib folder (net10.0-ios26.0) must not be chosen for a platform-agnostic
+    // A platform-specific lib folder (net11.0-ios26.0) must not be chosen for a platform-agnostic
     // target: it would otherwise beat the compatible net8.0 folder and pull in the wrong variant.
     [Fact]
     public void Score_PlatformSpecificCandidate_IsNotCompatibleWithPlainTarget()
     {
-        NuGetTfm.Score("net10.0-ios26.0", "net10.0").ShouldBe(0);
-        NuGetTfm.Score("net10.0-tvos26.0", "net10.0").ShouldBe(0);
-        NuGetTfm.Score("net8.0-windows7.0", "net10.0").ShouldBe(0);
-        NuGetTfm.Score("net8.0", "net10.0").ShouldBeGreaterThan(0);
+        NuGetTfm.Score("net11.0-ios26.0", "net11.0").ShouldBe(0);
+        NuGetTfm.Score("net11.0-tvos26.0", "net11.0").ShouldBe(0);
+        NuGetTfm.Score("net8.0-windows7.0", "net11.0").ShouldBe(0);
+        NuGetTfm.Score("net8.0", "net11.0").ShouldBeGreaterThan(0);
     }
 
     [Fact]
     public void Score_PlatformSpecificCandidate_MatchesSamePlatformTarget()
     {
-        NuGetTfm.Score("net10.0-ios26.0", "net10.0-ios26.0").ShouldBeGreaterThan(0);
-        NuGetTfm.Score("net8.0", "net10.0-ios26.0").ShouldBeGreaterThan(0);
+        NuGetTfm.Score("net11.0-ios26.0", "net11.0-ios26.0").ShouldBeGreaterThan(0);
+        NuGetTfm.Score("net8.0", "net11.0-ios26.0").ShouldBeGreaterThan(0);
     }
 
 
@@ -58,7 +58,7 @@ public class NuGetTests
         var packagePath = NuGetPackage.FindPackagePath("Microsoft.CodeAnalysis", "5.0.0");
         packagePath.ShouldNotBeNull();
 
-        var dlls = NuGetPackage.FindPackageDLLs(packagePath, "net10.0");
+        var dlls = NuGetPackage.FindPackageDLLs(packagePath, "net11.0");
         dlls.ShouldBeEmpty();
     }
 
@@ -68,7 +68,7 @@ public class NuGetTests
         var packagePath = NuGetPackage.FindPackagePath("Testcontainers", "4.4.0");
         packagePath.ShouldNotBeEmpty();
 
-        var dlls = NuGetPackage.GetTransitivePackageDlls(packagePath, "net10.0");
+        var dlls = NuGetPackage.GetTransitivePackageDlls(packagePath, "net11.0");
 
         dlls.ShouldNotBeEmpty();
         dlls.Select(Path.GetFileName)
@@ -151,7 +151,7 @@ public class NuGetTests
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                   </PropertyGroup>
                   <ItemGroup>
                     <PackageReference Include="YesSql.Filters.Abstractions" />
@@ -200,7 +200,7 @@ public class NuGetTests
         {
             Directory.CreateDirectory(root);
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>" +
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework>" +
                 "<ImplicitUsings>enable</ImplicitUsings></PropertyGroup>" +
                 "<ItemGroup><PackageReference Include=\"Parlot\" Version=\"1.5.8\" /></ItemGroup></Project>");
             File.WriteAllText(Path.Combine(root, "Program.cs"), "// placeholder\n");
@@ -227,7 +227,7 @@ public class NuGetTests
         {
             Directory.CreateDirectory(root);
             File.WriteAllText(Path.Combine(root, "Fixture.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>" +
+                "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><TargetFramework>net11.0</TargetFramework>" +
                 "<ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root, "Program.cs"), "// placeholder\n");
 

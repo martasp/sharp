@@ -34,12 +34,12 @@ public class HostingTest
         var hostExeName = OperatingSystem.IsWindows() ? "DotnetRuntimeHostExe.exe" : "DotnetRuntimeHostExe";
 
         var buildDetails = SharpCompiler.Build(MyCompiler);
-        var sharbin = Path.Combine(MyCompiler, "myc", "Debug", "net10.0");
+        var sharbin = Path.Combine(MyCompiler, "myc", "Debug", "net11.0");
         var dll = Path.Combine(sharbin, "MSCompiler.dll");
 
         // copy tool to myCompiler output folder
         File.Copy(
-            Path.Combine(TestPaths.RepoRoot, "DotnetRuntimeHostExe", "bin", "Release", "net10.0", "win-x64", "publish", hostExeName),
+            Path.Combine(TestPaths.RepoRoot, "DotnetRuntimeHostExe", "bin", "Release", "net11.0", "win-x64", "publish", hostExeName),
             Path.Combine(sharbin, hostExeName),
             true);
 
@@ -54,10 +54,10 @@ public class HostingTest
             """
             {
               "runtimeOptions": {
-                "tfm": "net10.0",
+                "tfm": "net11.0",
                 "framework": {
                   "name": "Microsoft.NETCore.App",
-                  "version": "10.0.0"
+                  "version": "11.0.0"
                 },
                 "configProperties": {
                   "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false
@@ -70,12 +70,12 @@ public class HostingTest
             """
             {
               "runtimeTarget": {
-                "name": ".NETCoreApp,Version=v10.0",
+                "name": ".NETCoreApp,Version=v11.0",
                 "signature": ""
               },
               "compilationOptions": {},
               "targets": {
-                ".NETCoreApp,Version=v10.0": {
+                ".NETCoreApp,Version=v11.0": {
                   "MSCompiler/1.0.0": {
                     "runtime": {
                       "MSCompiler.dll": {}

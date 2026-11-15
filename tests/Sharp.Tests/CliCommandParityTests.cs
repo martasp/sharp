@@ -41,7 +41,7 @@ public class CliCommandParityTests
         Path.Combine(TestExampleProjectsDir, "SlnFixtures", "SlnFixtures.sln");
 
     static string CliDll =>
-        Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net10.0", "Sharp.Cli.dll");
+        Path.Combine(RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net11.0", "Sharp.Cli.dll");
 
     private static async Task<(string Output, int ExitCode)> RunAsync(
         string fileName, string arguments, string? workingDirectory = null, params (string Key, string Value)[] env)
@@ -170,7 +170,7 @@ public class CliCommandParityTests
                 File.WriteAllText(Path.Combine(dir, name), """
                     <Project Sdk="Microsoft.NET.Sdk">
                       <PropertyGroup>
-                        <TargetFramework>net10.0</TargetFramework>
+                        <TargetFramework>net11.0</TargetFramework>
                       </PropertyGroup>
                     </Project>
                     """);

@@ -1,13 +1,13 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
-using Dotnet10Dependencies;
+using Dotnet11Dependencies;
 
 namespace Sharp;
 
 /// <summary>
 /// The compile-time payload sharp carries so it can build projects on a machine with no .NET SDK
 /// installed. The payload is staged at build time by tools/PayloadStager and embedded as the
-/// <c>embedded-refs.&lt;refpack&gt;.zip</c> manifest resource of the Dotnet10Dependencies assembly,
+/// <c>embedded-refs.&lt;refpack&gt;.zip</c> manifest resource of the Dotnet11Dependencies assembly,
 /// which is read here through <see cref="Payloads"/>.
 ///
 /// It contains only what compiling actually needs:
@@ -62,19 +62,19 @@ public static class EmbeddedSdkRefs
     }
 
     /// <summary>
-    /// Version of the shared framework sharp targets, e.g. <c>10.0.11</c>. This is written verbatim
+    /// Version of the shared framework sharp targets, e.g. <c>11.0.0</c>. This is written verbatim
     /// into every produced runtimeconfig.json.
     /// </summary>
     public static string RuntimeVersion => _runtimeVersion ??= ReadVersion("runtime");
 
     /// <summary>
-    /// Version of the reference packs that were embedded, e.g. <c>10.0.11</c>. This is a patch version
+    /// Version of the reference packs that were embedded, e.g. <c>11.0.0</c>. This is a patch version
     /// shared by the ref packs and the runtime, not the SDK's own version (see <see cref="SdkVersion"/>).
     /// </summary>
     public static string RefPackVersion => _refPackVersion ??= ReadVersion("refpack");
 
     /// <summary>
-    /// The .NET SDK version sharp was built against, e.g. <c>10.0.400</c>. Reported by
+    /// The .NET SDK version sharp was built against, e.g. <c>11.0.100</c>. Reported by
     /// <c>sharp --version</c>, matching what <c>dotnet --version</c> prints for that SDK. Stamped
     /// into the payload at build time so it is available with no SDK installed.
     /// </summary>
@@ -93,7 +93,7 @@ public static class EmbeddedSdkRefs
 
     /// <summary>
     /// Directory holding the ASP.NET Core targeting-pack generators (minimal-API public Program,
-    /// [LoggerMessage], options/validation/config-binding, RequestDelegateGenerator).
+    /// validation/config-binding, RequestDelegateGenerator).
     /// </summary>
     public static string AspNetRefPackAnalyzers => Path.Combine(
         Root, "packs", "Microsoft.AspNetCore.App.Ref", RefPackVersion, "analyzers", "dotnet", "cs");

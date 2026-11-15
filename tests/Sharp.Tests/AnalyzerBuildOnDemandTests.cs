@@ -44,7 +44,7 @@ public class AnalyzerBuildOnDemandTests
             File.WriteAllText(Path.Combine(root, "Analyzer", "Analyzer.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Library</OutputType>
                   </PropertyGroup>
                 </Project>
@@ -57,7 +57,7 @@ public class AnalyzerBuildOnDemandTests
             File.WriteAllText(Path.Combine(consumerDir, "Consumer.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
-                    <TargetFramework>net10.0</TargetFramework>
+                    <TargetFramework>net11.0</TargetFramework>
                     <OutputType>Library</OutputType>
                   </PropertyGroup>
                 </Project>
@@ -68,7 +68,7 @@ public class AnalyzerBuildOnDemandTests
             var build = SharpCompiler.Build(consumerDir);
             build.Success.ShouldBeTrue(build.Errors);
 
-            var analyzerDll = Path.Combine(root, "Analyzer", "myc", "Debug", "net10.0", "Analyzer.dll");
+            var analyzerDll = Path.Combine(root, "Analyzer", "myc", "Debug", "net11.0", "Analyzer.dll");
             File.Exists(analyzerDll).ShouldBeTrue(
                 $"Analyzer project output should be produced on demand at {analyzerDll}");
         }

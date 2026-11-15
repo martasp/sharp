@@ -36,7 +36,7 @@ SDK side-by-side output live in **`README.md`**.
 ```
 # build a single project by folder or .csproj file (terminal-logger summary w/ seconds, path relative to CWD)
 cd <repo> && sharp build tests/TestExampleProjects/HelloParityFixture
-  HelloParityFixture net10.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net10.0/HelloParityFixture.dll
+  HelloParityFixture net11.0 succeeded (0.4s) → tests/TestExampleProjects/HelloParityFixture/myc/Debug/net11.0/HelloParityFixture.dll
 
 Build succeeded in 1.2s
 ```
@@ -44,9 +44,9 @@ Build succeeded in 1.2s
 ```
 # build a solution (.sln/.slnx use the terminal-logger grammar: per-project timing lines + summary)
 sharp build <repo>/tests/TestExampleProjects/SlnFixtures/SlnFixtures.sln
-  LibA net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net10.0/LibA.dll
-  LibB net10.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net10.0/LibB.dll
-  SlnApp net10.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net10.0/SlnApp.dll
+  LibA net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibA/myc/Debug/net11.0/LibA.dll
+  LibB net11.0 succeeded (0.1s) → tests/TestExampleProjects/SlnFixtures/LibB/myc/Debug/net11.0/LibB.dll
+  SlnApp net11.0 succeeded (0.2s) → tests/TestExampleProjects/SlnFixtures/SlnApp/myc/Debug/net11.0/SlnApp.dll
 
 Build succeeded in 0.4s
 ```
@@ -66,7 +66,7 @@ Hello from Sharp!
 ```
 # a failing build reports errors (one indented line per error) and exits 1
 cd <repo> && sharp build tests/TestExampleProjects/FailingFixture
-  FailingFixture net10.0 failed with 1 error(s) (0.6s)
+  FailingFixture net11.0 failed with 1 error(s) (0.6s)
     <repo>/tests/TestExampleProjects/FailingFixture/Class1.cs(5,29): error CS0103: The name 'NonExistent' does not exist in the current context
 
 Build failed with 1 error(s) in 1.2s
@@ -75,7 +75,7 @@ Build failed with 1 error(s) in 1.2s
 
 ```
 # version and help mirror the host SDK
-sharp version    # prints the SDK version, e.g. 10.0.400
+sharp version    # prints the SDK version, e.g. 11.0.100
 sharp help       # full dotnet help text
 ```
 
@@ -126,7 +126,7 @@ the shared normalizer. `build` off the fixtures below is run with `--nologo --no
 | `run` (success) | application output only, rc=0 | same (incl. `--no-restore`) | identical |
 | `run` (failure) | `error CS0103 (...)` + `The build failed. Fix the build errors and run again.`, rc=1 | same | identical |
 | `run -- <app args>` | args forwarded to the app | same | identical |
-| `--version` / `version` | `10.0.400` (hosting SDK) | `10.0.400` | identical |
+| `--version` / `version` | `11.0.100` (hosting SDK) | `11.0.100` | identical |
 | `help` | full SDK command list, each annotated `[implemented]` / `[not implemented]`, version line from the hosting SDK | plain SDK command list | intentionally annotated (byte-identical otherwise) |
 | `build` in dir without a project | `MSBUILD : error MSB1003: ...` | same | identical |
 | `build` in dir with several projects | `MSBUILD : error MSB1011: ...` | same | identical |
@@ -187,7 +187,7 @@ and our `BuildSolution` both pass on the solution.
 ## Future work
 
 ### OrchardCore canary
-`OrchardCore.slnx` (239 projects, .NET 10, ASP.NET Core CMS) is the external stress test. Fresh clone +
+`OrchardCore.slnx` (239 projects, .NET 11, ASP.NET Core CMS) is the external stress test. Fresh clone +
 `dotnet restore` (warms the NuGet cache), then `sharp OrchardCore.slnx`. Baseline
 measurement: **3 OK / 236 FAIL** (42.3s) vs `dotnet build OrchardCore.slnx --no-restore` (149.4s, exit 0).
 Pilot led to real fixes (`.slnx` parsing, CLI routing) and this prioritized gap list:

@@ -146,7 +146,7 @@ public static class AotAnalyzerHost
     private static string BuildShimProject(string analyzerCsproj) => $$"""
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
-            <TargetFramework>net10.0</TargetFramework>
+            <TargetFramework>net11.0</TargetFramework>
             <OutputType>Library</OutputType>
             <PublishAot>true</PublishAot>
             <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
@@ -161,8 +161,8 @@ public static class AotAnalyzerHost
             <InvariantGlobalization>true</InvariantGlobalization>
           </PropertyGroup>
           <ItemGroup>
-            <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-            <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
+            <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
+            <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.12.0" />
             <ProjectReference Include="{{XmlEscape(Path.GetFullPath(analyzerCsproj))}}" />
           </ItemGroup>
         </Project>

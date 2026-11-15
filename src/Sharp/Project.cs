@@ -266,8 +266,8 @@ public class Project : IProject
         XMLProject.PropertyGroup?.FirstOrDefault()?.AddRazorSupportForMvc
             ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
 
-    // The Razor language version the generator targets. Defaults to the TFM's version (e.g. net10.0 ->
-    // "10.0"); a project may override it with <RazorLangVersion>.
+    // The Razor language version the generator targets. Defaults to the TFM's version (e.g. net11.0 ->
+    // "11.0"); a project may override it with <RazorLangVersion>.
     public string RazorLangVersion
     {
         get
@@ -279,7 +279,7 @@ public class Project : IProject
             var trimmed = tfm.StartsWith("net", StringComparison.OrdinalIgnoreCase) ? tfm[3..] : tfm;
             var dash = trimmed.IndexOf('-');
             if (dash >= 0) trimmed = trimmed[..dash];
-            return string.IsNullOrEmpty(trimmed) ? "10.0" : trimmed;
+            return string.IsNullOrEmpty(trimmed) ? "11.0" : trimmed;
         }
     }
 
