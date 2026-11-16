@@ -71,16 +71,11 @@ public static class ProjectBuild
         var syntaxTrees = parsedData.Select(item => item.syntaxTree);
         var embeddedTexts = parsedData.Select(item => item.embeddedText);
 
-        var mergedDefaultReferences = References.GetCompilingRefs(project, dotNetAssemblyRefPath);
+        var references = References.GetReferences(project, dotNetAssemblyRefPath);
 
-        // The shared framework's own assemblies are never copied next to the output app - they come from
-        // the runtime at execution time - and they are no longer even available as files, since only
-        // their names are embedded. So the copy-local candidates are just the project's own dependencies.
-        var mergedDefaultReferencesForRunning = References.GetRuntimeRefs(project);
+        outputs.Add($"Merged default references count: {references.Compiling.Length}");
 
-        outputs.Add($"Merged default references count: {mergedDefaultReferences.Length}");
-
-        var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, mergedDefaultReferences, compilationOptions);
+        var compilation = CSharpCompilation.Create(project.ProjectName, syntaxTrees, references.Compiling, compilationOptions);
 
         // Feature: source-generator + analyzer pipeline. Generators always run the statically
         // linked SDK set; under JIT (not NativeAOT) they additionally discover the project's own
@@ -130,7 +125,7 @@ public static class ProjectBuild
         // are resolved from the installed runtime at run time - never copied by `dotnet build`.
         // HintPath <Reference> assemblies are CopyLocal in MSBuild (the compiler's own graph carries
         // the SDK generator/analyzer DLLs so the self-hosted JIT stays bindable), so those ride along.
-        var paths = GetOutputRuntimeFiles(mergedDefaultReferencesForRunning, project.ProjectRootPath, project.TargetFramework ?? DefaultTargetFramework.Value);
+        var paths = GetOutputRuntimeFiles(references.Runtime, project.ProjectRootPath, project.TargetFramework ?? DefaultTargetFramework.Value);
         // SDK mirror: restore-derived runtime graph (*.deps.json). Only the NuGet/local runtime set
         // feeds it - HintPath copies are reference/analyzer assemblies, never package assets. They
         // are still registered in deps.json as "reference" libraries (DepsJsonWriter) so a JIT

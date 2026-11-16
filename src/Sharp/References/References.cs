@@ -2,29 +2,28 @@ using Microsoft.CodeAnalysis;
 
 namespace Sharp;
 
+public sealed record ResolvedReferences(
+    MetadataReference[] Compiling,
+    MetadataReference[] Runtime);
+
 public static class References
 {
-    // Reference set handed to CSharpCompilation.Create: NuGet + local (project refs) merged with the
-    // SDK/framework reference pack, deduped and version-unified.
+    // Resolve the NuGet + local closure once, then derive both reference sets from it. The compile set
+    // adds the SDK/framework pack; the runtime set is copy-local only (shared-framework assemblies
+    // come from the runtime at execution time).
     [Query]
-    public static MetadataReference[] GetCompilingRefs(Project project, string sdkRefPath)
-    {
-        var sdk = SharpUtils.GetdefaultReferencesForCompiling(sdkRefPath);
-        var framework = SharpUtils.GetFrameworkReferenceCompilingRefs(project);
-        var packageAndLocal = SharpUtils.GetdefaultNugetReferences(project)
-            .Concat(SharpUtils.GetdefaultLocalReferences(project));
-
-        return FrameworkFix.Merge(packageAndLocal, sdk.Concat(framework));
-    }
-
-    // Copy-local candidate set for the output app: NuGet + local only (shared-framework assemblies come
-    // from the runtime at run time, never copied next to the app), so they are the runtime graph.
-    [Query]
-    public static MetadataReference[] GetRuntimeRefs(Project project)
+    public static ResolvedReferences GetReferences(Project project, string sdkRefPath)
     {
         var packageAndLocal = SharpUtils.GetdefaultNugetReferences(project)
-            .Concat(SharpUtils.GetdefaultLocalReferences(project));
+            .Concat(SharpUtils.GetdefaultLocalReferences(project))
+            .ToArray();
 
-        return FrameworkFix.Merge(packageAndLocal, Array.Empty<MetadataReference>());
+        var framework = SharpUtils.GetdefaultReferencesForCompiling(sdkRefPath)
+            .Concat(SharpUtils.GetFrameworkReferenceCompilingRefs(project));
+        var runtime = FrameworkFix.Unify(packageAndLocal);
+
+        return new ResolvedReferences(
+            FrameworkFix.AddFrameworkReferences(runtime, framework),
+            runtime);
     }
 }
