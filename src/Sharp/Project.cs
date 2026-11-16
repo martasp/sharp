@@ -32,6 +32,23 @@ public class Project : IProject
     private BuildProps? _buildProps;
     private BuildProps BuildProps => _buildProps ??= BuildPropsEvaluator.Evaluate(ProjectRootPath);
 
+    // Identity is needed during project load (generated assembly info) and again for deps.json.
+    // Evaluate the csproj/props overlay once and keep it with the project.
+    private BuildIdentity? _identity;
+    private bool _identityResolved;
+    public BuildIdentity? Identity
+    {
+        get
+        {
+            if (!_identityResolved)
+            {
+                _identity = BuildPropsEvaluator.EvaluateIdentity(ProjectRootPath);
+                _identityResolved = true;
+            }
+            return _identity;
+        }
+    }
+
     // One unified package closure per project. Compile references, package usings, and generator
     // discovery all need the same ids/paths; resolving the graph once avoids separate nuspec walks.
     private IReadOnlyList<string>? _resolvedPackagePaths;
@@ -167,8 +184,7 @@ public class Project : IProject
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     // SDK $(Version): the project's <Version> (or the Directory.Build.props overlay), defaulted to
     // "1.0.0" like the SDK. Becomes the entry's "Name/Version" key in deps.json.
-    public string Version => BuildPropsEvaluator.EvaluateIdentity(ProjectRootPath)?.Version
-                             ?? "1.0.0";
+    public string Version => Identity?.Version ?? "1.0.0";
     public string DepsJsonPathName => Path.Combine(SharpBinFolderPath, ProjectName + ".deps.json");
     public string ExtensionName
     {

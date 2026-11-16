@@ -1192,7 +1192,7 @@ public static class SharpUtils
         // The SDK materializes its synthesized sources at obj/<config>/<tfm>/, and uses those
         // paths for the PDB documents too. Mirroring name + path keeps the PDB document set
         // (names and SHA-1 checksums) equal to `dotnet build` output.
-        var identity = BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath);
+        var identity = project.Identity;
         var configuration = options.Configuration ?? identity?.Configuration ?? "Debug";
         project.Configuration = configuration;
         var generatedRoot = GetGeneratedFileRoot(project, configuration);
