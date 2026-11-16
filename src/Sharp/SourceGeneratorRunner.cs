@@ -45,20 +45,8 @@ public static class SourceGeneratorRunner
         var warnings = new List<string>();
         var tfm = project.TargetFramework ?? "net" + Environment.Version.Major + ".0";
 
-        foreach (var item in project.PackageReferences)
-        {
-            var packageName = item.Include ?? "";
-            var packageVersion = item.Version ??
-                NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
-            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
-
-            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
-            if (string.IsNullOrEmpty(packagePath)) continue;
-
+        foreach (var packagePath in project.ResolvedPackagePaths)
             dlls.UnionWith(AnalyzerDlls(packagePath));
-            foreach (var transitive in NuGetPackage.GetTransitivePackagePaths(packagePath, tfm))
-                dlls.UnionWith(AnalyzerDlls(transitive));
-        }
 
         // <FrameworkReference> targeting packs can ship their own analyzers (e.g. the AspNetCore
         // pack's Microsoft.AspNetCore.App.SourceGenerators, which emits `public partial class
@@ -66,13 +54,7 @@ public static class SourceGeneratorRunner
         // these only run for projects that actually hold the framework reference - web projects
         // get Microsoft.AspNetCore.App implicitly. The base Microsoft.NETCore.App pack is skipped
         // (its generators are the statically linked SDK set, already in AnalyzerRegistry).
-        var frameworkNames = new HashSet<string>(
-            SharpUtils.CollectFrameworkReferenceNames(
-                project.ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
-            StringComparer.OrdinalIgnoreCase);
-        if (project.IsWebSdk) frameworkNames.Add("Microsoft.AspNetCore.App");
-
-        foreach (var frameworkName in frameworkNames)
+        foreach (var frameworkName in project.FrameworkReferenceNames)
         {
             if (string.IsNullOrEmpty(frameworkName)) continue;
             if (frameworkName.Equals("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)) continue;
@@ -213,10 +195,13 @@ public static class SourceGeneratorRunner
     // The compiler's own assemblies shipped in analyzer folders (e.g. the
     // Microsoft.CodeAnalysis.Analyzers package carries M.CA.dll/M.CA.CSharp.dll at a dev
     // version that clashes with the compiler process). csc never runs them as generators.
+    // Localized *.resources.dll files are also skipped: they carry no generator types, but
+    // loading them (one per culture, per project) forces needless assembly loads and GetTypes.
     private static bool IsRoslynDistribution(string dllPath)
     {
         var name = Path.GetFileNameWithoutExtension(dllPath);
-        return name.Equals("Microsoft.CodeAnalysis", StringComparison.OrdinalIgnoreCase)
+        return name.EndsWith(".resources", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("Microsoft.CodeAnalysis", StringComparison.OrdinalIgnoreCase)
             || name.Equals("Microsoft.CodeAnalysis.CSharp", StringComparison.OrdinalIgnoreCase)
             || name.Equals("Microsoft.CodeAnalysis.Analyzers", StringComparison.OrdinalIgnoreCase)
             // Analyzer (not generator) package: depends on M.CA.Analyzers, which is excluded above,

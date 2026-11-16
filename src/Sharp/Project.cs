@@ -32,6 +32,12 @@ public class Project : IProject
     private BuildProps? _buildProps;
     private BuildProps BuildProps => _buildProps ??= BuildPropsEvaluator.Evaluate(ProjectRootPath);
 
+    // One unified package closure per project. Compile references, package usings, and generator
+    // discovery all need the same ids/paths; resolving the graph once avoids separate nuspec walks.
+    private IReadOnlyList<string>? _resolvedPackagePaths;
+    public IReadOnlyList<string> ResolvedPackagePaths =>
+        _resolvedPackagePaths ??= SharpUtils.ResolvePackagePaths(this);
+
     public bool ImplicitUsings =>
         (XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false)
         || BuildProps.ImplicitUsings;
@@ -320,6 +326,19 @@ public class Project : IProject
             .Any(sdk => sdk.Trim().StartsWith("Aspire.AppHost.Sdk", StringComparison.OrdinalIgnoreCase))
         || ((XMLProject.PropertyGroup?.FirstOrDefault()?.IsAspireHost
             ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+    private IReadOnlySet<string>? _frameworkReferenceNames;
+    public IReadOnlySet<string> FrameworkReferenceNames =>
+        _frameworkReferenceNames ??= GetFrameworkReferenceNames();
+
+    private IReadOnlySet<string> GetFrameworkReferenceNames()
+    {
+        var names = SharpUtils.CollectFrameworkReferenceNames(
+            ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (IsWebSdk) names.Add("Microsoft.AspNetCore.App");
+        return names;
+    }
 
     // True for projects that depend on the ASP.NET Core shared framework (Web SDK projects, or any
     // project declaring <FrameworkReference Include="Microsoft.AspNetCore.App" />). Drives both the
