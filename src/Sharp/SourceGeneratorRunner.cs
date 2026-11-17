@@ -39,6 +39,11 @@ public static class SourceGeneratorRunner
     private static readonly ConcurrentDictionary<string, List<string>> AnalyzerDllCache =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // The statically linked analyzer file set only depends on the installed SDK, not on the project.
+    private static readonly Lazy<HashSet<string>> StaticAnalyzerFileNames = new(() => new HashSet<string>(
+        SharpUtils.GetAnalyzerRuntimeFiles().Select(Path.GetFileName).Where(name => name is not null)!,
+        StringComparer.OrdinalIgnoreCase));
+
     public static (List<string> Dlls, List<string> Warnings) CollectGeneratorDlls(Project project)
     {
         var dlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -261,10 +266,6 @@ public static class SourceGeneratorRunner
             {
                 try
                 {
-                    var staticallyLinkedAnalyzers = new HashSet<string>(
-                        SharpUtils.GetAnalyzerRuntimeFiles().Select(Path.GetFileName).Where(name => name is not null)!,
-                        StringComparer.OrdinalIgnoreCase);
-
                     var loadContext = new GeneratorAssemblyLoadContext();
                     var warnings = new List<string>();
                     foreach (var dll in generatorDlls) loadContext.RegisterCopy(dll);
@@ -276,7 +277,7 @@ public static class SourceGeneratorRunner
                         // fails with CS0757 "a partial method may not have multiple implementing
                         // declarations", plus CS0102/CS0229/CS0121. Not re-loading them also keeps
                         // six assemblies per project out of the dynamic path.
-                        if (staticallyLinkedAnalyzers.Contains(Path.GetFileName(dll))) continue;
+                        if (StaticAnalyzerFileNames.Value.Contains(Path.GetFileName(dll))) continue;
 
                         Assembly assembly;
                         try
