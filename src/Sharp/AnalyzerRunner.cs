@@ -26,8 +26,8 @@ public static class AnalyzerRunner
         var (generated, generatorErrors) = SourceGeneratorRunner.RunGenerators(compilation, project); //~1s
         compilation = generated;
 
-        // 2. Analyzers (statically linked DiagnosticAnalyzer instances).
-        var analyzers = AnalyzerRegistry.GetAnalyzers(); 
+        // 2. Project-relevant analyzers (statically linked DiagnosticAnalyzer instances).
+        var analyzers = SelectAnalyzers(compilation);
         if (analyzers.Length == 0)
             return (compilation, generatorErrors, string.Empty);
 
@@ -69,5 +69,46 @@ public static class AnalyzerRunner
         errors.AddRange(analyzerErrors);
 
         return (compilation, string.Join("\n", errors), string.Join("\n", analyzerWarnings));
+    }
+
+    private static readonly string[] InteropMarkers =
+    [
+        "InteropServices", "DllImport", "LibraryImport", "ComImport", "ComVisible",
+        "GeneratedCom", "NativeMarshalling", "CustomMarshaller", "MarshalAs",
+        "UnmanagedCallersOnly", "JSImport", "JSExport",
+    ];
+
+    private static readonly string[] RegexMarkers = ["Regex", "RegularExpressions"];
+
+    private static ImmutableArray<DiagnosticAnalyzer> SelectAnalyzers(CSharpCompilation compilation)
+    {
+        var analyzers = ImmutableArray.CreateBuilder<DiagnosticAnalyzer>();
+
+        var interop = false;
+        var regex = false;
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            var text = tree.GetText().ToString();
+            interop |= ContainsAny(text, InteropMarkers);
+            regex |= ContainsAny(text, RegexMarkers);
+            if (interop && regex) break;
+        }
+
+        if (interop)
+            analyzers.AddRange(AnalyzerRegistry.GetInteropAnalyzers());
+
+        if (regex)
+            analyzers.AddRange(AnalyzerRegistry.GetRegexAnalyzers());
+
+        return analyzers.ToImmutable();
+    }
+
+    private static bool ContainsAny(string text, string[] markers)
+    {
+        foreach (var marker in markers)
+            if (text.Contains(marker, StringComparison.Ordinal))
+                return true;
+
+        return false;
     }
 }
