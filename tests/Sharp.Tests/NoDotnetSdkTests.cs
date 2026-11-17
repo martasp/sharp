@@ -51,15 +51,16 @@ public class NoDotnetSdkTests
                 $"Missing AOT seed at '{Sharp}'. Run publish.bat (or `dotnet publish " +
                 "src/Sharp.Cli/Sharp.Cli.csproj -c Release -r linux-x64`) first.");
 
-        if (!BwrapWorks())
-        {
-            _output.WriteLine("SKIP: bwrap is unavailable or unprivileged user namespaces are disabled.");
-            return;
-        }
-
         var root = WriteSampleSolution();
         try
         {
+            var sandbox = ProbeSandbox(root);
+            if (!sandbox.Works)
+            {
+                _output.WriteLine("SKIP: sandbox unavailable: " + sandbox.Output.Trim());
+                return;
+            }
+
             // Precondition: there really is no SDK in there. Checked once, up front.
             var probe = Sandbox(root, "command -v dotnet || echo ON_PATH_NONE");
             probe.Exit.ShouldBe(0, probe.Output);
@@ -137,15 +138,16 @@ public class NoDotnetSdkTests
                 $"Missing AOT seed at '{Sharp}'. Run publish.bat (or `dotnet publish " +
                 "src/Sharp.Cli/Sharp.Cli.csproj -c Release -r linux-x64`) first.");
 
-        if (!BwrapWorks())
-        {
-            _output.WriteLine("SKIP: bwrap is unavailable or unprivileged user namespaces are disabled.");
-            return;
-        }
-
         var root = WriteSampleSolution();
         try
         {
+            var sandbox = ProbeSandbox(root);
+            if (!sandbox.Works)
+            {
+                _output.WriteLine("SKIP: sandbox unavailable: " + sandbox.Output.Trim());
+                return;
+            }
+
             // Reference: what the SDK itself produces for these projects. Built on the host, where an
             // SDK is present - only the sandbox below has to be SDK-free.
             foreach (var project in new[] { "Domain", "Cli", "Api" })
@@ -256,13 +258,21 @@ public class NoDotnetSdkTests
         var args = new List<string>();
         void Add(string flag, params string[] values) { args.Add(flag); args.AddRange(values); }
 
-        // Read-only system bits so coreutils and the ELF loader work. On usrmerge distributions
-        // /bin and /lib are symlinks into /usr, and bwrap cannot --ro-bind a symlink, so /usr is
-        // bound and the symlinks recreated.
+        // Read-only system bits so coreutils and the ELF loader work. Bind real directories directly;
+        // when a path is a symlink, recreate it with an absolute target so a host where /usr/bin/sh
+        // points at /bin/sh cannot turn our /bin symlink into a resolution loop.
         Add("--ro-bind", "/usr", "/usr");
         Add("--ro-bind", "/etc", "/etc");
-        foreach (var link in new[] { "/bin", "/sbin" }) Add("--symlink", "usr/bin", link);
-        foreach (var link in new[] { "/lib", "/lib64" }) Add("--symlink", "usr/lib", link);
+        foreach (var path in new[] { "/bin", "/sbin", "/lib", "/lib64" })
+        {
+            if (!Directory.Exists(path)) continue;
+            var resolved = new DirectoryInfo(path).ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                ?? path;
+            if (resolved != path)
+                Add("--symlink", resolved, path);
+            else
+                Add("--ro-bind", path, path);
+        }
 
         // An empty /tmp and an empty HOME keep the run cold: no NuGet package cache, and no
         // previously extracted payload in ~/.cache/sharp, so the reference pack is re-extracted
@@ -302,25 +312,20 @@ public class NoDotnetSdkTests
         return (process.ExitCode, output);
     }
 
-    // bwrap is on most modern Linux, but unprivileged user namespaces can be disabled by a hardened
-    // kernel or sysctl. Probe it so the test skips instead of failing for an unrelated reason.
-    private static bool BwrapWorks()
+    // Probe the exact sandbox used by the assertions. bwrap may exist while unprivileged user
+    // namespaces are disabled, or the host filesystem layout may break our bind/symlink setup;
+    // either way these self-containment tests cannot run, so skip instead of failing for infrastructure.
+    private static (bool Works, string Output) ProbeSandbox(string projectRoot)
     {
-        var psi = new ProcessStartInfo("bwrap") { RedirectStandardError = true };
-        foreach (var arg in new[] { "--ro-bind", "/", "/", "/bin/true" })
-            psi.ArgumentList.Add(arg);
-
         try
         {
-            using var process = Process.Start(psi);
-            if (process is null)
-                return false;
-            process.WaitForExit(30_000);
-            return process.HasExited && process.ExitCode == 0;
+            var probe = Sandbox(projectRoot, "echo sandbox-ok");
+            return (probe.Exit == 0 && probe.Output.Contains("sandbox-ok", StringComparison.Ordinal),
+                probe.Output);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return false;
+            return (false, ex.Message);
         }
     }
 
