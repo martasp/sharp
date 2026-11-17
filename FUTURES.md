@@ -56,7 +56,8 @@ files, project files, imported props/targets, project-reference outputs, NuGet a
 generators/analyzers, compiler options, and toolchain version could skip most Roslyn work. It would
 also need safe invalidation for generated sources and environment-dependent build inputs. The
 complexity and risk of stale builds currently outweigh the expected gain; revisit if cold-build time
-becomes the dominant bottleneck.
+becomes the dominant bottleneck. Current work is limited to sharing resolution inside one cold build
+(see `main.md`, "Cold-build work sharing").
 
 ## Content-addressed build cache
 

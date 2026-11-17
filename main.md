@@ -172,6 +172,23 @@ clean temp copy so the repo is untouched. The table is also saved to `benchmarks
 results can be committed to git. Timings are informational — no thresholds are asserted. Set
 `SHARP_SKIP_BENCHMARK=1` to skip it for a fast suite run.
 
+### Cold-build work sharing
+
+Sharp has no persistent incremental cache: every build starts from scratch. It does, however, share
+resolution work inside one build:
+
+- compile and runtime references are resolved once into `ResolvedReferences` and reused by `ProjectBuild`;
+- `Project` lazily computes framework reference names, direct package-reference resolution, the unified
+  package path closure, and build identity; NuGet references, package global usings, generator discovery,
+  unresolved-package warnings, and assembly metadata all consume those values;
+- the static analyzer filename set is computed once per process instead of once per project;
+- diagnostic analyzers are filtered by source relevance instead of being attached to every compilation.
+
+These changes remove repeated csproj/import evaluation and nuspec graph walks, and skip analyzer work for
+projects whose sources cannot use it. No new environment variable, MSBuild mode, or persistent cache was
+introduced. Final measurements on `Sharp.sln`: in-process JIT `6.41s / 6.35s`, fresh NativeAOT publish
+`2.55s / 2.28s` vs `dotnet build` cold `10.63s` (4.17x). As always, timings are informational and noisy.
+
 ## What we do NOT support (by design, for now)
 
 `Sharp.Tests` is part of `Sharp.sln` and compiles via the test entry-point shim
@@ -247,6 +264,11 @@ Implemented in `SourceGeneratorRunner.cs` — real `CSharpGeneratorDriver` runs,
    (`<ProjectReference OutputItemType="Analyzer">`; OrchardCore injects its own
    `OrchardCore.SourceGenerators` into every project this way). Analyzer project refs are built on demand
    (missing output → compiler-internal build) and skipped when the compiler is itself the generator.
+   Diagnostic analyzers are grouped in `AnalyzerRegistry`; `AnalyzerRunner` scans each compilation once
+   and runs interop analyzers only when interop APIs/attributes are present and regex analyzers only when
+   `Regex`/`RegularExpressions` appears. Link analyzers remain in the registry for full static tooling,
+   but are not injected into normal csc runs because Sharp does not supply the trim/AOT options csc
+   expects; enabling full ILLink parity cost several seconds per cold build and is intentionally parked.
 2. **Execution parity** — `ISourceGenerator`/`IIncrementalGenerator` normalized via `AsSourceGenerator()`,
    M.CA packages matched to OrchardCore's central version (`Microsoft.CodeAnalysis*` 5.6.0 in the host app),
    Roslyn-distribution assemblies filtered out of the analyzer set so dev-version M.C.A doesn't clash with the
