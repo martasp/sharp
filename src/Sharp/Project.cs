@@ -49,6 +49,12 @@ public class Project : IProject
         }
     }
 
+    // Direct PackageReference resolution (version + on-disk path), shared by the unified closure and
+    // the NU1001/NU1002 warning pass.
+    private IReadOnlyList<(string Id, string Version, string? Path)>? _resolvedPackageReferences;
+    public IReadOnlyList<(string Id, string Version, string? Path)> ResolvedPackageReferences =>
+        _resolvedPackageReferences ??= SharpUtils.ResolvePackageReferences(PackageReferences, ProjectRootPath).ToList();
+
     // One unified package closure per project. Compile references, package usings, and generator
     // discovery all need the same ids/paths; resolving the graph once avoids separate nuspec walks.
     private IReadOnlyList<string>? _resolvedPackagePaths;

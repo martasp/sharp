@@ -657,7 +657,7 @@ public static class SharpUtils
     internal static List<string> ResolvePackagePaths(Project project)
     {
         var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
-        var roots = ResolvedPackageRoots(project.PackageReferences, project.ProjectRootPath);
+        var roots = ResolvedPackageRoots(project);
         return ResolveUnifiedPackagePaths(roots, tfm, project.ProjectRootPath);
     }
 
@@ -730,7 +730,7 @@ public static class SharpUtils
     // reference collection and the diagnostics below can never disagree about what resolved.
     // Path is null when the version or the package folder cannot be found; the diagnostics report it.
     [Query]
-    private static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
+    internal static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
         IEnumerable<PackageReference> packages, string projectDirectory)
     {
         foreach (var package in packages)
@@ -749,6 +749,13 @@ public static class SharpUtils
     private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(
         IEnumerable<PackageReference> packages, string projectDirectory) =>
         ResolvePackageReferences(packages, projectDirectory)
+            .Where(reference => !string.IsNullOrEmpty(reference.Path))
+            .Select(reference => (reference.Id, reference.Version, reference.Path!))
+            .ToList();
+
+    [Query]
+    private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(Project project) =>
+        project.ResolvedPackageReferences
             .Where(reference => !string.IsNullOrEmpty(reference.Path))
             .Select(reference => (reference.Id, reference.Version, reference.Path!))
             .ToList();
@@ -825,7 +832,7 @@ public static class SharpUtils
     {
         var warnings = new List<string>();
 
-        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project.PackageReferences, project.ProjectRootPath))
+        foreach (var (packageName, packageVersion, packagePath) in project.ResolvedPackageReferences)
         {
             if (string.IsNullOrEmpty(packageVersion))
             {
