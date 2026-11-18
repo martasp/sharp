@@ -248,6 +248,19 @@ Measurement after GENERATOR_PIPELINE (+ TFM constants, shadow-copy, interceptor 
 `OrchardCore.ContentTypes.Abstractions`, `OrchardCore.Module.Targets` all compile. Tail: `OrchardCore.Navigation.Core`
 (CS9137 interceptor namespace gap, see below) plus cascades. Trail: `canary-raw.txt`.
 
+Current perf-branch canary (2026-11-17, `ea8cb7e`, full `OrchardCore.slnx`, 236 projects, `net10.0`):
+
+| Build | Elapsed | Result |
+|---|---:|---|
+| `dotnet build OrchardCore.slnx -c Debug --no-restore --no-incremental` (.NET 10.0.400) | 173s | success, 0 errors |
+| `Sharp.Cli` JIT (Debug) `OrchardCore.slnx` | 286s | success, 236/236 projects |
+| published NativeAOT `Sharp.Cli` `OrchardCore.slnx` | 176s | success, 236/236 projects |
+
+Sharp AOT is about 1.63x faster than Sharp JIT on this canary and near parity with full no-incremental
+`dotnet build` (3s slower). Sharp builds have no incremental cache; the `dotnet` run forced a full build.
+No Spectre.Console repository was present on the machine; the synthetic `SpectreConsoleSupportTests`
+passed 7/7 in 8.97s.
+
 Canary command:
 ```
 git clone --depth 1 https://github.com/OrchardCMS/OrchardCore.git
