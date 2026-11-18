@@ -172,6 +172,39 @@ clean temp copy so the repo is untouched. The table is also saved to `benchmarks
 results can be committed to git. Timings are informational — no thresholds are asserted. Set
 `SHARP_SKIP_BENCHMARK=1` to skip it for a fast suite run.
 
+### Cold-build work sharing
+
+Sharp has no persistent incremental cache: every build starts from scratch. It does, however, share
+resolution work inside one build:
+
+- compile and runtime references are resolved once into `ResolvedReferences` and reused by `ProjectBuild`;
+- `Project` lazily computes framework reference names, direct package-reference resolution, the unified
+  package path closure, and build identity; NuGet references, package global usings, generator discovery,
+  unresolved-package warnings, and assembly metadata all consume those values;
+- the static analyzer filename set is computed once per process instead of once per project;
+- diagnostic analyzers are filtered by source relevance instead of being attached to every compilation.
+
+These changes remove repeated csproj/import evaluation and nuspec graph walks, and skip analyzer work for
+projects whose sources cannot use it. No new environment variable, MSBuild mode, or persistent cache was
+introduced. Final measurements on `Sharp.sln`: in-process JIT `6.41s / 6.35s`, fresh NativeAOT publish
+`2.55s / 2.28s` vs `dotnet build` cold `10.63s` (4.17x). As always, timings are informational and noisy.
+
+### Small builds vs large builds
+
+AOT mostly removes fixed startup cost, so its advantage is largest on small solutions:
+
+| Target | Sharp JIT | Sharp published AOT | dotnet build |
+|---|---:|---:|---:|
+| `Sharp.sln` (8 projects) | 6.41s / 6.35s | 2.55s / 2.28s | 10.63s cold, 7.67s warm |
+| `OrchardCore.slnx` (236 projects) | 286s | 176s | 173s full/no-incremental |
+
+On `Sharp.sln` the published CLI is 4.17x faster than cold `dotnet build` and about 3x faster than
+warm/incremental `dotnet build`. On OrchardCore, AOT is about 1.63x faster than Sharp JIT but only near
+parity with `dotnet build`: with hundreds of projects, Roslyn analysis, generators, and emit dominate,
+while `dotnet build` benefits from R2R Roslyn, MSBuild node reuse, a shared compiler server, and warm
+targeting packs/NuGet cache. Sharp has no persistent cache and rebuilds each project from scratch, so
+beating `dotnet build` at that scale needs less per-project work rather than more AOT.
+
 ## What we do NOT support (by design, for now)
 
 `Sharp.Tests` is part of `Sharp.sln` and compiles via the test entry-point shim
@@ -231,6 +264,19 @@ Measurement after GENERATOR_PIPELINE (+ TFM constants, shadow-copy, interceptor 
 `OrchardCore.ContentTypes.Abstractions`, `OrchardCore.Module.Targets` all compile. Tail: `OrchardCore.Navigation.Core`
 (CS9137 interceptor namespace gap, see below) plus cascades. Trail: `canary-raw.txt`.
 
+Current perf-branch canary (2026-11-17, `ea8cb7e`, full `OrchardCore.slnx`, 236 projects, `net10.0`):
+
+| Build | Elapsed | Result |
+|---|---:|---|
+| `dotnet build OrchardCore.slnx -c Debug --no-restore --no-incremental` (.NET 10.0.400) | 173s | success, 0 errors |
+| `Sharp.Cli` JIT (Debug) `OrchardCore.slnx` | 286s | success, 236/236 projects |
+| published NativeAOT `Sharp.Cli` `OrchardCore.slnx` | 176s | success, 236/236 projects |
+
+Sharp AOT is about 1.63x faster than Sharp JIT on this canary and near parity with full no-incremental
+`dotnet build` (3s slower). Sharp builds have no incremental cache; the `dotnet` run forced a full build.
+No Spectre.Console repository was present on the machine; the synthetic `SpectreConsoleSupportTests`
+passed 7/7 in 8.97s.
+
 Canary command:
 ```
 git clone --depth 1 https://github.com/OrchardCMS/OrchardCore.git
@@ -247,6 +293,11 @@ Implemented in `SourceGeneratorRunner.cs` — real `CSharpGeneratorDriver` runs,
    (`<ProjectReference OutputItemType="Analyzer">`; OrchardCore injects its own
    `OrchardCore.SourceGenerators` into every project this way). Analyzer project refs are built on demand
    (missing output → compiler-internal build) and skipped when the compiler is itself the generator.
+   Diagnostic analyzers are grouped in `AnalyzerRegistry`; `AnalyzerRunner` scans each compilation once
+   and runs interop analyzers only when interop APIs/attributes are present and regex analyzers only when
+   `Regex`/`RegularExpressions` appears. Link analyzers remain in the registry for full static tooling,
+   but are not injected into normal csc runs because Sharp does not supply the trim/AOT options csc
+   expects; enabling full ILLink parity cost several seconds per cold build and is intentionally parked.
 2. **Execution parity** — `ISourceGenerator`/`IIncrementalGenerator` normalized via `AsSourceGenerator()`,
    M.CA packages matched to OrchardCore's central version (`Microsoft.CodeAnalysis*` 5.6.0 in the host app),
    Roslyn-distribution assemblies filtered out of the analyzer set so dev-version M.C.A doesn't clash with the

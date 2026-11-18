@@ -49,6 +49,16 @@ Keep the payload out of a giant C# string literal and out of the project file. T
   discovered (solution folder, environment variable, project root) and how a missing payload is
   reported at compile time.
 
+## Incremental project builds
+
+Parked for now: the compiler rebuilds projects from scratch. An up-to-date check keyed by source
+files, project files, imported props/targets, project-reference outputs, NuGet assets,
+generators/analyzers, compiler options, and toolchain version could skip most Roslyn work. It would
+also need safe invalidation for generated sources and environment-dependent build inputs. The
+complexity and risk of stale builds currently outweigh the expected gain; revisit if cold-build time
+becomes the dominant bottleneck. Current work is limited to sharing resolution inside one cold build
+(see `main.md`, "Cold-build work sharing").
+
 ## Content-addressed build cache
 
 The archived `experiment/pure-cache` prototype produced byte-identical output and skipped most

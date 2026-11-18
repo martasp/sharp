@@ -32,6 +32,35 @@ public class Project : IProject
     private BuildProps? _buildProps;
     private BuildProps BuildProps => _buildProps ??= BuildPropsEvaluator.Evaluate(ProjectRootPath);
 
+    // Identity is needed during project load (generated assembly info) and again for deps.json.
+    // Evaluate the csproj/props overlay once and keep it with the project.
+    private BuildIdentity? _identity;
+    private bool _identityResolved;
+    public BuildIdentity? Identity
+    {
+        get
+        {
+            if (!_identityResolved)
+            {
+                _identity = BuildPropsEvaluator.EvaluateIdentity(ProjectRootPath);
+                _identityResolved = true;
+            }
+            return _identity;
+        }
+    }
+
+    // Direct PackageReference resolution (version + on-disk path), shared by the unified closure and
+    // the NU1001/NU1002 warning pass.
+    private IReadOnlyList<(string Id, string Version, string? Path)>? _resolvedPackageReferences;
+    public IReadOnlyList<(string Id, string Version, string? Path)> ResolvedPackageReferences =>
+        _resolvedPackageReferences ??= SharpUtils.ResolvePackageReferences(PackageReferences, ProjectRootPath).ToList();
+
+    // One unified package closure per project. Compile references, package usings, and generator
+    // discovery all need the same ids/paths; resolving the graph once avoids separate nuspec walks.
+    private IReadOnlyList<string>? _resolvedPackagePaths;
+    public IReadOnlyList<string> ResolvedPackagePaths =>
+        _resolvedPackagePaths ??= SharpUtils.ResolvePackagePaths(this);
+
     public bool ImplicitUsings =>
         (XMLProject.PropertyGroup?.FirstOrDefault()?.ImplicitUsings?.Contains("enable") ?? false)
         || BuildProps.ImplicitUsings;
@@ -161,8 +190,7 @@ public class Project : IProject
     public string ProjectName => Path.GetFileNameWithoutExtension(CsProjFile.FilePath);
     // SDK $(Version): the project's <Version> (or the Directory.Build.props overlay), defaulted to
     // "1.0.0" like the SDK. Becomes the entry's "Name/Version" key in deps.json.
-    public string Version => BuildPropsEvaluator.EvaluateIdentity(ProjectRootPath)?.Version
-                             ?? "1.0.0";
+    public string Version => Identity?.Version ?? "1.0.0";
     public string DepsJsonPathName => Path.Combine(SharpBinFolderPath, ProjectName + ".deps.json");
     public string ExtensionName
     {
@@ -320,6 +348,19 @@ public class Project : IProject
             .Any(sdk => sdk.Trim().StartsWith("Aspire.AppHost.Sdk", StringComparison.OrdinalIgnoreCase))
         || ((XMLProject.PropertyGroup?.FirstOrDefault()?.IsAspireHost
             ?.Trim().Equals("true", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+    private IReadOnlySet<string>? _frameworkReferenceNames;
+    public IReadOnlySet<string> FrameworkReferenceNames =>
+        _frameworkReferenceNames ??= GetFrameworkReferenceNames();
+
+    private IReadOnlySet<string> GetFrameworkReferenceNames()
+    {
+        var names = SharpUtils.CollectFrameworkReferenceNames(
+            ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (IsWebSdk) names.Add("Microsoft.AspNetCore.App");
+        return names;
+    }
 
     // True for projects that depend on the ASP.NET Core shared framework (Web SDK projects, or any
     // project declaring <FrameworkReference Include="Microsoft.AspNetCore.App" />). Drives both the

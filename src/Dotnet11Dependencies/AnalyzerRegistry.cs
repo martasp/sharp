@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.Diagnostics;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace CustomCompiler
@@ -15,13 +16,24 @@ namespace CustomCompiler
     public static class AnalyzerRegistry
     {
         public static ImmutableArray<DiagnosticAnalyzer> GetAnalyzers()
+            => ImmutableArray.CreateRange(
+                GetLinkAnalyzers()
+                    .Concat(GetInteropAnalyzers())
+                    .Concat(GetRegexAnalyzers()));
+
+        // Kept as a group for callers that need the full static analyzer set (for example tooling
+        // outside the normal build pipeline). The normal build does not run these: their diagnostics
+        // require trim/AOT analyzer options that Sharp does not feed to csc.
+        public static ImmutableArray<DiagnosticAnalyzer> GetLinkAnalyzers()
             => ImmutableArray.Create<DiagnosticAnalyzer>(
                 new ILLink.RoslynAnalyzer.COMAnalyzer(),
                 new ILLink.RoslynAnalyzer.DynamicallyAccessedMembersAnalyzer(),
                 new ILLink.RoslynAnalyzer.RequiresAssemblyFilesAnalyzer(),
                 new ILLink.RoslynAnalyzer.RequiresDynamicCodeAnalyzer(),
-                new ILLink.RoslynAnalyzer.RequiresUnreferencedCodeAnalyzer(),
+                new ILLink.RoslynAnalyzer.RequiresUnreferencedCodeAnalyzer());
 
+        public static ImmutableArray<DiagnosticAnalyzer> GetInteropAnalyzers()
+            => ImmutableArray.Create<DiagnosticAnalyzer>(
                 new Microsoft.Interop.Analyzers.ConvertToLibraryImportAnalyzer(),
                 new Microsoft.Interop.Analyzers.CustomMarshallerAttributeAnalyzer(),
                 new Microsoft.Interop.Analyzers.NativeMarshallingAttributeAnalyzer(),
@@ -30,16 +42,13 @@ namespace CustomCompiler
                 new Microsoft.Interop.Analyzers.ComHostingDoesNotSupportGeneratedComInterfaceAnalyzer(),
                 new Microsoft.Interop.Analyzers.ConvertComImportToGeneratedComInterfaceAnalyzer(),
                 new Microsoft.Interop.Analyzers.GeneratedComInterfaceAttributeAnalyzer(),
-                new Microsoft.Interop.Analyzers.RuntimeComApiUsageWithSourceGeneratedComAnalyzer(),
+                new Microsoft.Interop.Analyzers.RuntimeComApiUsageWithSourceGeneratedComAnalyzer());
 
-                new System.Text.RegularExpressions.Generator.UpgradeToGeneratedRegexAnalyzer()
-
-                // --- 2. Interop & Source Generator Analyzers ---
-                // SYSLIB1030-1045 (JSON/Regex) and SYSLIB1051-1090 (Interop) validity
-                // diagnostics are emitted by the source generators themselves, which are
-                // wrapped via GeneratorExtensions.AsSourceGenerator below.
-
-                );
+        // Info-only upgrader (SYSLIB1045). Kept out of projects with no Regex references; Sharp drops
+        // info diagnostics anyway, so this is pure work avoidance.
+        public static ImmutableArray<DiagnosticAnalyzer> GetRegexAnalyzers()
+            => ImmutableArray.Create<DiagnosticAnalyzer>(
+                new System.Text.RegularExpressions.Generator.UpgradeToGeneratedRegexAnalyzer());
 
         public static ImmutableArray<CodeFixProvider> GetCodeFixes()
             => ImmutableArray.Create<CodeFixProvider>(

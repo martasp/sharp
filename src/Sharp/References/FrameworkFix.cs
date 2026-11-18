@@ -17,25 +17,17 @@ public static class FrameworkFix
     // first-seen lower version triggers CS1705. This mirrors NuGet's graph-wide version unification,
     // which the per-project resolution upstream cannot see across the project-reference closure.
     [Pure]
-    public static MetadataReference[] Merge(
-        IEnumerable<MetadataReference> nugetAndLocal,
-        IEnumerable<MetadataReference> frameworkReferences)
+    public static MetadataReference[] Unify(IEnumerable<MetadataReference> references)
     {
-        var frameworkNames = new HashSet<string>(
-            frameworkReferences.Select(reference =>
-                Path.GetFileNameWithoutExtension(reference.Display) ?? ""),
-            StringComparer.OrdinalIgnoreCase);
-
         // First-seen order is preserved so the emitted reference set stays deterministic.
         var order = new List<string>();
         var chosen = new Dictionary<string, (MetadataReference Reference, Version? Version)>(
             StringComparer.OrdinalIgnoreCase);
 
-        foreach (var reference in nugetAndLocal)
+        foreach (var reference in references)
         {
             var name = Path.GetFileNameWithoutExtension(reference.Display) ?? "";
             if (name.Length == 0) continue;
-            if (frameworkNames.Contains(name)) continue;
 
             if (!chosen.TryGetValue(name, out var current))
             {
@@ -51,10 +43,23 @@ public static class FrameworkFix
             chosen[name] = (reference, candidate);
         }
 
-        var merged = new List<MetadataReference>(order.Count + frameworkReferences.Count());
-        foreach (var name in order) merged.Add(chosen[name].Reference);
-        merged.AddRange(frameworkReferences);
-        return merged.ToArray();
+        return order.Select(name => chosen[name].Reference).ToArray();
+    }
+
+    [Pure]
+    public static MetadataReference[] AddFrameworkReferences(
+        IEnumerable<MetadataReference> unified,
+        IEnumerable<MetadataReference> frameworkReferences)
+    {
+        var framework = frameworkReferences.ToArray();
+        var frameworkNames = framework
+            .Select(reference => Path.GetFileNameWithoutExtension(reference.Display) ?? "")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return unified
+            .Where(reference => !frameworkNames.Contains(Path.GetFileNameWithoutExtension(reference.Display) ?? ""))
+            .Concat(framework)
+            .ToArray();
     }
 
     // Reads an assembly's identity version from its file, tolerating paths that are not managed
