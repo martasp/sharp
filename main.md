@@ -189,6 +189,22 @@ projects whose sources cannot use it. No new environment variable, MSBuild mode,
 introduced. Final measurements on `Sharp.sln`: in-process JIT `6.41s / 6.35s`, fresh NativeAOT publish
 `2.55s / 2.28s` vs `dotnet build` cold `10.63s` (4.17x). As always, timings are informational and noisy.
 
+### Small builds vs large builds
+
+AOT mostly removes fixed startup cost, so its advantage is largest on small solutions:
+
+| Target | Sharp JIT | Sharp published AOT | dotnet build |
+|---|---:|---:|---:|
+| `Sharp.sln` (8 projects) | 6.41s / 6.35s | 2.55s / 2.28s | 10.63s cold, 7.67s warm |
+| `OrchardCore.slnx` (236 projects) | 286s | 176s | 173s full/no-incremental |
+
+On `Sharp.sln` the published CLI is 4.17x faster than cold `dotnet build` and about 3x faster than
+warm/incremental `dotnet build`. On OrchardCore, AOT is about 1.63x faster than Sharp JIT but only near
+parity with `dotnet build`: with hundreds of projects, Roslyn analysis, generators, and emit dominate,
+while `dotnet build` benefits from R2R Roslyn, MSBuild node reuse, a shared compiler server, and warm
+targeting packs/NuGet cache. Sharp has no persistent cache and rebuilds each project from scratch, so
+beating `dotnet build` at that scale needs less per-project work rather than more AOT.
+
 ## What we do NOT support (by design, for now)
 
 `Sharp.Tests` is part of `Sharp.sln` and compiles via the test entry-point shim
