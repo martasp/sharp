@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using static System.Console;
 
 // CLI command parity with the .NET SDK: `build`, `run`, `help`, `version`/`--version`.
@@ -138,7 +139,7 @@ switch (first)
 
 int BuildCommand(string[] args)
 {
-    var (pathArg, _) = PositionalAndFlags(args);
+    var (pathArg, _, _, _) = PositionalAndFlags(args);
     var target = ResolveTargetOrFail(pathArg, checkRunnable: false);
     if (target is null) return 1;
 
@@ -388,7 +389,7 @@ static bool TryProperty(string arg, string[] args, ref int index, out string nam
 
 int RunCommand(string[] args)
 {
-    var (pathArg, appArgs) = PositionalAndFlags(args);
+    var (pathArg, appArgs, launchProfile, noLaunchProfile) = PositionalAndFlags(args);
     var target = ResolveTargetOrFail(pathArg, checkRunnable: true);
     if (target is null) return 1;
 
@@ -416,6 +417,7 @@ int RunCommand(string[] args)
         WorkingDirectory = Path.GetFullPath(project.ProjectRootPath),
         UseShellExecute = false,
     };
+    ApplyLaunchSettings(startInfo, project.ProjectRootPath, launchProfile, noLaunchProfile);
     foreach (var arg in launchArgs) startInfo.ArgumentList.Add(arg);
     using var process = Process.Start(startInfo);
     if (process is null) return 1;
@@ -521,14 +523,14 @@ int CleanCommand(string[] args)
         }
         if (!arg.StartsWith("-"))
         {
-            var (pathArg, _) = PositionalAndFlags(args);
+            var (pathArg, _, _, _) = PositionalAndFlags(args);
             var target = ResolveTargetOrFail(pathArg, checkRunnable: false);
             if (target is null) return 1;
             return CleanTarget(target, configuration);
         }
     }
 
-    var (implicitPath, _) = PositionalAndFlags(args);
+    var (implicitPath, _, _, _) = PositionalAndFlags(args);
     var implicitTarget = ResolveTargetOrFail(implicitPath, checkRunnable: false);
     if (implicitTarget is null) return 1;
     return CleanTarget(implicitTarget, configuration);
@@ -643,15 +645,11 @@ static string? ResolveDirectory(string dir, string? asGiven, bool checkRunnable,
 
 // --- helpers ----------------------------------------------------------------
 
-// First non-flag argument is the project/solution path (`--project <path>` works too, matching
-// `dotnet run`); everything after the `--` separator is handed to the running application.
-static (string? Path, string[] AppArgs) PositionalAndFlags(string[] args)
+static (string? Path, string[] AppArgs, string? LaunchProfile, bool NoLaunchProfile) PositionalAndFlags(string[] args)
 {
-    // Mirrors `dotnet run` forwarding: only --project/-p are consumed as options, everything else
-    // is forwarded to the app (positionals and unknown flags alike), and the first positional is
-    // the project path - exactly like `dotnet run --project <proj> <args>` (the path is not
-    // re-forwarded; dotnet only echoes a path given as a bare positional, a legacy quirk).
     string? path = null;
+    string? launchProfile = null;
+    var noLaunchProfile = false;
     var appArgs = new System.Collections.Generic.List<string>();
     bool afterSeparator = false;
     for (int i = 0; i < args.Length; i++)
@@ -663,10 +661,64 @@ static (string? Path, string[] AppArgs) PositionalAndFlags(string[] args)
             if (i + 1 < args.Length) path = args[++i];
             continue;
         }
+        if (!afterSeparator && arg == "--no-launch-profile")
+        {
+            noLaunchProfile = true;
+            continue;
+        }
+        if (!afterSeparator && arg == "--launch-profile" && i + 1 < args.Length)
+        {
+            launchProfile = args[++i];
+            continue;
+        }
+        if (!afterSeparator && arg.StartsWith("--launch-profile=", StringComparison.Ordinal))
+        {
+            launchProfile = arg["--launch-profile=".Length..];
+            continue;
+        }
         if (!afterSeparator && path is null && !arg.StartsWith("-")) { path = arg; continue; }
         appArgs.Add(arg);
     }
-    return (path, appArgs.ToArray());
+    return (path, appArgs.ToArray(), launchProfile, noLaunchProfile);
+}
+
+static void ApplyLaunchSettings(
+    ProcessStartInfo startInfo, string projectRootPath, string? launchProfile, bool noLaunchProfile)
+{
+    if (noLaunchProfile) return;
+
+    var settingsPath = Path.Combine(projectRootPath, "Properties", "launchSettings.json");
+    if (!File.Exists(settingsPath)) return;
+
+    using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
+    if (!document.RootElement.TryGetProperty("profiles", out var profiles) ||
+        profiles.ValueKind != JsonValueKind.Object) return;
+
+    JsonElement profile;
+    if (!string.IsNullOrEmpty(launchProfile))
+    {
+        if (!profiles.TryGetProperty(launchProfile, out profile)) return;
+    }
+    else
+    {
+        profile = profiles.EnumerateObject().Select(item => item.Value).FirstOrDefault();
+        if (profile.ValueKind == JsonValueKind.Undefined) return;
+    }
+
+    if (profile.ValueKind != JsonValueKind.Object) return;
+
+    if (profile.TryGetProperty("environmentVariables", out var environmentVariables) &&
+        environmentVariables.ValueKind == JsonValueKind.Object)
+    {
+        foreach (var variable in environmentVariables.EnumerateObject())
+            startInfo.Environment[variable.Name] = variable.Value.ToString();
+    }
+
+    if (profile.TryGetProperty("applicationUrl", out var applicationUrl) &&
+        applicationUrl.ValueKind == JsonValueKind.String)
+    {
+        startInfo.Environment["ASPNETCORE_URLS"] = applicationUrl.GetString()!;
+    }
 }
 
 // Restore and clean report paths the way the SDK does: relative to the current directory.

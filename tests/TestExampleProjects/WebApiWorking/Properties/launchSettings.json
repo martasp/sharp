@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "WebApiWorking": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "SecondProfile": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "SecondDev"
+      }
+    }
+  }
+}

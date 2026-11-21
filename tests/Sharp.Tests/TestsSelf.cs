@@ -83,6 +83,35 @@ public class ConsoleAppTestsSelf
     [Fact]
     public async Task Run_WebApi_UsesProjectDirectoryAsContentRoot()
     {
+        var output = await RunWebApi();
+        var projectDir = Path.GetFullPath(TestPaths.TestProjects("WebApiWorking"));
+        output.Contains($"Content root path: {projectDir}")
+            .ShouldBeTrue($"unexpected content root:\n{output}");
+    }
+
+    [Fact]
+    public async Task Run_WebApi_UsesDefaultLaunchProfileEnvironment()
+    {
+        var output = await RunWebApi();
+        output.Contains("Hosting environment: Development").ShouldBeTrue(output);
+    }
+
+    [Fact]
+    public async Task Run_WebApi_HonorsNoLaunchProfile()
+    {
+        var output = await RunWebApi("--no-launch-profile");
+        output.Contains("Hosting environment: Production").ShouldBeTrue(output);
+    }
+
+    [Fact]
+    public async Task Run_WebApi_HonorsExplicitLaunchProfile()
+    {
+        var output = await RunWebApi("--launch-profile", "SecondProfile");
+        output.Contains("Hosting environment: SecondDev").ShouldBeTrue(output);
+    }
+
+    private static async Task<string> RunWebApi(params string[] extraArgs)
+    {
         var projectDir = Path.GetFullPath(TestPaths.TestProjects("WebApiWorking"));
         var cliDll = Path.Combine(TestPaths.RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net11.0",
             "Sharp.Cli.dll");
@@ -104,6 +133,9 @@ public class ConsoleAppTestsSelf
         startInfo.ArgumentList.Add(cliDll);
         startInfo.ArgumentList.Add("run");
         startInfo.ArgumentList.Add(projectDir);
+        foreach (var extraArg in extraArgs) startInfo.ArgumentList.Add(extraArg);
+        startInfo.Environment.Remove("ASPNETCORE_ENVIRONMENT");
+        startInfo.Environment.Remove("DOTNET_ENVIRONMENT");
         startInfo.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
 
         using var process = Process.Start(startInfo)!;
@@ -133,8 +165,7 @@ public class ConsoleAppTestsSelf
 
         var output = await stdout + await stderr;
         started.ShouldBeTrue($"Web API did not start:\n{output}");
-        output.Contains($"Content root path: {projectDir}")
-            .ShouldBeTrue($"unexpected content root:\n{output}");
+        return output;
     }
 }
 
