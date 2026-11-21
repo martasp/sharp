@@ -56,7 +56,7 @@ sharp <command> [target] [-- app args]
 | Command | Behaviour |
 |---|---|
 | `build` | compiles the target; identical output/exit code to `dotnet build` |
-| `run` | builds then launches the app (apphost when present, else `dotnet <dll>`); forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
+| `run` | builds then launches the app from the project directory (apphost when present, else `dotnet <dll>`); applies `launchSettings.json` environment/profile settings like `dotnet run`, with `--launch-profile` / `--no-launch-profile`; forwards app args like `dotnet run` (everything after the target, and everything after `--`); propagates the app exit code |
 | `version` / `--version` | prints Sharp's version and the hosting SDK version (e.g. `Sharp 0.3.0 (.NET SDK 11.0.100)`) |
 | `help` / `-h` / `--help` | prints the .NET SDK's general help text; the SDK command list is annotated `[implemented]` / `[not implemented]` (derived from the command registry) and the header includes Sharp's version plus the hosting SDK version |
 | `sharp <target>` | legacy form, routed to `build` |

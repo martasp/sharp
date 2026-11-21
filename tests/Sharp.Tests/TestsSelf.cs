@@ -1,6 +1,10 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using Shouldly;
 using Xunit;
@@ -74,6 +78,94 @@ public class ConsoleAppTestsSelf
         File.Exists(Path.Combine(outputDir, "WebApiWorking.dll")).ShouldBeTrue("dll not Exists");
         var appHost = "WebApiWorking" + (OperatingSystem.IsWindows() ? ".exe" : "");
         File.Exists(Path.Combine(outputDir, appHost)).ShouldBeTrue("apphost not Exists");
+    }
+
+    [Fact]
+    public async Task Run_WebApi_UsesProjectDirectoryAsContentRoot()
+    {
+        var output = await RunWebApi();
+        var projectDir = Path.GetFullPath(TestPaths.TestProjects("WebApiWorking"));
+        output.Contains($"Content root path: {projectDir}")
+            .ShouldBeTrue($"unexpected content root:\n{output}");
+    }
+
+    [Fact]
+    public async Task Run_WebApi_UsesDefaultLaunchProfileEnvironment()
+    {
+        var output = await RunWebApi();
+        output.Contains("Hosting environment: Development").ShouldBeTrue(output);
+    }
+
+    [Fact]
+    public async Task Run_WebApi_HonorsNoLaunchProfile()
+    {
+        var output = await RunWebApi("--no-launch-profile");
+        output.Contains("Hosting environment: Production").ShouldBeTrue(output);
+    }
+
+    [Fact]
+    public async Task Run_WebApi_HonorsExplicitLaunchProfile()
+    {
+        var output = await RunWebApi("--launch-profile", "SecondProfile");
+        output.Contains("Hosting environment: SecondDev").ShouldBeTrue(output);
+    }
+
+    private static async Task<string> RunWebApi(params string[] extraArgs)
+    {
+        var projectDir = Path.GetFullPath(TestPaths.TestProjects("WebApiWorking"));
+        var cliDll = Path.Combine(TestPaths.RepoRoot, "src", "Sharp.Cli", "bin", "Debug", "net11.0",
+            "Sharp.Cli.dll");
+        File.Exists(cliDll).ShouldBeTrue("Sharp.Cli is not built");
+
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        var startInfo = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = TestPaths.RepoRoot,
+        };
+        startInfo.ArgumentList.Add(cliDll);
+        startInfo.ArgumentList.Add("run");
+        startInfo.ArgumentList.Add(projectDir);
+        foreach (var extraArg in extraArgs) startInfo.ArgumentList.Add(extraArg);
+        startInfo.Environment.Remove("ASPNETCORE_ENVIRONMENT");
+        startInfo.Environment.Remove("DOTNET_ENVIRONMENT");
+        startInfo.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
+
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        var started = false;
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
+            for (var attempt = 0; attempt < 80 && !started; attempt++)
+            {
+                try
+                {
+                    var response = await client.GetAsync($"http://127.0.0.1:{port}/");
+                    started = response.IsSuccessStatusCode;
+                }
+                catch (HttpRequestException) { }
+                catch (TaskCanceledException) { }
+                if (!started) await Task.Delay(100);
+            }
+        }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+        }
+
+        var output = await stdout + await stderr;
+        started.ShouldBeTrue($"Web API did not start:\n{output}");
+        return output;
     }
 }
 
