@@ -275,18 +275,8 @@ public static class SharpUtils
     public static MetadataReference[] GetFrameworkReferenceCompilingRefs(Project project)
     {
         var tfm = project.TargetFramework ?? "net" + Environment.Version.Major + ".0";
-        var names = new HashSet<string>(
-            CollectFrameworkReferenceNames(
-                project.ProjectRootPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase)),
-            StringComparer.OrdinalIgnoreCase);
-
-        // Mirror the Web SDK, which injects <FrameworkReference Include="Microsoft.AspNetCore.App" />
-        // implicitly. Microsoft.NETCore.App does not carry those types, so without this a
-        // Microsoft.NET.Sdk.Web project cannot resolve WebApplication & co.
-        if (project.IsWebSdk) names.Add("Microsoft.AspNetCore.App");
-
         var references = new List<MetadataReference>();
-        foreach (var include in names)
+        foreach (var include in project.FrameworkReferenceNames)
         {
             if (string.IsNullOrEmpty(include)) continue;
             if (include.Equals("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)) continue;
@@ -664,14 +654,20 @@ public static class SharpUtils
     }
 
     [Query]
+    internal static List<string> ResolvePackagePaths(Project project)
+    {
+        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
+        var roots = ResolvedPackageRoots(project);
+        return ResolveUnifiedPackagePaths(roots, tfm, project.ProjectRootPath);
+    }
+
+    [Query]
     public static MetadataReference[] GetdefaultNugetReferences(Project project)
     {
         var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
         var referenceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var roots = ResolvedPackageRoots(project.PackageReferences, project.ProjectRootPath);
-
-        foreach (var packagePath in ResolveUnifiedPackagePaths(roots, tfm, project.ProjectRootPath))
+        foreach (var packagePath in project.ResolvedPackagePaths)
         {
             foreach (var dll in NuGetPackage.FindPackageDLLs(packagePath, tfm))
                 referenceFiles.Add(dll);
@@ -734,7 +730,7 @@ public static class SharpUtils
     // reference collection and the diagnostics below can never disagree about what resolved.
     // Path is null when the version or the package folder cannot be found; the diagnostics report it.
     [Query]
-    private static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
+    internal static IEnumerable<(string Id, string Version, string? Path)> ResolvePackageReferences(
         IEnumerable<PackageReference> packages, string projectDirectory)
     {
         foreach (var package in packages)
@@ -753,6 +749,13 @@ public static class SharpUtils
     private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(
         IEnumerable<PackageReference> packages, string projectDirectory) =>
         ResolvePackageReferences(packages, projectDirectory)
+            .Where(reference => !string.IsNullOrEmpty(reference.Path))
+            .Select(reference => (reference.Id, reference.Version, reference.Path!))
+            .ToList();
+
+    [Query]
+    private static List<(string Id, string Version, string Path)> ResolvedPackageRoots(Project project) =>
+        project.ResolvedPackageReferences
             .Where(reference => !string.IsNullOrEmpty(reference.Path))
             .Select(reference => (reference.Id, reference.Version, reference.Path!))
             .ToList();
@@ -829,7 +832,7 @@ public static class SharpUtils
     {
         var warnings = new List<string>();
 
-        foreach (var (packageName, packageVersion, packagePath) in ResolvePackageReferences(project.PackageReferences, project.ProjectRootPath))
+        foreach (var (packageName, packageVersion, packagePath) in project.ResolvedPackageReferences)
         {
             if (string.IsNullOrEmpty(packageVersion))
             {
@@ -1083,7 +1086,6 @@ public static class SharpUtils
     {
         var result = new StringBuilder();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var tfm = project.TargetFramework ?? DefaultTargetFramework.Value;
 
         void AddUsing(NuGetPackage.PackageUsingItem item)
         {
@@ -1094,20 +1096,9 @@ public static class SharpUtils
             result.Append("global::").Append(item.Namespace).AppendLine(";");
         }
 
-        foreach (var packageItem in project.PackageReferences)
-        {
-            var packageName = packageItem.Include ?? "";
-            var packageVersion = packageItem.Version ??
-                NuGetPackage.ResolveCentralVersion(packageName, project.ProjectRootPath);
-            if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(packageVersion)) continue;
-
-            var packagePath = NuGetPackage.FindPackagePath(packageName, packageVersion);
-            if (string.IsNullOrEmpty(packagePath)) continue;
-
-            foreach (var item in NuGetPackage.ReadPackageUsingItems(packagePath)) AddUsing(item);
-            foreach (var transitivePath in NuGetPackage.GetTransitivePackagePaths(packagePath, tfm))
-                foreach (var item in NuGetPackage.ReadPackageUsingItems(transitivePath)) AddUsing(item);
-        }
+        foreach (var packagePath in project.ResolvedPackagePaths)
+            foreach (var item in NuGetPackage.ReadPackageUsingItems(packagePath))
+                AddUsing(item);
 
         return result.ToString();
     }
@@ -1208,7 +1199,7 @@ public static class SharpUtils
         // The SDK materializes its synthesized sources at obj/<config>/<tfm>/, and uses those
         // paths for the PDB documents too. Mirroring name + path keeps the PDB document set
         // (names and SHA-1 checksums) equal to `dotnet build` output.
-        var identity = BuildPropsEvaluator.EvaluateIdentity(project.ProjectRootPath);
+        var identity = project.Identity;
         var configuration = options.Configuration ?? identity?.Configuration ?? "Debug";
         project.Configuration = configuration;
         var generatedRoot = GetGeneratedFileRoot(project, configuration);
