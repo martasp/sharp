@@ -14,9 +14,8 @@
 
     <WarningsAsErrors>Nullable</WarningsAsErrors>
 
-    <!-- Keep in sync with VERSION; Version_Output verifies the two agree. The release workflow
-         passes a Version property on the command line, which wins over this value. -->
-    <Version>0.3.0</Version>
+    <!-- Single source of truth for Sharp's version. The release workflow overrides it with -p:Version. -->
+    <Version>0.3.1</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- PublishAot bakes IsDynamicCodeSupported=false into the runtimeconfig even for ordinary

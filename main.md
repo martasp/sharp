@@ -107,8 +107,8 @@ sharp help       # full dotnet help text
 
 ### Scripts
 - `install.sh` / `install.ps1` – install a prebuilt release (Linux x64 / Windows x64)
-- `VERSION` – stable release version used by the release workflow and kept in sync with the CLI project's `Version`
-- `.github/workflows/release.yml` – publish PR previews and VERSION-based stable releases (Linux x64 / Windows x64)
+- `src/Sharp.Cli/Sharp.Cli.csproj` – `Version` is the stable release version used by the release workflow
+- `.github/workflows/release.yml` – publish PR previews and stable releases (Linux x64 / Windows x64)
 - `publish.bat` – `dotnet publish` win-x64 Release
 - `publish.sh`  – `dotnet publish` linux-x64 Release (needs Linux/WSL for the AOT native toolchain)
 

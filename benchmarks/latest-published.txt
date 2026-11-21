@@ -1,10 +1,10 @@
 -------------- published AOT compiler vs dotnet build (Sharp.sln) --------------
-  commit: adbf32d6c5e7-dirty
-  Sharp.Cli.exe  run1  wall 3.12s (exit 0)
-  Sharp.Cli.exe  run2  wall 3.09s (exit 0)   (no cache: always from scratch)
-  dotnet build           cold  wall 11.44s (incl. restore)
-  dotnet build           warm  wall 7.47s (incremental)
-  speed-up vs dotnet build cold: 3.67x
+  commit: 2da44654aaa1-dirty
+  Sharp.Cli.exe  run1  wall 2.52s (exit 0)
+  Sharp.Cli.exe  run2  wall 2.44s (exit 0)   (no cache: always from scratch)
+  dotnet build           cold  wall 13.78s (incl. restore)
+  dotnet build           warm  wall 8.68s (incremental)
+  speed-up vs dotnet build cold: 5.47x
 ---------------------------------------------------------------------
   notes:
   - ours is measured as the published signed native-AOT compiler (subprocess, wall clock)

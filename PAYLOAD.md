@@ -182,7 +182,7 @@ which NuGet refuses as a `PackageReference` with `NU1213` — and DependencyMode
 `PackageReference`. The stager reads them out of the NuGet global packages folder and lays them out in
 the SDK shape. Only the reported SDK version is still taken from the building SDK, because the
 SDK version in `sharp --version` must match that machine's `dotnet` (see `UPGRADING.md`). Sharp's
-own version is stamped separately from the CLI project's `Version`, kept in sync with `VERSION`.
+own version is stamped from the CLI project's `Version`, which is the single source of truth.
 
 ## How the payload is embedded and read (JIT vs NativeAOT)
 

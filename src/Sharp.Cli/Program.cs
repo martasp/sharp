@@ -745,9 +745,9 @@ static string WithProjectSuffix(string errors, string? projectFile)
 // still works on a machine with no .NET SDK installed.
 static string SdkVersion() => EmbeddedSdkRefs.SdkVersion;
 
-// Sharp's own release version, stamped into the CLI assembly at build time. The project default is
-// kept in sync with VERSION; the release workflow overrides it with -p:Version. Build metadata after
-// '+' is not part of the user-facing version.
+// Sharp's own release version, stamped into the CLI assembly at build time from the CLI project's
+// Version property (which the release workflow overrides). Build metadata after '+' is not part of
+// the user-facing version.
 static string SharpVersion()
 {
     var informational = (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())

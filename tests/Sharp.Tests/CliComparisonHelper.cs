@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -31,10 +32,19 @@ public static class CliComparisonHelper
     private static string GetRepoRootPrefixed() =>
         GetRepoRoot().Replace('\\', '/') + '/';
 
-    // Sharp's build version is the VERSION file for local test builds. It must be normalized
-    // separately from the SDK version so a side-by-side snapshot cannot accidentally hide a
-    // mismatch between the two.
-    public static string SharpVersion => File.ReadAllText(Path.Combine(GetRepoRoot(), "VERSION")).Trim();
+    // Sharp's version comes from the built CLI assembly, so the expected value always matches the
+    // binary under test even when a build overrides the project's Version property.
+    public static string SharpVersion
+    {
+        get
+        {
+            var cliDll = Path.Combine(GetRepoRoot(), "src", "Sharp.Cli", "bin", "Debug", "net11.0",
+                "Sharp.Cli.dll");
+            var version = FileVersionInfo.GetVersionInfo(cliDll).ProductVersion ?? "unknown";
+            var metadata = version.IndexOf('+');
+            return metadata >= 0 ? version[..metadata] : version;
+        }
+    }
 
     // Shared normalization for any our-vs-dotnet comparison, so behavior parity is asserted on
     // identical text regardless of which command produced it. Wall-clock and restore banners add

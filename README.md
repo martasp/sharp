@@ -24,8 +24,8 @@ Both installers fetch the latest stable GitHub release, verify the SHA-256 check
 on your PATH. Pin a release with `SHARP_VERSION` (for example `v0.3.0`) and change the destination
 with `SHARP_INSTALL_DIR`.
 
-Stable releases come from the `VERSION` file when a PR merges to `main`. Pull requests publish
-prerelease previews tagged `v<VERSION>-preview.<PR>`; install one with
+Stable releases come from the CLI project's `Version` property when a PR merges to `main`. Pull
+requests publish prerelease previews tagged `v<version>-preview.<PR>`; install one with
 `SHARP_VERSION=v0.3.0-preview.12`. See [Releases](https://github.com/martasp/sharp/releases).
 
 The Windows binary is currently unsigned, so SmartScreen may show a warning on first launch.
@@ -168,7 +168,7 @@ deterministic surface only (exit code plus the `Build succeeded`/`Build failed` 
 the SDK's own solution rendering is build-state dependent — it drops per-project lines and the
 summary's timing clause when every project is up-to-date. Our full solution layout is pinned by
 Verify snapshots. `help` and `--version` deliberately add value: both report Sharp's own version
-(kept in sync with `VERSION`) alongside the hosting SDK version, and `help` annotates the command
+(stamped from the CLI project's `Version` property) alongside the hosting SDK version, and `help` annotates the command
 list with `[implemented]`/`[not implemented]`, derived from the command registry rather than
 hardcoded. The parity is enforced by `CliCommandParityTests` and `CliComparisonTests`
 (side-by-side Verify snapshots for `build`, `run`, `--version`, `help`, and `build` over
