@@ -402,14 +402,18 @@ int RunCommand(string[] args)
     }
 
     // Launch the freshly built app just like `dotnet run`: apphost when present, else `dotnet <dll>`.
-    // Output streams and the exit code are inherited and propagated unmodified.
+    // `dotnet run` also starts the app with the project directory as its working directory, which is
+    // what ASP.NET Core uses as the content root. Output streams and the exit code are inherited.
     var appHost = Path.Combine(Path.GetDirectoryName(project.DllPathName) ?? ".", project.ProjectName);
-    var launcher = File.Exists(appHost) ? appHost : "dotnet";
-    var launchArgs = File.Exists(appHost) ? appArgs : new[] { project.DllPathName }.Concat(appArgs).ToArray();
+    var launcher = File.Exists(appHost) ? Path.GetFullPath(appHost) : "dotnet";
+    var launchArgs = File.Exists(appHost)
+        ? appArgs
+        : new[] { Path.GetFullPath(project.DllPathName) }.Concat(appArgs).ToArray();
 
     var startInfo = new ProcessStartInfo
     {
         FileName = launcher,
+        WorkingDirectory = Path.GetFullPath(project.ProjectRootPath),
         UseShellExecute = false,
     };
     foreach (var arg in launchArgs) startInfo.ArgumentList.Add(arg);
