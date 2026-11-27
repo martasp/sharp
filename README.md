@@ -1,5 +1,10 @@
 # Sharp
 
+![sharp v0.3.1 self-building Sharp.sln: dotnet build 4.2s, sharp build 2.0s](artifacts/social/sharp.gif)
+
+> Want to learn how a C# compiler works? sharp CLI is 19k C# lines vs 722k in the MSBuild repo. The whole sharp SDK is just one Native AOT executable: no installed SDK or MSBuild needed. Great for small and medium-sized solutions as it is faster. Compiling our own code results in these timings: dotnet build 4.2s, sharp build 2.0s. Both `dotnet run` and `sharp run` print "Hello from Sharp!".
+>
+
 A self-hosting C# compiler built on Roslyn that compiles `.csproj` projects and `.sln` / `.slnx`
 solutions **without MSBuild**, driven by a CLI whose commands, paths, flags, exit codes and output
 are shaped to match the .NET SDK's `dotnet`.

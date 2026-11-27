@@ -38,7 +38,9 @@ Thumbs.db
 # .NET
 project.lock.json
 project.fragment.lock.json
-artifacts/
+artifacts/*
+!artifacts/social/
+!artifacts/social/**
 **/Properties/launchSettings.json
 
 # Temporary
